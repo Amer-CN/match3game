@@ -1,0 +1,957 @@
+{
+  "configurations": [
+    {
+      "id": "95c60f18-da18-426c-ab1d-80d04048d753",
+      "name": "默认配置",
+      "description": "自动创建的默认工具配置",
+      "tools": [
+        {
+          "category": "scene",
+          "name": "get_current_scene",
+          "enabled": true,
+          "description": "Get current scene information"
+        },
+        {
+          "category": "scene",
+          "name": "get_scene_list",
+          "enabled": true,
+          "description": "Get all scenes in the project"
+        },
+        {
+          "category": "scene",
+          "name": "open_scene",
+          "enabled": true,
+          "description": "Open a scene by path"
+        },
+        {
+          "category": "scene",
+          "name": "save_scene",
+          "enabled": true,
+          "description": "Save current scene"
+        },
+        {
+          "category": "scene",
+          "name": "create_scene",
+          "enabled": true,
+          "description": "Create a new scene asset"
+        },
+        {
+          "category": "scene",
+          "name": "save_scene_as",
+          "enabled": false,
+          "description": "Save scene as new file"
+        },
+        {
+          "category": "scene",
+          "name": "close_scene",
+          "enabled": false,
+          "description": "Close current scene"
+        },
+        {
+          "category": "scene",
+          "name": "get_scene_hierarchy",
+          "enabled": false,
+          "description": "Get the complete hierarchy of current scene"
+        },
+        {
+          "category": "node",
+          "name": "create_node",
+          "enabled": true,
+          "description": "Create a new node in the scene. Supports creating empty nodes, nodes with components, or instantiating from assets (prefabs, etc.). IMPORTANT: You should always provide parentUuid to specify where to create the node."
+        },
+        {
+          "category": "node",
+          "name": "get_node_info",
+          "enabled": true,
+          "description": "Get node information by UUID"
+        },
+        {
+          "category": "node",
+          "name": "find_nodes",
+          "enabled": true,
+          "description": "Find nodes by name pattern"
+        },
+        {
+          "category": "node",
+          "name": "find_node_by_name",
+          "enabled": false,
+          "description": "Find first node by exact name"
+        },
+        {
+          "category": "node",
+          "name": "get_all_nodes",
+          "enabled": true,
+          "description": "Get all nodes in the scene with their UUIDs"
+        },
+        {
+          "category": "node",
+          "name": "set_node_property",
+          "enabled": true,
+          "description": "Set node property value (prefer using set_node_transform for active/layer/mobility/position/rotation/scale)"
+        },
+        {
+          "category": "node",
+          "name": "set_node_transform",
+          "enabled": true,
+          "description": "Set node transform properties (position, rotation, scale) with unified interface. Automatically handles 2D/3D node differences."
+        },
+        {
+          "category": "node",
+          "name": "delete_node",
+          "enabled": true,
+          "description": "Delete a node from scene"
+        },
+        {
+          "category": "node",
+          "name": "move_node",
+          "enabled": true,
+          "description": "Move node to new parent"
+        },
+        {
+          "category": "node",
+          "name": "duplicate_node",
+          "enabled": false,
+          "description": "Duplicate a node"
+        },
+        {
+          "category": "node",
+          "name": "detect_node_type",
+          "enabled": false,
+          "description": "Detect if a node is 2D or 3D based on its components and properties"
+        },
+        {
+          "category": "component",
+          "name": "add_component",
+          "enabled": true,
+          "description": "Add a component to a specific node. IMPORTANT: You must provide the nodeUuid parameter to specify which node to add the component to."
+        },
+        {
+          "category": "component",
+          "name": "remove_component",
+          "enabled": true,
+          "description": "Remove a component from a node. componentType must be the component's classId (cid, i.e. the type field from getComponents), not the script name or class name. Use getComponents to get the correct cid."
+        },
+        {
+          "category": "component",
+          "name": "get_components",
+          "enabled": true,
+          "description": "Get all components of a node"
+        },
+        {
+          "category": "component",
+          "name": "get_component_info",
+          "enabled": false,
+          "description": "Get specific component information"
+        },
+        {
+          "category": "component",
+          "name": "set_component_property",
+          "enabled": true,
+          "description": "Set component property values for UI components or custom script components. Supports setting properties of built-in UI components (e.g., cc.Label, cc.Sprite) and custom script components. Note: For node basic properties (name, active, layer, etc.), use set_node_property. For node transform properties (position, rotation, scale, etc.), use set_node_transform."
+        },
+        {
+          "category": "component",
+          "name": "attach_script",
+          "enabled": true,
+          "description": "Attach a script component to a node"
+        },
+        {
+          "category": "component",
+          "name": "get_available_components",
+          "enabled": false,
+          "description": "Get list of available component types"
+        },
+        {
+          "category": "prefab",
+          "name": "get_prefab_list",
+          "enabled": true,
+          "description": "Get all prefabs in the project"
+        },
+        {
+          "category": "prefab",
+          "name": "load_prefab",
+          "enabled": true,
+          "description": "Load a prefab by path"
+        },
+        {
+          "category": "prefab",
+          "name": "instantiate_prefab",
+          "enabled": true,
+          "description": "Instantiate a prefab in the scene"
+        },
+        {
+          "category": "prefab",
+          "name": "create_prefab",
+          "enabled": true,
+          "description": "Create a prefab from a node with all children and components"
+        },
+        {
+          "category": "prefab",
+          "name": "update_prefab",
+          "enabled": false,
+          "description": "Update an existing prefab"
+        },
+        {
+          "category": "prefab",
+          "name": "revert_prefab",
+          "enabled": false,
+          "description": "Revert prefab instance to original"
+        },
+        {
+          "category": "prefab",
+          "name": "get_prefab_info",
+          "enabled": false,
+          "description": "Get detailed prefab information"
+        },
+        {
+          "category": "prefab",
+          "name": "validate_prefab",
+          "enabled": false,
+          "description": "Validate a prefab file format"
+        },
+        {
+          "category": "prefab",
+          "name": "duplicate_prefab",
+          "enabled": false,
+          "description": "Duplicate an existing prefab"
+        },
+        {
+          "category": "prefab",
+          "name": "restore_prefab_node",
+          "enabled": false,
+          "description": "Restore prefab node using prefab asset (built-in undo record)"
+        },
+        {
+          "category": "project",
+          "name": "run_project",
+          "enabled": false,
+          "description": "Run the project in preview mode"
+        },
+        {
+          "category": "project",
+          "name": "build_project",
+          "enabled": false,
+          "description": "Build the project"
+        },
+        {
+          "category": "project",
+          "name": "get_project_info",
+          "enabled": false,
+          "description": "Get project information"
+        },
+        {
+          "category": "project",
+          "name": "get_project_settings",
+          "enabled": false,
+          "description": "Get project settings"
+        },
+        {
+          "category": "project",
+          "name": "refresh_assets",
+          "enabled": true,
+          "description": "Refresh asset database"
+        },
+        {
+          "category": "project",
+          "name": "import_asset",
+          "enabled": true,
+          "description": "Import an asset file"
+        },
+        {
+          "category": "project",
+          "name": "get_asset_info",
+          "enabled": false,
+          "description": "Get asset information"
+        },
+        {
+          "category": "project",
+          "name": "get_assets",
+          "enabled": true,
+          "description": "Get assets by type"
+        },
+        {
+          "category": "project",
+          "name": "get_build_settings",
+          "enabled": false,
+          "description": "Get build settings - shows current limitations"
+        },
+        {
+          "category": "project",
+          "name": "open_build_panel",
+          "enabled": false,
+          "description": "Open the build panel in the editor"
+        },
+        {
+          "category": "project",
+          "name": "check_builder_status",
+          "enabled": false,
+          "description": "Check if builder worker is ready"
+        },
+        {
+          "category": "project",
+          "name": "start_preview_server",
+          "enabled": false,
+          "description": "Start preview server"
+        },
+        {
+          "category": "project",
+          "name": "stop_preview_server",
+          "enabled": false,
+          "description": "Stop preview server"
+        },
+        {
+          "category": "project",
+          "name": "create_asset",
+          "enabled": true,
+          "description": "Create a new asset file or folder"
+        },
+        {
+          "category": "project",
+          "name": "copy_asset",
+          "enabled": false,
+          "description": "Copy an asset to another location"
+        },
+        {
+          "category": "project",
+          "name": "move_asset",
+          "enabled": false,
+          "description": "Move an asset to another location"
+        },
+        {
+          "category": "project",
+          "name": "delete_asset",
+          "enabled": false,
+          "description": "Delete an asset"
+        },
+        {
+          "category": "project",
+          "name": "save_asset",
+          "enabled": true,
+          "description": "Save asset content"
+        },
+        {
+          "category": "project",
+          "name": "reimport_asset",
+          "enabled": false,
+          "description": "Reimport an asset"
+        },
+        {
+          "category": "project",
+          "name": "query_asset_path",
+          "enabled": false,
+          "description": "Get asset disk path"
+        },
+        {
+          "category": "project",
+          "name": "query_asset_uuid",
+          "enabled": true,
+          "description": "Get asset UUID from URL"
+        },
+        {
+          "category": "project",
+          "name": "query_asset_url",
+          "enabled": false,
+          "description": "Get asset URL from UUID"
+        },
+        {
+          "category": "project",
+          "name": "find_asset_by_name",
+          "enabled": true,
+          "description": "Find assets by name (supports partial matching and multiple results)"
+        },
+        {
+          "category": "project",
+          "name": "get_asset_details",
+          "enabled": true,
+          "description": "Get detailed asset information including spriteFrame sub-assets"
+        },
+        {
+          "category": "debug",
+          "name": "get_console_logs",
+          "enabled": true,
+          "description": "Get editor console logs"
+        },
+        {
+          "category": "debug",
+          "name": "clear_console",
+          "enabled": false,
+          "description": "Clear editor console"
+        },
+        {
+          "category": "debug",
+          "name": "execute_script",
+          "enabled": false,
+          "description": "Execute JavaScript in scene context"
+        },
+        {
+          "category": "debug",
+          "name": "get_node_tree",
+          "enabled": true,
+          "description": "Get detailed node tree for debugging"
+        },
+        {
+          "category": "debug",
+          "name": "get_performance_stats",
+          "enabled": false,
+          "description": "Get performance statistics"
+        },
+        {
+          "category": "debug",
+          "name": "validate_scene",
+          "enabled": false,
+          "description": "Validate current scene for issues"
+        },
+        {
+          "category": "debug",
+          "name": "get_editor_info",
+          "enabled": false,
+          "description": "Get editor and environment information"
+        },
+        {
+          "category": "debug",
+          "name": "get_project_logs",
+          "enabled": false,
+          "description": "Get project logs from temp/logs/project.log file"
+        },
+        {
+          "category": "debug",
+          "name": "get_log_file_info",
+          "enabled": false,
+          "description": "Get information about the project log file"
+        },
+        {
+          "category": "debug",
+          "name": "search_project_logs",
+          "enabled": false,
+          "description": "Search for specific patterns or errors in project logs"
+        },
+        {
+          "category": "preferences",
+          "name": "open_preferences_settings",
+          "enabled": false,
+          "description": "Open preferences settings panel"
+        },
+        {
+          "category": "preferences",
+          "name": "query_preferences_config",
+          "enabled": false,
+          "description": "Query preferences configuration"
+        },
+        {
+          "category": "preferences",
+          "name": "set_preferences_config",
+          "enabled": false,
+          "description": "Set preferences configuration"
+        },
+        {
+          "category": "preferences",
+          "name": "get_all_preferences",
+          "enabled": false,
+          "description": "Get all available preferences categories"
+        },
+        {
+          "category": "preferences",
+          "name": "reset_preferences",
+          "enabled": false,
+          "description": "Reset preferences to default values"
+        },
+        {
+          "category": "preferences",
+          "name": "export_preferences",
+          "enabled": false,
+          "description": "Export current preferences configuration"
+        },
+        {
+          "category": "preferences",
+          "name": "import_preferences",
+          "enabled": false,
+          "description": "Import preferences configuration from file"
+        },
+        {
+          "category": "server",
+          "name": "query_server_ip_list",
+          "enabled": false,
+          "description": "Query server IP list"
+        },
+        {
+          "category": "server",
+          "name": "query_sorted_server_ip_list",
+          "enabled": false,
+          "description": "Get sorted server IP list"
+        },
+        {
+          "category": "server",
+          "name": "query_server_port",
+          "enabled": false,
+          "description": "Query editor server current port"
+        },
+        {
+          "category": "server",
+          "name": "get_server_status",
+          "enabled": false,
+          "description": "Get comprehensive server status information"
+        },
+        {
+          "category": "server",
+          "name": "check_server_connectivity",
+          "enabled": false,
+          "description": "Check server connectivity and network status"
+        },
+        {
+          "category": "server",
+          "name": "get_network_interfaces",
+          "enabled": false,
+          "description": "Get available network interfaces"
+        },
+        {
+          "category": "broadcast",
+          "name": "get_broadcast_log",
+          "enabled": false,
+          "description": "Get recent broadcast messages log"
+        },
+        {
+          "category": "broadcast",
+          "name": "listen_broadcast",
+          "enabled": false,
+          "description": "Start listening for specific broadcast messages"
+        },
+        {
+          "category": "broadcast",
+          "name": "stop_listening",
+          "enabled": false,
+          "description": "Stop listening for specific broadcast messages"
+        },
+        {
+          "category": "broadcast",
+          "name": "clear_broadcast_log",
+          "enabled": false,
+          "description": "Clear the broadcast messages log"
+        },
+        {
+          "category": "broadcast",
+          "name": "get_active_listeners",
+          "enabled": false,
+          "description": "Get list of active broadcast listeners"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "reset_node_property",
+          "enabled": false,
+          "description": "Reset node property to default value"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "move_array_element",
+          "enabled": false,
+          "description": "Move array element position"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "remove_array_element",
+          "enabled": false,
+          "description": "Remove array element at specific index"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "copy_node",
+          "enabled": false,
+          "description": "Copy node for later paste operation"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "paste_node",
+          "enabled": false,
+          "description": "Paste previously copied nodes"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "cut_node",
+          "enabled": false,
+          "description": "Cut node (copy + mark for move)"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "reset_node_transform",
+          "enabled": false,
+          "description": "Reset node position, rotation and scale"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "reset_component",
+          "enabled": false,
+          "description": "Reset component to default values"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "restore_prefab",
+          "enabled": false,
+          "description": "Restore prefab instance from asset"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "execute_component_method",
+          "enabled": false,
+          "description": "Execute method on component"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "execute_scene_script",
+          "enabled": false,
+          "description": "Execute scene script method"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "scene_snapshot",
+          "enabled": false,
+          "description": "Create scene state snapshot"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "scene_snapshot_abort",
+          "enabled": false,
+          "description": "Abort scene snapshot creation"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "begin_undo_recording",
+          "enabled": false,
+          "description": "Begin recording undo data"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "end_undo_recording",
+          "enabled": false,
+          "description": "End recording undo data"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "cancel_undo_recording",
+          "enabled": false,
+          "description": "Cancel undo recording"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "soft_reload_scene",
+          "enabled": false,
+          "description": "Soft reload current scene"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "query_scene_ready",
+          "enabled": false,
+          "description": "Check if scene is ready"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "query_scene_dirty",
+          "enabled": false,
+          "description": "Check if scene has unsaved changes"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "query_scene_classes",
+          "enabled": false,
+          "description": "Query all registered classes"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "query_scene_components",
+          "enabled": false,
+          "description": "Query available scene components"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "query_component_has_script",
+          "enabled": false,
+          "description": "Check if component has script"
+        },
+        {
+          "category": "sceneAdvanced",
+          "name": "query_nodes_by_asset_uuid",
+          "enabled": false,
+          "description": "Find nodes that use specific asset UUID"
+        },
+        {
+          "category": "sceneView",
+          "name": "change_gizmo_tool",
+          "enabled": false,
+          "description": "Change Gizmo tool"
+        },
+        {
+          "category": "sceneView",
+          "name": "query_gizmo_tool_name",
+          "enabled": false,
+          "description": "Get current Gizmo tool name"
+        },
+        {
+          "category": "sceneView",
+          "name": "change_gizmo_pivot",
+          "enabled": false,
+          "description": "Change transform pivot point"
+        },
+        {
+          "category": "sceneView",
+          "name": "query_gizmo_pivot",
+          "enabled": false,
+          "description": "Get current Gizmo pivot point"
+        },
+        {
+          "category": "sceneView",
+          "name": "query_gizmo_view_mode",
+          "enabled": false,
+          "description": "Query view mode (view/select)"
+        },
+        {
+          "category": "sceneView",
+          "name": "change_gizmo_coordinate",
+          "enabled": false,
+          "description": "Change coordinate system"
+        },
+        {
+          "category": "sceneView",
+          "name": "query_gizmo_coordinate",
+          "enabled": false,
+          "description": "Get current coordinate system"
+        },
+        {
+          "category": "sceneView",
+          "name": "change_view_mode_2d_3d",
+          "enabled": false,
+          "description": "Change 2D/3D view mode"
+        },
+        {
+          "category": "sceneView",
+          "name": "query_view_mode_2d_3d",
+          "enabled": false,
+          "description": "Get current view mode"
+        },
+        {
+          "category": "sceneView",
+          "name": "set_grid_visible",
+          "enabled": false,
+          "description": "Show/hide grid"
+        },
+        {
+          "category": "sceneView",
+          "name": "query_grid_visible",
+          "enabled": false,
+          "description": "Query grid visibility status"
+        },
+        {
+          "category": "sceneView",
+          "name": "set_icon_gizmo_3d",
+          "enabled": false,
+          "description": "Set IconGizmo to 3D or 2D mode"
+        },
+        {
+          "category": "sceneView",
+          "name": "query_icon_gizmo_3d",
+          "enabled": false,
+          "description": "Query IconGizmo mode"
+        },
+        {
+          "category": "sceneView",
+          "name": "set_icon_gizmo_size",
+          "enabled": false,
+          "description": "Set IconGizmo size"
+        },
+        {
+          "category": "sceneView",
+          "name": "query_icon_gizmo_size",
+          "enabled": false,
+          "description": "Query IconGizmo size"
+        },
+        {
+          "category": "sceneView",
+          "name": "focus_camera_on_nodes",
+          "enabled": false,
+          "description": "Focus scene camera on nodes"
+        },
+        {
+          "category": "sceneView",
+          "name": "align_camera_with_view",
+          "enabled": false,
+          "description": "Apply scene camera position and angle to selected node"
+        },
+        {
+          "category": "sceneView",
+          "name": "align_view_with_node",
+          "enabled": false,
+          "description": "Apply selected node position and angle to current view"
+        },
+        {
+          "category": "sceneView",
+          "name": "get_scene_view_status",
+          "enabled": false,
+          "description": "Get comprehensive scene view status"
+        },
+        {
+          "category": "sceneView",
+          "name": "reset_scene_view",
+          "enabled": false,
+          "description": "Reset scene view to default settings"
+        },
+        {
+          "category": "referenceImage",
+          "name": "add_reference_image",
+          "enabled": false,
+          "description": "Add reference image(s) to scene"
+        },
+        {
+          "category": "referenceImage",
+          "name": "remove_reference_image",
+          "enabled": false,
+          "description": "Remove reference image(s)"
+        },
+        {
+          "category": "referenceImage",
+          "name": "switch_reference_image",
+          "enabled": false,
+          "description": "Switch to specific reference image"
+        },
+        {
+          "category": "referenceImage",
+          "name": "set_reference_image_data",
+          "enabled": false,
+          "description": "Set reference image transform and display properties"
+        },
+        {
+          "category": "referenceImage",
+          "name": "query_reference_image_config",
+          "enabled": false,
+          "description": "Query reference image configuration"
+        },
+        {
+          "category": "referenceImage",
+          "name": "query_current_reference_image",
+          "enabled": false,
+          "description": "Query current reference image data"
+        },
+        {
+          "category": "referenceImage",
+          "name": "refresh_reference_image",
+          "enabled": false,
+          "description": "Refresh reference image display"
+        },
+        {
+          "category": "referenceImage",
+          "name": "set_reference_image_position",
+          "enabled": false,
+          "description": "Set reference image position"
+        },
+        {
+          "category": "referenceImage",
+          "name": "set_reference_image_scale",
+          "enabled": false,
+          "description": "Set reference image scale"
+        },
+        {
+          "category": "referenceImage",
+          "name": "set_reference_image_opacity",
+          "enabled": false,
+          "description": "Set reference image opacity"
+        },
+        {
+          "category": "referenceImage",
+          "name": "list_reference_images",
+          "enabled": false,
+          "description": "List all available reference images"
+        },
+        {
+          "category": "referenceImage",
+          "name": "clear_all_reference_images",
+          "enabled": false,
+          "description": "Clear all reference images"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "save_asset_meta",
+          "enabled": false,
+          "description": "Save asset meta information"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "generate_available_url",
+          "enabled": false,
+          "description": "Generate an available URL based on input URL"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "query_asset_db_ready",
+          "enabled": false,
+          "description": "Check if asset database is ready"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "open_asset_external",
+          "enabled": false,
+          "description": "Open asset with external program"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "batch_import_assets",
+          "enabled": false,
+          "description": "Import multiple assets in batch"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "batch_delete_assets",
+          "enabled": false,
+          "description": "Delete multiple assets in batch"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "validate_asset_references",
+          "enabled": false,
+          "description": "Validate asset references and find broken links"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "get_asset_dependencies",
+          "enabled": false,
+          "description": "Get asset dependency tree"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "get_unused_assets",
+          "enabled": false,
+          "description": "Find unused assets in project"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "compress_textures",
+          "enabled": false,
+          "description": "Batch compress texture assets"
+        },
+        {
+          "category": "assetAdvanced",
+          "name": "export_asset_manifest",
+          "enabled": false,
+          "description": "Export asset manifest/inventory"
+        },
+        {
+          "category": "validation",
+          "name": "validate_json_params",
+          "enabled": false,
+          "description": "Validate and fix JSON parameters before sending to other tools"
+        },
+        {
+          "category": "validation",
+          "name": "safe_string_value",
+          "enabled": false,
+          "description": "Create a safe string value that won't cause JSON parsing issues"
+        },
+        {
+          "category": "validation",
+          "name": "format_mcp_request",
+          "enabled": false,
+          "description": "Format a complete MCP request with proper JSON escaping"
+        }
+      ],
+      "createdAt": "2026-07-04T11:54:18.550Z",
+      "updatedAt": "2026-07-05T17:19:30.471Z"
+    }
+  ],
+  "currentConfigId": "95c60f18-da18-426c-ab1d-80d04048d753",
+  "maxConfigSlots": 5
+}
