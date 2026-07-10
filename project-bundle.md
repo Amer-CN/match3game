@@ -7588,7 +7588,7 @@ export class GameManager extends Component {
         this.addWidget(maskNode, { top: 0, bottom: 0, left: 0, right: 0 });
 
         // Card
-        const cardW = 640, cardH = 580;
+        const cardW = 640, cardH = 640;
         const shadowNode = new Node('CardShadow');
         shadowNode.parent = this.dailySignPanel;
         const shadowUT = shadowNode.addComponent(UITransform);
@@ -7614,88 +7614,74 @@ export class GameManager extends Component {
         cardG.fill();
         cardG.stroke();
 
-        // ── 手动定位 ──
-        const padding = 32;
-        const spacing = 14;
-        const titleH = 50;
+        // ── 手动定位（确定性坐标，不依赖 Layout）──
         const cellW = 80;
         const cellH = 110;
         const cellGap = 6;
-        let cursorY = this.safeNum(cardH / 2 - padding, 258);
+        const stepX = cellW + cellGap;
 
         // Title
         const titleLabel = this.createLabel(card, 'Title', '📅 每日签到', 40, this.COLOR_TITLE_WIN);
         titleLabel.isBold = true;
         const titleW = this.safeNum(cardW - 80, 560);
-        titleLabel.node.getComponent(UITransform)!.setContentSize(titleW, titleH);
+        titleLabel.node.getComponent(UITransform)!.setContentSize(titleW, 50);
         titleLabel.overflow = Label.Overflow.SHRINK;
         titleLabel.enableWrapText = false;
-        cursorY = this.safeNum(cursorY - titleH / 2, 0);
-        titleLabel.node.setPosition(0, cursorY, 0);
-        cursorY = this.safeNum(cursorY - titleH / 2 - spacing, 0);
+        titleLabel.node.setPosition(0, 265, 0);
 
         // 提示文案
         const hintLabel = this.createLabel(card, 'Hint', '连续签到奖励递增，断签重置哦~', 22, this.COLOR_TEXT_MAIN);
         hintLabel.node.getComponent(UITransform)!.setContentSize(this.safeNum(cardW - 80, 560), 28);
         hintLabel.overflow = Label.Overflow.SHRINK;
-        cursorY = this.safeNum(cursorY - 14, 0);
-        hintLabel.node.setPosition(0, cursorY, 0);
-        cursorY = this.safeNum(cursorY - 14 - spacing, 0);
+        hintLabel.node.setPosition(0, 220, 0);
 
-        // ── 7 格日历（两排：上3下4） ──
-        const rowW = this.safeNum(4 * cellW + 3 * cellGap, 338);
+        // ── 7 格日历（两排：上3下4，手动定位）──
         const topRow = new Node('TopRow');
         topRow.parent = card;
-        topRow.addComponent(UITransform).setContentSize(this.safeNum(3 * cellW + 2 * cellGap, 252), cellH);
-        cursorY = this.safeNum(cursorY - cellH / 2, 0);
-        topRow.setPosition(0, cursorY, 0);
-        cursorY = this.safeNum(cursorY - cellH / 2 - spacing, 0);
-
-        const topRowLayout = topRow.addComponent(Layout);
-        topRowLayout.type = Layout.Type.HORIZONTAL;
-        topRowLayout.spacingX = cellGap;
-        topRowLayout.horizontalDirection = Layout.HorizontalDirection.CENTER;
-        topRowLayout.verticalDirection = Layout.VerticalDirection.CENTER;
-        topRowLayout.resizeMode = Layout.ResizeMode.NONE;
+        topRow.addComponent(UITransform).setContentSize(3 * cellW + 2 * cellGap, cellH);
+        topRow.setPosition(0, 140, 0);
 
         const bottomRow = new Node('BottomRow');
         bottomRow.parent = card;
-        bottomRow.addComponent(UITransform).setContentSize(rowW, cellH);
-        cursorY = this.safeNum(cursorY - cellH / 2, 0);
-        bottomRow.setPosition(0, cursorY, 0);
-        cursorY = this.safeNum(cursorY - cellH / 2 - spacing, 0);
+        bottomRow.addComponent(UITransform).setContentSize(4 * cellW + 3 * cellGap, cellH);
+        bottomRow.setPosition(0, 15, 0);
 
-        const bottomRowLayout = bottomRow.addComponent(Layout);
-        bottomRowLayout.type = Layout.Type.HORIZONTAL;
-        bottomRowLayout.spacingX = cellGap;
-        bottomRowLayout.horizontalDirection = Layout.HorizontalDirection.CENTER;
-        bottomRowLayout.verticalDirection = Layout.VerticalDirection.CENTER;
-        bottomRowLayout.resizeMode = Layout.ResizeMode.NONE;
+        const topX = [-stepX, 0, stepX];
+        const bottomX = [
+            -stepX * 1.5,
+            -stepX * 0.5,
+             stepX * 0.5,
+             stepX * 1.5,
+        ];
 
-        for (let i = 0; i < 7; i++) {
-            const parent = i < 3 ? topRow : bottomRow;
-            this.createSignCell(parent, i, cellW, cellH);
+        for (let i = 0; i < 3; i++) {
+            const cell = this.createSignCell(topRow, i, cellW, cellH);
+            cell.setPosition(topX[i], 0, 0);
+        }
+
+        for (let i = 0; i < 4; i++) {
+            const dayIdx = i + 3;
+            const cell = this.createSignCell(bottomRow, dayIdx, cellW, cellH);
+            cell.setPosition(bottomX[i], 0, 0);
         }
 
         // ── 领取按钮 ──
         this.dailySignClaimBtn = this.createRoundButton(card, 'ClaimBtn', '',
             this.COLOR_BTN_AD, 440, 64, () => this.onSignClaim());
         this.dailySignClaimLabel = this.dailySignClaimBtn.getChildByName('Label')?.getComponent(Label) ?? null;
-        const claimBtnY = this.safeNum(-cardH / 2 + 32 + 32, -226);
-        this.dailySignClaimBtn.setPosition(0, claimBtnY, 0);
+        this.dailySignClaimBtn.setPosition(0, -160, 0);
 
         // ── 关闭按钮 ──
         const backBtn = this.createRoundButton(card, 'BackBtn', '关闭',
             this.COLOR_BTN_GIVEUP, 440, 56, () => this.onDailySignClose(),
             { ghost: true });
-        const backBtnY = this.safeNum(claimBtnY - 32 - 28, -286);
-        backBtn.setPosition(0, backBtnY, 0);
+        backBtn.setPosition(0, -240, 0);
 
         this.dailySignPanel.active = false;
     }
 
     /** R3: 创建单个签到格子 */
-    private createSignCell(parent: Node, dayIdx: number, w: number, h: number): void {
+    private createSignCell(parent: Node, dayIdx: number, w: number, h: number): Node {
         const node = new Node(`Day${dayIdx + 1}`);
         node.parent = parent;
         node.addComponent(UITransform).setContentSize(w, h);
@@ -7773,6 +7759,7 @@ export class GameManager extends Component {
         }
 
         this.dailySignCells.push({ node, bg, dayLabel, rewardLabel, statusLabel });
+        return node;
     }
 
     /** R3: 刷新签到格子三态 + 领取按钮 */
@@ -7786,6 +7773,11 @@ export class GameManager extends Component {
             const cell = this.dailySignCells[i];
             if (!cell) continue;
             const dayNum = i + 1; // 第1~7天
+
+            // X1: 恢复基础状态，避免高亮残留
+            cell.node.active = true;
+            cell.dayLabel.color = this.COLOR_HUD_TEXT.clone();
+            cell.statusLabel.color = this.COLOR_TEXT_MAIN.clone();
 
             if (signedToday) {
                 // 今天已签
