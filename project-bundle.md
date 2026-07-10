@@ -1,23 +1,60 @@
-================================================================
-Directory Structure
-================================================================
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: assets/scripts/Board.ts, assets/scripts/GameManager.ts, assets/scripts/AudioManager.ts, assets/scripts/SaveManager.ts, assets/scripts/TileGesture.ts, assets/scripts/AdManager.ts, assets/scripts/GameClubEntry.ts, assets/scripts/VibrateManager.ts
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
 assets/scripts/AdManager.ts
 assets/scripts/AudioManager.ts
 assets/scripts/Board.ts
 assets/scripts/GameClubEntry.ts
 assets/scripts/GameManager.ts
-assets/scripts/RecorderManager.ts
 assets/scripts/SaveManager.ts
 assets/scripts/TileGesture.ts
 assets/scripts/VibrateManager.ts
+</directory_structure>
 
-================================================================
-Files
-================================================================
+<files>
+This section contains the contents of the repository's files.
 
-================
-File: assets/scripts/AdManager.ts
-================
+<file path="assets/scripts/AdManager.ts">
 /**
  * AdManager — 微信激励视频广告单例
  *
@@ -214,10 +251,9 @@ export class AdManager {
         if (cb) cb();
     }
 }
+</file>
 
-================
-File: assets/scripts/AudioManager.ts
-================
+<file path="assets/scripts/AudioManager.ts">
 import { _decorator, Component, AudioClip, AudioSource, resources } from 'cc';
 import { SaveManager } from './SaveManager';
 const { ccclass } = _decorator;
@@ -508,10 +544,9 @@ export class AudioManager extends Component {
         return this._enabled;
     }
 }
+</file>
 
-================
-File: assets/scripts/GameClubEntry.ts
-================
+<file path="assets/scripts/GameClubEntry.ts">
 /**
  * GameClubEntry — 微信游戏圈入口按钮
  *
@@ -739,230 +774,9 @@ export class GameClubEntry {
         return this.isValidNum(v) ? v : fallback;
     }
 }
+</file>
 
-================
-File: assets/scripts/RecorderManager.ts
-================
-/**
- * RecorderManager — 抖音录屏单例
- *
- * 封装 tt.getGameRecorderManager()，提供 start/stop/onStart/onStop。
- *
- * 降级策略（和 AdManager 一致，保证流程不卡）：
- *   以下任一情况 → 降级跳过，不报错：
- *   1. tt 不存在（浏览器 / 微信预览）
- *   2. tt.getGameRecorderManager 不可用
- *
- * Android/iOS 差异处理：
- *   stop() 后加 500ms 延迟才允许下一次 start()，
- *   否则安卓会覆盖上一段 / start 不执行。
- */
-
-// 抖音小游戏全局 API（非抖音环境下不存在）
-declare const tt: any;
-
-type StartCallback = () => void;
-type StopCallback = (videoPath: string) => void;
-type ErrorCallback = (err: any) => void;
-
-export class RecorderManager {
-    // ── 单例 ──────────────────────────────────
-    private static _instance: RecorderManager | null = null;
-
-    public static getInstance(): RecorderManager {
-        if (!RecorderManager._instance) {
-            RecorderManager._instance = new RecorderManager();
-        }
-        return RecorderManager._instance;
-    }
-
-    // ── 录屏实例 ──────────────────────────────
-    private recorder: any = null;
-
-    // ── 状态 ──────────────────────────────────
-    private isRecording = false;
-
-    /** stop() 后的冷却期，防止安卓立刻 start 覆盖上一段 */
-    private coolingDown = false;
-    private static readonly COOLDOWN_MS = 500;
-
-    // ── 回调 ──────────────────────────────────
-    private _onStart: StartCallback | null = null;
-    private _onStop: StopCallback | null = null;
-    private _onError: ErrorCallback | null = null;
-
-    // ── 最后一次录屏的 videoPath ──────────────
-    private _lastVideoPath: string | null = null;
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  构造（私有，单例）
-    // ══════════════════════════════════════════════════════════════════════════
-
-    private constructor() {
-        this.initRecorder();
-    }
-
-    /**
-     * 初始化录屏实例。
-     * 仅在「抖音环境 + API 可用」时创建，否则保持 null（降级模式）。
-     */
-    private initRecorder(): void {
-        // ── 降级检查 1：tt 不存在 ──
-        if (typeof tt === 'undefined') {
-            console.log('[Recorder] tt 不存在（非抖音环境），降级跳过');
-            return;
-        }
-
-        // ── 降级检查 2：getGameRecorderManager 不可用 ──
-        if (typeof tt.getGameRecorderManager !== 'function') {
-            console.log('[Recorder] tt.getGameRecorderManager 不可用，降级跳过');
-            return;
-        }
-
-        try {
-            this.recorder = tt.getGameRecorderManager();
-
-            // 录屏开始
-            this.recorder.onStart(() => {
-                console.log('[Recorder] onStart — 录屏已开始');
-                this.isRecording = true;
-                if (this._onStart) this._onStart();
-            });
-
-            // 录屏结束（拿到 videoPath）
-            this.recorder.onStop((res: any) => {
-                console.log('[Recorder] onStop — 录屏已结束:', JSON.stringify(res));
-                this.isRecording = false;
-
-                const videoPath = (res && typeof res.videoPath === 'string') ? res.videoPath : '';
-                if (videoPath) {
-                    this._lastVideoPath = videoPath;
-                    console.log('[Recorder] videoPath:', videoPath);
-                }
-
-                // 进入冷却期（安卓需要延迟才能下一次 start）
-                this.startCooldown();
-
-                if (this._onStop) this._onStop(videoPath);
-            });
-
-            // 录屏错误
-            this.recorder.onError((err: any) => {
-                console.error('[Recorder] onError:', JSON.stringify(err));
-                this.isRecording = false;
-                this.startCooldown();
-                if (this._onError) this._onError(err);
-            });
-
-            console.log('[Recorder] 录屏实例创建成功');
-        } catch (e) {
-            console.error('[Recorder] 创建录屏实例异常:', e);
-            this.recorder = null;
-        }
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  公开接口
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * 开始录屏。
-     * @param duration 录屏时长（秒），抖音最大 300 秒
-     */
-    public start(duration: number = 300): void {
-        if (!this.recorder) {
-            console.log('[Recorder] 降级模式，start 跳过');
-            return;
-        }
-
-        if (this.isRecording) {
-            console.warn('[Recorder] 正在录屏中，忽略重复 start');
-            return;
-        }
-
-        if (this.coolingDown) {
-            console.warn('[Recorder] 冷却期内，忽略 start（安卓需要 500ms 间隔）');
-            return;
-        }
-
-        try {
-            console.log(`[Recorder] start() duration=${duration}s`);
-            this.recorder.start({ duration });
-        } catch (e) {
-            console.error('[Recorder] start 异常:', e);
-        }
-    }
-
-    /** 停止录屏，onStop 回调中拿到 videoPath */
-    public stop(): void {
-        if (!this.recorder) {
-            console.log('[Recorder] 降级模式，stop 跳过');
-            return;
-        }
-
-        if (!this.isRecording) {
-            console.warn('[Recorder] 未在录屏，忽略 stop');
-            return;
-        }
-
-        try {
-            console.log('[Recorder] stop()');
-            this.recorder.stop();
-        } catch (e) {
-            console.error('[Recorder] stop 异常:', e);
-            this.isRecording = false;
-            this.startCooldown();
-        }
-    }
-
-    /**
-     * 设置回调。
-     * @param opts.onStart  录屏开始时调用
-     * @param opts.onStop   录屏结束时调用，参数为 videoPath
-     * @param opts.onError  录屏出错时调用
-     */
-    public on(opts: {
-        onStart?: StartCallback;
-        onStop?: StopCallback;
-        onError?: ErrorCallback;
-    }): void {
-        if (opts.onStart !== undefined) this._onStart = opts.onStart;
-        if (opts.onStop !== undefined) this._onStop = opts.onStop;
-        if (opts.onError !== undefined) this._onError = opts.onError;
-    }
-
-    /** 是否正在录屏 */
-    public get recording(): boolean {
-        return this.isRecording;
-    }
-
-    /** 录屏实例是否可用 */
-    public get isAvailable(): boolean {
-        return this.recorder !== null;
-    }
-
-    /** 获取最后一次录屏的 videoPath */
-    public get lastVideoPath(): string | null {
-        return this._lastVideoPath;
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  内部
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /** 启动冷却计时器（安卓 stop 后立刻 start 会出问题） */
-    private startCooldown(): void {
-        this.coolingDown = true;
-        setTimeout(() => {
-            this.coolingDown = false;
-            console.log('[Recorder] 冷却期结束，可以 start');
-        }, RecorderManager.COOLDOWN_MS);
-    }
-}
-
-================
-File: assets/scripts/SaveManager.ts
-================
+<file path="assets/scripts/SaveManager.ts">
 /**
  * SaveManager — 进度存档持久化单例（纯数据，非 Component）
  *
@@ -1526,10 +1340,9 @@ export class SaveManager {
         }
     }
 }
+</file>
 
-================
-File: assets/scripts/TileGesture.ts
-================
+<file path="assets/scripts/TileGesture.ts">
 import { _decorator, Component, Node, EventTouch, Vec2 } from 'cc';
 
 const { ccclass } = _decorator;
@@ -1607,10 +1420,9 @@ export class TileGesture extends Component {
         this._startPos = null;
     }
 }
+</file>
 
-================
-File: assets/scripts/VibrateManager.ts
-================
+<file path="assets/scripts/VibrateManager.ts">
 import { _decorator, Component } from 'cc';
 const { ccclass, property } = _decorator;
 
@@ -1665,10 +1477,9 @@ export class VibrateManager extends Component {
     medium() { this.short('medium'); }
     heavy()  { this.short('heavy'); }
 }
+</file>
 
-================
-File: assets/scripts/GameManager.ts
-================
+<file path="assets/scripts/GameManager.ts">
 import {
     _decorator,
     Component,
@@ -2053,6 +1864,24 @@ export class GameManager extends Component {
     /** 是否在关卡中（控制暂停键可见性） */
     private _inLevel = false;
 
+    // ── W: 局内道具系统 ─────────────────────────
+    private hammerCount = 1;
+    private shuffleCount = 1;
+    private addStepsCount = 1;
+
+    private boosterBar: Node | null = null;
+    private hammerBtn: Node | null = null;
+    private shuffleBtn: Node | null = null;
+    private addStepsBtn: Node | null = null;
+
+    private hammerLabel: Label | null = null;
+    private shuffleLabel: Label | null = null;
+    private addStepsLabel: Label | null = null;
+
+    private hammerSelecting = false;
+    private boosterBusy = false;
+    private hammerHintLabel: Label | null = null;
+
     // ── 游戏背景层（章节主题色） ─────────────────
     private gameBgNode: Node | null = null;
     private gameBgG: Graphics | null = null;
@@ -2151,6 +1980,7 @@ export class GameManager extends Component {
                 onIceDamaged: (row: number, col: number, layersRemaining: number) => this.onIceDamaged(row, col, layersRemaining),
                 onCrateCleared: (row: number, col: number) => this.onCrateCleared(row, col),
                 onCrateDamaged: (row: number, col: number, layersRemaining: number) => this.onCrateDamaged(row, col, layersRemaining),
+                onHammerResolved: (success: boolean) => this.onHammerResolved(success),
             } as BoardCallbacks);
         }
 
@@ -2175,6 +2005,7 @@ export class GameManager extends Component {
         }
 
         this.layoutBoard();
+        this.layoutBoosterBar();
         // F0: 启动先显示首页（不再直接进关卡选择页）
         this.showHomePanel();
     }
@@ -2553,6 +2384,7 @@ export class GameManager extends Component {
 
         // 重新布局棋盘
         this.layoutBoard();
+        this.layoutBoosterBar();
 
         // 重新定位游戏圈按钮
         this.gameClubEntry?.reposition(
@@ -2607,6 +2439,14 @@ export class GameManager extends Component {
         this.clearedIceCells = 0;  // U1: 清零冰格计数
         this.clearedCrateCells = 0;  // V: 清零木箱格计数
 
+        // W: 重置局内道具
+        this.hammerCount = 1;
+        this.shuffleCount = 1;
+        this.addStepsCount = 1;
+        this.hammerSelecting = false;
+        this.boosterBusy = false;
+        this.board?.cancelHammerMode();
+
         this.hidePanel(this.resultPanel);
         this.hidePanel(this.stepsPanel);
         this.hidePanel(this.pausePanel);
@@ -2623,6 +2463,9 @@ export class GameManager extends Component {
         // Fix 1.1: 延迟重算布局
         this.scheduleOnce(() => {
             this.layoutBoard();
+            this.layoutBoosterBar();
+            this.updateBoosterUI();
+            this.updateBoosterBarVisible();
         }, 0.1);
 
         // 开始录屏（抖音环境才生效，非抖音降级跳过）
@@ -2792,7 +2635,15 @@ export class GameManager extends Component {
     }
 
     private onChainComplete(): void {
+        this.evaluateLevelAfterBoardStable();
+    }
+
+    /** W: 棋盘稳定后的统一目标判定（普通交换连锁结束 & 锤子道具稳定后均调用） */
+    private evaluateLevelAfterBoardStable(): void {
         const config = this.levelConfigs[this.currentLevel];
+
+        // 防重复结算
+        if (this.resultPanel?.active || this.stepsPanel?.active) return;
 
         // ★ 先判过关，后判步数耗尽（避免最后一步刚好达标却误判失败）
         if (this.isGoalReached(config)) {
@@ -3359,6 +3210,7 @@ export class GameManager extends Component {
         // ── 3. HUD / 弹层 ──
         this.createHUD();
         this.createPauseButton();
+        this.createBoosterBar();
         this.createResultPanel();
         this.createStepsPanel();
         this.createLevelSelectPanel();
@@ -5851,7 +5703,300 @@ export class GameManager extends Component {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    //  暂停弹层 — 交互
+    //  W · 局内道具栏
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** W: 创建道具栏（三按钮横排） */
+    private createBoosterBar(): void {
+        const canvas = this.node.parent!;
+        const bar = new Node('BoosterBar');
+        bar.parent = canvas;
+        const barUT = bar.addComponent(UITransform);
+        barUT.setContentSize(540, 56);
+        bar.setPosition(0, -560, 0);
+        bar.active = false;
+        this.boosterBar = bar;
+
+        // 三个按钮
+        this.hammerBtn = this.createBoosterButton(bar, 'HammerBtn', '🔨 ×1', 0, () => this.onHammerBoosterClick());
+        this.shuffleBtn = this.createBoosterButton(bar, 'ShuffleBtn', '🔀 ×1', -185, () => this.onShuffleBoosterClick());
+        this.addStepsBtn = this.createBoosterButton(bar, 'AddStepsBtn', '👣+3 ×1', 185, () => this.onAddStepsBoosterClick());
+
+        // 缓存 Label
+        this.hammerLabel = this.hammerBtn.getChildByName('Label')?.getComponent(Label) ?? null;
+        this.shuffleLabel = this.shuffleBtn.getChildByName('Label')?.getComponent(Label) ?? null;
+        this.addStepsLabel = this.addStepsBtn.getChildByName('Label')?.getComponent(Label) ?? null;
+    }
+
+    /** W: 创建单个道具按钮（比 createRoundButton 更紧凑） */
+    private createBoosterButton(parent: Node, name: string, text: string, offsetX: number, callback: () => void): Node {
+        const w = 165;
+        const h = 50;
+        const node = new Node(name);
+        node.parent = parent;
+        const ut = node.addComponent(UITransform);
+        ut.setContentSize(w, h);
+        node.setPosition(offsetX, 0, 0);
+
+        // Graphics 画圆角底 + 描边
+        const g = node.addComponent(Graphics);
+        g.fillColor = new Color(255, 255, 255, 220);
+        g.strokeColor = new Color(0x9B, 0x59, 0xD9, 255);  // 紫色描边
+        g.lineWidth = 2;
+        g.roundRect(-w / 2, -h / 2, w, h, 24);
+        g.fill();
+        g.stroke();
+
+        // Label
+        const labelNode = new Node('Label');
+        labelNode.parent = node;
+        const labelUT = labelNode.addComponent(UITransform);
+        labelUT.setContentSize(w, h);
+        const label = labelNode.addComponent(Label);
+        label.string = text;
+        label.fontSize = 22;
+        label.lineHeight = 26;
+        label.color = new Color(0x6A, 0x3D, 0xA8, 255);  // 紫色文字
+        label.useSystemFont = true;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+        label.overflow = Label.Overflow.SHRINK;
+
+        // Button（手动 tween 缩放反馈）
+        const button = node.addComponent(Button);
+        button.transition = Button.Transition.NONE;
+        button.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            Tween.stopAllByTarget(node);
+            node.setScale(0.95, 0.95, 1);
+            tween(node)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+        button.node.on(Button.EventType.CLICK, callback, this);
+
+        return node;
+    }
+
+    /** W: 刷新道具栏 UI（次数、按钮状态、高亮） */
+    private updateBoosterUI(): void {
+        if (!this.boosterBar) return;
+
+        const setBtn = (btn: Node | null, label: Label | null, count: number, baseText: string, highlight: boolean) => {
+            if (!btn) return;
+            const btnComp = btn.getComponent(Button);
+            const g = btn.getComponent(Graphics);
+            if (!btnComp || !g) return;
+
+            const used = count <= 0;
+            btnComp.interactable = !used && !this.boosterBusy;
+
+            // 重绘底色
+            const w = 165, h = 50;
+            g.clear();
+            if (used) {
+                g.fillColor = new Color(200, 200, 200, 100);
+                g.strokeColor = new Color(150, 150, 150, 120);
+            } else if (highlight) {
+                g.fillColor = new Color(0xFF, 0xF0, 0xA0, 240);  // 高亮黄底
+                g.strokeColor = new Color(0xE8, 0x8B, 0x1A, 255); // 橙色描边
+            } else {
+                g.fillColor = new Color(255, 255, 255, 220);
+                g.strokeColor = new Color(0x9B, 0x59, 0xD9, 255);
+            }
+            g.lineWidth = highlight ? 3 : 2;
+            g.roundRect(-w / 2, -h / 2, w, h, 24);
+            g.fill();
+            g.stroke();
+
+            // 更新文字
+            if (label) {
+                if (highlight) {
+                    label.string = '🔨 选目标';
+                } else {
+                    label.string = baseText + ` ×${count}`;
+                }
+                label.color = used
+                    ? new Color(150, 150, 150, 150)
+                    : (highlight ? new Color(0xC0, 0x60, 0x00, 255) : new Color(0x6A, 0x3D, 0xA8, 255));
+            }
+        };
+
+        setBtn(this.hammerBtn, this.hammerLabel, this.hammerCount, '🔨', this.hammerSelecting);
+        setBtn(this.shuffleBtn, this.shuffleLabel, this.shuffleCount, '🔀', false);
+        setBtn(this.addStepsBtn, this.addStepsLabel, this.addStepsCount, '👣+3', false);
+    }
+
+    // ── W: 道具栏位置（在 layoutBoard 后调用） ──────
+    private layoutBoosterBar(): void {
+        if (!this.boosterBar) return;
+        const boardNode = this.node.parent?.getChildByName('Board');
+        if (!boardNode) return;
+
+        // 棋盘底边的世界坐标 → Canvas 局部坐标
+        const { ROWS, TILE_SIZE, GAP } = Board;
+        const halfBoard = (ROWS * TILE_SIZE + (ROWS - 1) * GAP) / 2;
+        const boardBottomLocal = boardNode.position.y - halfBoard;
+
+        // 道具栏放在棋盘下方 45~55px
+        const barY = boardBottomLocal - 50;
+
+        // 确保不超出底部安全区
+        const canvasH = this.safeNum(this.canvasH, 1280);
+        const minBottom = -(canvasH / 2) + 50;
+        const finalY = Math.max(barY, minBottom);
+
+        this.boosterBar.setPosition(0, finalY, 0);
+    }
+
+    // ── W: 道具栏可见性 ──────────────────────────
+    private updateBoosterBarVisible(): void {
+        if (!this.boosterBar) return;
+        const anyPanelOpen =
+            (this.resultPanel?.active ?? false) ||
+            (this.stepsPanel?.active ?? false) ||
+            (this.pausePanel?.active ?? false) ||
+            (this.levelSelectPanel?.active ?? false) ||
+            (this.gachaPanel?.active ?? false) ||
+            (this.collectionPanel?.active ?? false) ||
+            (this.homePanel?.active ?? false) ||
+            (this.chapterCard?.active ?? false) ||
+            (this.settingsPanel?.active ?? false) ||
+            (this.dressupPanel?.active ?? false) ||
+            (this.dailySignPanel?.active ?? false);
+        this.boosterBar.active = this._inLevel && !anyPanelOpen;
+    }
+
+    // ── W: 锤子提示文字 ──────────────────────────
+    private showHammerHint(): void {
+        if (this.hammerHintLabel) return;  // 已存在
+        const canvas = this.node.parent!;
+        const node = new Node('HammerHint');
+        node.parent = canvas;
+        const ut = node.addComponent(UITransform);
+        ut.setContentSize(500, 36);
+        // 放在棋盘上方
+        const boardNode = canvas.getChildByName('Board');
+        const { ROWS, TILE_SIZE, GAP } = Board;
+        const halfBoard = (ROWS * TILE_SIZE + (ROWS - 1) * GAP) / 2;
+        const hintY = boardNode ? boardNode.position.y + halfBoard + 30 : 200;
+        node.setPosition(0, hintY, 0);
+
+        const label = node.addComponent(Label);
+        label.string = '🔨 点击一个萌宠、冰层或木箱';
+        label.fontSize = 24;
+        label.lineHeight = 28;
+        label.color = new Color(0x6A, 0x3D, 0xA8, 255);
+        label.useSystemFont = true;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 淡入
+        const op = node.addComponent(UIOpacity);
+        op.opacity = 0;
+        tween(op).to(0.2, { opacity: 255 }).start();
+
+        this.hammerHintLabel = label;
+    }
+
+    private hideHammerHint(): void {
+        if (!this.hammerHintLabel) return;
+        const node = this.hammerHintLabel.node;
+        if (node && node.isValid) {
+            node.destroy();
+        }
+        this.hammerHintLabel = null;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  W · 道具按钮点击处理
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** W: 小锤子按钮 */
+    private onHammerBoosterClick(): void {
+        if (this.hammerCount <= 0) return;
+        if (this.boosterBusy) return;
+
+        // 如果正在选目标，再次点击 = 取消
+        if (this.hammerSelecting) {
+            this.board?.cancelHammerMode();
+            this.hammerSelecting = false;
+            this.hideHammerHint();
+            this.updateBoosterUI();
+            return;
+        }
+
+        // 进入锤子选择模式
+        const ok = this.board?.beginHammerMode() ?? false;
+        if (ok) {
+            this.hammerSelecting = true;
+            this.showHammerHint();
+            this.updateBoosterUI();
+        }
+    }
+
+    /** W: 重新洗牌按钮 */
+    private async onShuffleBoosterClick(): Promise<void> {
+        if (this.shuffleCount <= 0) return;
+        if (this.boosterBusy) return;
+        if (this.hammerSelecting) return;
+
+        this.boosterBusy = true;
+        this.updateBoosterUI();
+
+        try {
+            const ok = await this.board?.useShuffleBooster();
+            if (ok) {
+                this.shuffleCount = Math.max(0, this.shuffleCount - 1);
+            }
+        } catch (e) {
+            console.error('[GameManager] 洗牌道具异常:', e);
+        } finally {
+            this.boosterBusy = false;
+            this.updateBoosterUI();
+        }
+    }
+
+    /** W: +3 步按钮 */
+    private onAddStepsBoosterClick(): void {
+        if (this.addStepsCount <= 0) return;
+        if (this.boosterBusy) return;
+        if (this.hammerSelecting) return;
+        if (!this._inLevel) return;
+        // 弹层打开时不可用
+        if (this.resultPanel?.active || this.stepsPanel?.active || this.pausePanel?.active) return;
+
+        this.currentSteps += 3;
+        this.addStepsCount = Math.max(0, this.addStepsCount - 1);
+        this.updateHUD();
+        this.updateBoosterUI();
+
+        // 简单 scale 弹动步数 Label
+        if (this.stepsLabel) {
+            Tween.stopAllByTarget(this.stepsLabel.node);
+            this.stepsLabel.node.setScale(1.3, 1.3, 1);
+            tween(this.stepsLabel.node)
+                .to(0.2, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }
+    }
+
+    /** W: Board 锤子解析完成回调 */
+    private onHammerResolved(success: boolean): void {
+        if (success) {
+            this.hammerCount = Math.max(0, this.hammerCount - 1);
+            this.hammerSelecting = false;
+            this.boosterBusy = false;
+            this.hideHammerHint();
+            this.updateBoosterUI();
+            // 统一目标判定
+            this.evaluateLevelAfterBoardStable();
+        } else {
+            // 失败 — 不扣次数
+            this.boosterBusy = false;
+            this.updateBoosterUI();
+        }
+    }
     // ══════════════════════════════════════════════════════════════════════════
 
     /** 点暂停键 → 弹出暂停卡，锁棋盘 */
@@ -5960,6 +6105,16 @@ export class GameManager extends Component {
             (this.dressupPanel?.active ?? false) ||
             (this.dailySignPanel?.active ?? false);
         this.pauseBtn.active = this._inLevel && !anyPanelOpen;
+
+        // W: 同步道具栏可见性
+        if (anyPanelOpen && this.hammerSelecting) {
+            // 弹层打开时安全取消锤子选择
+            this.board?.cancelHammerMode();
+            this.hammerSelecting = false;
+            this.hideHammerHint();
+        }
+        this.updateBoosterBarVisible();
+        this.updateBoosterUI();
     }
 
     private showPanel(panel: Node | null, silent: boolean = false): void {
@@ -7561,10 +7716,9 @@ export class GameManager extends Component {
         this.refreshDailySignPanel();
     }
 }
+</file>
 
-================
-File: assets/scripts/Board.ts
-================
+<file path="assets/scripts/Board.ts">
 import {
     _decorator,
     Component,
@@ -7668,6 +7822,9 @@ export enum BoardState {
     LOCKED = 3,
 }
 
+/** W: 道具模式 */
+type BoosterMode = 'none' | 'hammer';
+
 /** Board → GameManager 回调接口 */
 export interface BoardCallbacks {
     /** 有效交换（触发了消除）→ GameManager 扣 1 步 */
@@ -7688,6 +7845,8 @@ export interface BoardCallbacks {
     onCrateDamaged?: (row: number, col: number, layersRemaining: number) => void;
     /** V: 木箱完全清除（某一格的木箱归零） */
     onCrateCleared?: (row: number, col: number) => void;
+    /** W: 锤子道具解析完成（success=是否命中了棋子或木箱） */
+    onHammerResolved?: (success: boolean) => void;
 }
 
 @ccclass('Board')
@@ -7833,6 +7992,14 @@ export class Board extends Component {
     // ── C3 状态超时计时 ──────────────────────
     private _stateTimer: number = 0;
 
+    // ── W: 道具系统 ──────────────────────────
+    /** W: 道具模式 */
+    private _boosterMode: BoosterMode = 'none';
+    /** W: 道具正在解析中（防重入） */
+    private _boosterResolving = false;
+    /** W: 棋盘 epoch — 每次 resetBoard 递增，异步流程据此检测是否已被新关卡取代 */
+    private _boardEpoch = 0;
+
     /** 当前棋盘状态（只读，供外部查询） */
     public get state(): BoardState { return this._state; }
 
@@ -7969,6 +8136,12 @@ export class Board extends Component {
 
     /** 重置棋盘：销毁所有方块，用新的颜色种类数重新生成 */
     public resetBoard(colorCount: number, iceConfig: IceCellConfig[] = [], crateConfig: CrateCellConfig[] = []): void {
+        // W: 棋盘 epoch 递增 — 使旧异步流程作废
+        this._boardEpoch++;
+        // W: 清理道具状态
+        this.cancelHammerMode();
+        this._boosterResolving = false;
+
         // 头像未加载完时暂存请求
         if (!this.framesReady) {
             this.pendingColorCount = colorCount;
@@ -8126,6 +8299,184 @@ export class Board extends Component {
     /** 外部锁定/解锁棋盘（弹层时用） */
     public setBusy(busy: boolean): void {
         this.setState(busy ? BoardState.LOCKED : BoardState.IDLE);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  W · 局内道具系统
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** W: 进入锤子选择模式 */
+    public beginHammerMode(): boolean {
+        if (this._state !== BoardState.IDLE) return false;
+        if (this._boosterResolving) return false;
+        // 取消选中
+        this.deselectTile();
+        // 停止空闲提示和手势引导
+        this.markPlayerActive();
+        this._boosterMode = 'hammer';
+        console.log('[Board] 进入锤子选择模式');
+        return true;
+    }
+
+    /** W: 取消锤子选择模式 */
+    public cancelHammerMode(): void {
+        if (this._boosterMode === 'hammer') {
+            console.log('[Board] 取消锤子选择模式');
+        }
+        this._boosterMode = 'none';
+        // 安全取消选中
+        if (this.selectedTile) {
+            this.deselectTile();
+        }
+    }
+
+    /** W: 获取当前道具模式（供外部查询） */
+    public get boosterMode(): BoosterMode { return this._boosterMode; }
+
+    /** W: 洗牌道具 — 不扣步、不触发消除回调 */
+    public async useShuffleBooster(): Promise<boolean> {
+        // 如果正在使用锤子，先取消
+        if (this._boosterMode === 'hammer') {
+            this.cancelHammerMode();
+        }
+        if (this._state !== BoardState.IDLE) return false;
+        if (this._boosterResolving) return false;
+
+        this._boosterResolving = true;
+        const epoch = this._boardEpoch;
+
+        try {
+            this.deselectTile();
+            this.markPlayerActive();
+            this.setState(BoardState.CHAINING);
+
+            await this.shuffleBoardWithHint();
+
+            // epoch 检查：如果期间切关了，不操作新棋盘
+            if (epoch !== this._boardEpoch) return false;
+
+            // 确认：无现成匹配 + 有可行步
+            if (this.findMatchGroups().length > 0) {
+                console.warn('[Board] 洗牌后仍有匹配，判定失败');
+                return false;
+            }
+            if (!this.hasAnyValidMove()) {
+                console.warn('[Board] 洗牌后无可行步，判定失败');
+                return false;
+            }
+
+            console.log('[Board] 洗牌道具成功');
+            return true;
+        } catch (e) {
+            console.error('[Board] 洗牌道具异常:', e);
+            return false;
+        } finally {
+            this._boosterResolving = false;
+            this._boosterMode = 'none';
+            if (this._state !== BoardState.LOCKED && epoch === this._boardEpoch) {
+                this.setState(BoardState.IDLE);
+            }
+        }
+    }
+
+    /** W: 锤子核心流程 — 点击目标格后执行伤害/消除/重力/连锁 */
+    private async resolveHammerAt(row: number, col: number): Promise<void> {
+        // 1. 防重入
+        if (this._boosterMode !== 'hammer') return;
+        if (this._boosterResolving) return;
+        if (this._state !== BoardState.IDLE) return;
+        if (!this.inBounds(row, col)) return;
+
+        // 2. 判断目标
+        const hasCrate = this.hasCrateAt(row, col);
+        const hasTile = this.tiles[row]?.[col] != null && this.grid[row]?.[col] != null && this.grid[row][col] >= 0;
+
+        // 3. 无效目标 — 不消耗、不清模式、直接 return
+        if (!hasCrate && !hasTile) {
+            console.log('[Board] 锤子点击无效目标，保持选择状态');
+            return;
+        }
+
+        // 4. 有效目标 — 开始解析
+        this._boosterResolving = true;
+        this._boosterMode = 'none';
+        this.deselectTile();
+        this.markPlayerActive();
+        this.setState(BoardState.CHAINING);
+        const epoch = this._boardEpoch;
+
+        let success = false;
+
+        try {
+            if (hasCrate) {
+                // ── A. 目标是木箱 ──
+                console.log(`[Board] 锤子击中木箱 (${row},${col})`);
+                this.damageCrateAt(row, col);
+
+                const crateCleared = !this.hasCrateAt(row, col);
+
+                if (crateCleared) {
+                    // 木箱清除后执行重力和连锁
+                    if (epoch !== this._boardEpoch) return;
+                    await this.applyGravity();
+                    if (epoch !== this._boardEpoch) return;
+                    await this.processChain();
+                    if (epoch !== this._boardEpoch) return;
+
+                    // 死局检测
+                    if (!this.hasAnyValidMove()) {
+                        console.log('[Board] 锤子后死局，自动洗牌');
+                        await this.shuffleBoardWithHint();
+                    }
+                }
+                // 木箱未清除时不执行重力/连锁
+                success = true;
+            } else {
+                // ── B. 目标是普通棋子 ──
+                console.log(`[Board] 锤子击中棋子 (${row},${col})`);
+                const cells = new Set<string>([`${row},${col}`]);
+
+                // 展开特效（如果是特殊棋子则引爆）
+                const splash = this.expandSpecialSplash(cells);
+                const delayMap = splash.delayMap;
+                const waveStyleMap = splash.waveStyleMap;
+
+                // 销毁
+                if (epoch !== this._boardEpoch) return;
+                await this.destroyCellSet(cells, delayMap, waveStyleMap);
+
+                if (epoch !== this._boardEpoch) return;
+                await this.applyGravity();
+                if (epoch !== this._boardEpoch) return;
+                await this.processChain();
+
+                if (epoch !== this._boardEpoch) return;
+
+                // 死局检测
+                if (!this.hasAnyValidMove()) {
+                    console.log('[Board] 锤子后死局，自动洗牌');
+                    await this.shuffleBoardWithHint();
+                }
+
+                success = true;
+            }
+        } catch (e) {
+            console.error('[Board] 锤子解析异常:', e);
+        } finally {
+            this._boosterResolving = false;
+            this._boosterMode = 'none';
+
+            // epoch 检查
+            if (epoch === this._boardEpoch) {
+                if (this._state !== BoardState.LOCKED) {
+                    this.setState(BoardState.IDLE);
+                }
+                // 只回调一次
+                if (success) {
+                    this.callbacks.onHammerResolved?.(true);
+                }
+            }
+        }
     }
 
     /** 分数翻倍（看广告占位） */
@@ -8503,6 +8854,12 @@ export class Board extends Component {
 
     // ── 点击逻辑（供 TileGesture 调用） ──────────────
     public onCellClick(row: number, col: number): void {
+        // W: 锤子道具模式 — 直接处理，不走普通选中/交换逻辑
+        if (this._boosterMode === 'hammer') {
+            void this.resolveHammerAt(row, col);
+            return;
+        }
+
         if (!this.inputEnabled) {
             console.log(`[Board] 输入忽略: onCellClick(${row},${col}) state=${BoardState[this._state]}`);
             return;
@@ -8531,6 +8888,9 @@ export class Board extends Component {
 
     // ── 滑动交换入口（供 TileGesture 调用） ────
     public trySwapByDir(r: number, c: number, dr: number, dc: number): void {
+        // W: 锤子模式禁止滑动交换
+        if (this._boosterMode === 'hammer') return;
+
         if (this._state !== BoardState.IDLE) {
             console.log(`[Board] 输入忽略: trySwapByDir(${r},${c},${dr},${dc}) state=${BoardState[this._state]}`);
             return;
@@ -10865,6 +11225,13 @@ return { cells, waveSeeds, isFullBoardClear: false };
         const ut = node.addComponent(UITransform);
         ut.setContentSize(Board.TILE_SIZE, Board.TILE_SIZE);
 
+        // W: 为木箱节点添加触摸入口 — 仅在锤子模式下生效
+        node.on(Node.EventType.TOUCH_END, () => {
+            if (this._boosterMode === 'hammer') {
+                this.onCellClick(row, col);
+            }
+        });
+
         this.drawCrateNode(node, layers);
         return node;
     }
@@ -11649,11 +12016,6 @@ return { cells, waveSeeds, isFullBoardClear: false };
             .start();
     }
 }
+</file>
 
-
-
-
-
-================================================================
-End of Codebase
-================================================================
+</files>
