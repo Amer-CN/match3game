@@ -47,6 +47,20 @@ enum MatchShape {
     LINE_5 = 4,   // 直线 ≥5
 }
 
+/** T4a: 视觉波纹种子（仅供表现层使用） */
+interface VisualWaveSeed {
+    row: number;
+    col: number;
+    special: SpecialType;
+    baseDelay: number;
+}
+
+/** T4a: 特效交换结果（内部返回结构） */
+interface SpecialExchangeResult {
+    cells: Set<string>;
+    waveSeeds: VisualWaveSeed[];
+}
+
 /** 一组匹配（连续同色） */
 interface MatchGroup {
     cells: Array<{ row: number; col: number }>;
@@ -98,6 +112,11 @@ export class Board extends Component {
     static readonly GUIDE_HINT_DELAY = 3;   // C0: L1 手势引导触发秒数
     static readonly HINT_SCALE = 1.15;     // 提示高亮缩放
     static readonly MAX_STATE_TIME = 15;   // C3: 非IDLE态最大停留秒数（防卡死）
+    // T4a: 视觉波纹常量（只控制表现，不参与逻辑计算）
+    static readonly WAVE_LINE_STEP = 0.035;    // 线消：35ms/格
+    static readonly WAVE_BOMB_STEP = 0.045;    // 炸弹：45ms/圈
+    static readonly WAVE_COLOR_STEP = 0.04;    // 彩球：40ms/距离层
+    static readonly WAVE_MAX_DELAY = 0.4;      // 最大视觉启动延迟：400ms
 
     // 6 色底色（L1/L2 用前 5 种，L3 用全部 6 种）— 明度阶梯：黄最亮→紫最暗
     static readonly COLORS: Color[] = [
@@ -191,6 +210,8 @@ export class Board extends Component {
 
     // ── C2 特效层（COMBO/引导/洗牌提示统一挂这层，确保在方块之上） ──
     private _effectsLayer: Node | null = null;
+    // T1: 待执行的顿帧时长（特效引爆时设置，在 async 链中 await）
+    private _pendingHitstop: number = 0;
 
     // ── C3 状态超时计时 ──────────────────────
     private _stateTimer: number = 0;
@@ -230,128 +251,6 @@ export class Board extends Component {
         this.loadMonsterFrames();
         this.loadSpecialFrames();  // 加载特效贴图
         // 触摸由 TileGesture 组件处理，无需棋盘层监听
-
-        // ── 调试入口（A2 验证用，测完删除）──
-        if (typeof window !== 'undefined') {
-            const win = window as any;
-            win.__boardDebug__ = {
-                testShuffle: () => {
-                    console.log('[DEBUG] ★ 触发洗牌动画');
-                    this.shuffleBoardWithHint();
-                },
-                testDeadlock: () => {
-                    console.log('[DEBUG] ★ 强制死局（临时禁用 hasAnyValidMove 返回 true）');
-                    win.__debugForceDeadlock__ = true;
-                    setTimeout(() => { win.__debugForceDeadlock__ = false; }, 5000);
-                },
-                testForceRegen: async () => {
-                    console.log('[DEBUG] ★ 强制触发 forceRegenerateBoard（洗牌上限临时改为 1）');
-                    win.__debugForceRegenLimit__ = true;
-                    win.__debugForceDeadlock__ = true;  // 确保洗牌必失败
-                    // 触发洗牌（内部会因上限 1 + 死局标志而走到 forceRegenerateBoard）
-                    await this.shuffleBoardWithHint();
-                    // ★ 洗牌完成后：清除所有调试标志，打印真实可解性
-                    win.__debugForceRegenLimit__ = false;
-                    win.__debugForceDeadlock__ = false;
-                    const realResult = this.hasAnyValidMove();
-                    console.log('[DEBUG] ★ forceRegenerateBoard 后真实 hasAnyValidMove =', realResult);
-                    if (!realResult) {
-                        console.error('[DEBUG] ⚠ 重生成后仍无可行步！请检查 forceRegenerateBoard 逻辑');
-                    } else {
-                        console.log('[DEBUG] ✓ 重生成后棋盘有可行步，验证通过');
-                    }
-                },
-            };
-            console.log('[DEBUG] 调试入口已挂载，用 window.__boardDebug__.testShuffle() / .testDeadlock() / .testForceRegen()');
-        }
-
-        // ===== TEMP DEBUG (B3/B4 补测·上线前删) =====
-        {
-            const g = globalThis as any;
-            const SPECIAL_MAP: Record<string, number> = {
-                'NONE': SpecialType.NONE,
-                'LINE_H': SpecialType.LINE_H,
-                'LINE_V': SpecialType.LINE_V,
-                'BOMB': SpecialType.BOMB,
-                'COLOR_BOMB': SpecialType.COLOR_BOMB,
-            };
-
-            /** 把 (r,c) 的特效设为指定类型 + 刷角标视觉；越界忽略 */
-            const setSpecial = (r: number, c: number, typeName: string): void => {
-                if (r < 0 || r >= Board.ROWS || c < 0 || c >= Board.COLS) return;
-                const st = SPECIAL_MAP[typeName];
-                if (st === undefined) { console.warn('[boardDebug] 未知类型:', typeName); return; }
-                this.tileSpecials[r][c] = st;
-                // NONE 时手动清角标（applySpecialVisual 对 NONE 会 return）
-                const tileNode = this.tiles[r]?.[c];
-                if (!tileNode) return;
-if (st === SpecialType.NONE) {
-this.removeSpecialVisual(tileNode);
-console.log(`[boardDebug] setSpecial(${r},${c}) = NONE (角标已清)`);
-                } else {
-                    this.applySpecialVisual(r, c, st);
-                    console.log(`[boardDebug] setSpecial(${r},${c}) = ${typeName} ✓`);
-                }
-            };
-
-            g.boardDebug = {
-                /** 单格设特效 */
-                setSpecial: (r: number, c: number, typeName: string) => setSpecial(r, c, typeName),
-
-                /** 彩球 */
-                colorBomb: (r: number, c: number) => setSpecial(r, c, 'COLOR_BOMB'),
-
-                /** 线+线（B4 大十字）：(r,c)=LINE_H, (r,c+1)=LINE_V */
-                pairLineLine: (r: number, c: number) => {
-                    let c2 = c + 1;
-                    if (c2 >= Board.COLS) { r += 1; c2 = c; }  // 越界则换到下一行同列
-                    if (r >= Board.ROWS) return;
-                    setSpecial(r, c, 'LINE_H');
-                    setSpecial(r, c2, 'LINE_V');
-                    console.log(`[boardDebug] pairLineLine: (${r},${c})=LINE_H + (${r},${c2})=LINE_V → 滑动交换验证大十字`);
-                },
-
-                /** 彩球+线（B4）：(r,c)=COLOR_BOMB, (r,c+1)=LINE_H */
-                pairColorBombLine: (r: number, c: number) => {
-                    let c2 = c + 1;
-                    if (c2 >= Board.COLS) { r += 1; c2 = c; }
-                    if (r >= Board.ROWS) return;
-                    setSpecial(r, c, 'COLOR_BOMB');
-                    setSpecial(r, c2, 'LINE_H');
-                    console.log(`[boardDebug] pairColorBombLine: (${r},${c})=COLOR_BOMB + (${r},${c2})=LINE_H → 滑动交换验证`);
-                },
-
-                /** 彩球+彩球（B4 清屏）：(r,c) 与 (r,c+1) 都设 COLOR_BOMB */
-                pairColorBomb: (r: number, c: number) => {
-                    let c2 = c + 1;
-                    if (c2 >= Board.COLS) { r += 1; c2 = c; }
-                    if (r >= Board.ROWS) return;
-                    setSpecial(r, c, 'COLOR_BOMB');
-                    setSpecial(r, c2, 'COLOR_BOMB');
-                    console.log(`[boardDebug] pairColorBomb: (${r},${c}) + (${r},${c2}) 双彩球 → 滑动交换验证清屏`);
-                },
-
-                /** 打印整盘 tileSpecials 矩阵 */
-                dump: () => {
-                    const names: Record<number, string> = {
-                        0: '·', 1: 'H', 2: 'V', 3: 'B', 4: 'C',
-                    };
-                    console.log('[boardDebug] === tileSpecials 矩阵 ===');
-                    for (let r = 0; r < Board.ROWS; r++) {
-                        const row = this.tileSpecials[r]?.map((s: number) => names[s] ?? '?').join(' ') ?? '???';
-                        console.log(`  R${r}: ${row}`);
-                    }
-                },
-
-                /** 确认棋盘可操作 */
-                status: () => {
-                    console.log(`[boardDebug] _state=${BoardState[this._state]}, inputEnabled=${this.inputEnabled}`);
-                },
-            };
-
-            console.log('[boardDebug] ★ B3/B4 补测入口已挂载: boardDebug.setSpecial / .colorBomb / .pairLineLine / .pairColorBombLine / .pairColorBomb / .dump / .status');
-        }
-        // ===== END TEMP DEBUG (B3/B4 补测·上线前删) =====
     }
 
     onDestroy(): void {
@@ -472,6 +371,7 @@ console.log(`[boardDebug] setSpecial(${r},${c}) = NONE (角标已清)`);
         this.tileInfoMap.clear();
         this.selectedTile = null;
         this._activatedSpecials.clear();  // B3 修复: 重置已激活集合
+        this._pendingHitstop = 0;         // T1: 重置顿帧
         this.stopGuideAnimation();   // C0: 停止引导
         this.stopHintAnimation();    // 停止提示
         if (this._effectsLayer && this._effectsLayer.isValid) {
@@ -1031,13 +931,20 @@ console.log(`[boardDebug] setSpecial(${r},${c}) = NONE (角标已清)`);
             await this.performSwap(a, b);
 
             // ★ B3/B4: 主动特效交换检测（在普通匹配判定之前）
-            const specialCells = this.triggerSpecialExchange(a, b);
+            const specialResult = this.triggerSpecialExchange(a, b);
 
-            if (specialCells) {
+            if (specialResult) {
+                const specialCells = specialResult.cells;
                 // 特效交换被触发 → 展开 + 销毁 + 连锁
                 hadMatches = true;
-                this.expandSpecialSplash(specialCells);
-                await this.destroyCellSet(specialCells);
+                const delayMap = this.expandSpecialSplash(specialCells, specialResult.waveSeeds);
+                // T1: 顿帧——特效引爆后插入极短停顿
+                if (this._pendingHitstop > 0) {
+                    const hs = this._pendingHitstop;
+                    this._pendingHitstop = 0;
+                    await this.hitstop(hs);
+                }
+                await this.destroyCellSet(specialCells, delayMap);
 
                 this.callbacks.onValidSwap?.();
                 this.setState(BoardState.CHAINING);
@@ -1089,7 +996,7 @@ console.log(`[boardDebug] setSpecial(${r},${c}) = NONE (角标已清)`);
      * 2. 一个 COLOR_BOMB + 一个普通 → 清该色全盘
      * 3. 其余 → null（走普通匹配）
      */
-    private triggerSpecialExchange(a: TileInfo, b: TileInfo): Set<string> | null {
+    private triggerSpecialExchange(a: TileInfo, b: TileInfo): SpecialExchangeResult | null {
         const { ROWS, COLS } = Board;
         const sa = this.tileSpecials[a.row]?.[a.col] ?? SpecialType.NONE;
         const sb = this.tileSpecials[b.row]?.[b.col] ?? SpecialType.NONE;
@@ -1097,6 +1004,7 @@ console.log(`[boardDebug] setSpecial(${r},${c}) = NONE (角标已清)`);
         if (sa === SpecialType.NONE && sb === SpecialType.NONE) return null;
 
         const cells = new Set<string>();
+        const waveSeeds: VisualWaveSeed[] = [];
         const addCell = (r: number, c: number) => {
             if (r >= 0 && r < ROWS && c >= 0 && c < COLS) cells.add(`${r},${c}`);
         };
@@ -1159,7 +1067,10 @@ const tileA = this.tiles[a.row]?.[a.col];
 const tileB = this.tiles[b.row]?.[b.col];
 if (tileA) this.removeSpecialVisual(tileA);
 if (tileB) this.removeSpecialVisual(tileB);
-return cells;
+// T4a: 保存表现种子
+if (sa !== SpecialType.NONE) waveSeeds.push({ row: a.row, col: a.col, special: sa, baseDelay: 0 });
+if (sb !== SpecialType.NONE) waveSeeds.push({ row: b.row, col: b.col, special: sb, baseDelay: 0 });
+return { cells, waveSeeds };
         }
 
         // ── 一个 COLOR_BOMB + 一个普通 → 清该色全盘 + 彩球自身 ──
@@ -1182,7 +1093,9 @@ this.playSpecialBurst(bombPos.row, bombPos.col, SpecialType.COLOR_BOMB);
 // 移除视觉层
 const tileBomb = this.tiles[bombPos.row]?.[bombPos.col];
 if (tileBomb) this.removeSpecialVisual(tileBomb);
-return cells;
+// T4a: 保存表现种子
+waveSeeds.push({ row: bombPos.row, col: bombPos.col, special: SpecialType.COLOR_BOMB, baseDelay: 0 });
+return { cells, waveSeeds };
         }
 
         // ── 一个 LINE/BOMB + 一个普通 → 走普通匹配（特效格可能被波及而被动激活）──
@@ -1190,7 +1103,7 @@ return cells;
     }
 
     /** B3/B4: 从 Set<string> 销毁所有格（动画 + 清理数据），与 eliminateMatches 逻辑一致 */
-    private async destroyCellSet(cells: Set<string>): Promise<void> {
+    private async destroyCellSet(cells: Set<string>, delayMap: Map<string, number> = new Map()): Promise<void> {
         const promises: Promise<void>[] = [];
         let destroyedCount = 0;
 
@@ -1216,19 +1129,10 @@ return cells;
             this.tileInfoMap.delete(tileNode);
             destroyedCount++;
 
-            const opacity = tileNode.getComponent(UIOpacity) ?? tileNode.addComponent(UIOpacity);
+            // T4a: 延迟视觉消失动画（逻辑数据已在上文立即清理）
+            const delaySec = delayMap.get(key) ?? 0;
             promises.push(
-                new Promise<void>(resolve => {
-                    tween(tileNode)
-                        .to(Board.ELIMINATE_SCALE_UP, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
-                        .to(Board.ELIMINATE_SCALE_DOWN, { scale: new Vec3(0, 0, 0) }, { easing: 'quadIn' })
-                        .start();
-                    tween(opacity)
-                        .delay(Board.ELIMINATE_SCALE_UP)
-                        .to(Board.ELIMINATE_SCALE_DOWN, { opacity: 0 })
-                        .call(() => { tileNode.destroy(); resolve(); })
-                        .start();
-                }),
+                this.animateEliminatedTile(tileNode, row, col, eliminatedColor, delaySec),
             );
         }
 
@@ -1242,6 +1146,52 @@ return cells;
         AudioManager.inst?.playMatch();
         destroyedCount >= 4 ? VibrateManager.inst?.medium() : VibrateManager.inst?.light();
         await Promise.all(promises);
+    }
+
+    /** T4a: 共用视觉销毁动画（带延迟启动），不含计分/回调/矩阵清理 */
+    private animateEliminatedTile(
+        tileNode: Node,
+        row: number,
+        col: number,
+        eliminatedColor: number,
+        delaySec: number,
+    ): Promise<void> {
+        let safeDelay = 0;
+        if (typeof delaySec === 'number' && isFinite(delaySec) && delaySec > 0) {
+            safeDelay = Math.min(delaySec, Board.WAVE_MAX_DELAY);
+        }
+
+        return new Promise<void>(resolve => {
+            const startAnimation = () => {
+                if (!this.isValid || !tileNode || !tileNode.isValid) {
+                    resolve();
+                    return;
+                }
+                // ★ H2: 在消除位置喷同色柔光粒子
+                if (eliminatedColor >= 0 && eliminatedColor < Board.COLORS.length) {
+                    const pos = this.tileToLocalPosition(row, col);
+                    if (isFinite(pos.x) && isFinite(pos.y)) {
+                        this.spawnEliminateParticles(pos.x, pos.y, Board.COLORS[eliminatedColor]);
+                    }
+                }
+                const opacity = tileNode.getComponent(UIOpacity) ?? tileNode.addComponent(UIOpacity);
+                tween(tileNode)
+                    .to(Board.ELIMINATE_SCALE_UP, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
+                    .to(Board.ELIMINATE_SCALE_DOWN, { scale: new Vec3(0, 0, 0) }, { easing: 'quadIn' })
+                    .start();
+                tween(opacity)
+                    .delay(Board.ELIMINATE_SCALE_UP)
+                    .to(Board.ELIMINATE_SCALE_DOWN, { opacity: 0 })
+                    .call(() => { if (tileNode.isValid) tileNode.destroy(); resolve(); })
+                    .start();
+            };
+
+            if (safeDelay > 0) {
+                setTimeout(() => startAnimation(), safeDelay * 1000);
+            } else {
+                startAnimation();
+            }
+        });
     }
 
     private async performSwap(a: TileInfo, b: TileInfo): Promise<void> {
@@ -1532,11 +1482,6 @@ return cells;
 
     /** 便捷判断：当前棋盘是否有可行步 */
     public hasAnyValidMove(): boolean {
-        // 调试：临时强制死局（5秒有效，由 testDeadlock 触发）
-        if (typeof window !== 'undefined' && (window as any).__debugForceDeadlock__) {
-            console.log('[DEBUG] ⚠ hasAnyValidMove 被强制返回 false（死局模拟）');
-            return false;
-        }
         return this.findAnyValidMove() !== null;
     }
 
@@ -1629,8 +1574,7 @@ return cells;
      */
     private async shuffleBoardWithHint(): Promise<void> {
         const { ROWS, COLS } = Board;
-        // 调试：临时把上限改成 1，测试 forceRegenerateBoard 路径
-        const MAX_RETRIES = (typeof window !== 'undefined' && (window as any).__debugForceRegenLimit__) ? 1 : 20;
+        const MAX_RETRIES = 20;
 
         // 提示文字 + 轻抖
         this.showShuffleHint();
@@ -1866,8 +1810,52 @@ return cells;
      * 新加入的格若也是特效格 → 继续展开（连环引爆），直到无新增。
      * 不递归、不爆栈，纯迭代。
      */
-    private expandSpecialSplash(destroyedCells: Set<string>): void {
+    private expandSpecialSplash(
+        destroyedCells: Set<string>,
+        initialSeeds: VisualWaveSeed[] = [],
+    ): Map<string, number> {
         const { ROWS, COLS } = Board;
+        const delayMap = new Map<string, number>();
+
+        // ── T4a: 延迟计算工具 ──────────────────────
+        const computeDelay = (sr: number, sc: number, special: SpecialType, baseDelay: number, r: number, c: number): number => {
+            let dist = 0;
+            let step = Board.WAVE_LINE_STEP;
+            if (special === SpecialType.LINE_H) {
+                if (r === sr) {
+                    dist = Math.abs(c - sc);
+                } else {
+                    dist = Math.abs(r - sr) + Math.abs(c - sc); // Manhattan fallback
+                }
+                step = Board.WAVE_LINE_STEP;
+            } else if (special === SpecialType.LINE_V) {
+                if (c === sc) {
+                    dist = Math.abs(r - sr);
+                } else {
+                    dist = Math.abs(r - sr) + Math.abs(c - sc);
+                }
+                step = Board.WAVE_LINE_STEP;
+            } else if (special === SpecialType.BOMB) {
+                dist = Math.max(Math.abs(r - sr), Math.abs(c - sc));
+                step = Board.WAVE_BOMB_STEP;
+            } else if (special === SpecialType.COLOR_BOMB) {
+                dist = Math.abs(r - sr) + Math.abs(c - sc);
+                step = Board.WAVE_COLOR_STEP;
+            } else {
+                dist = Math.abs(r - sr) + Math.abs(c - sc);
+                step = Board.WAVE_LINE_STEP;
+            }
+            return Math.min(baseDelay + dist * step, Board.WAVE_MAX_DELAY);
+        };
+
+        const setDelayMin = (k: string, d: number) => {
+            const safeD = (typeof d === 'number' && isFinite(d) && d >= 0) ? Math.min(d, Board.WAVE_MAX_DELAY) : 0;
+            const prev = delayMap.get(k);
+            if (prev === undefined || safeD < prev) {
+                delayMap.set(k, safeD);
+            }
+        };
+
         const queue = Array.from(destroyedCells);
         const processed = new Set<string>();
 
@@ -1880,6 +1868,9 @@ return cells;
                 queue.push(k);
             }
         };
+
+        // T4a: 记录 BFS 中发现的被动特效种子
+        const passiveSeeds: VisualWaveSeed[] = [];
 
         while (queue.length > 0) {
             const key = queue.shift()!;
@@ -1895,6 +1886,9 @@ return cells;
 
             const special = this.tileSpecials[r][c];
             if (special === SpecialType.NONE) continue;
+
+            // T4a: 记录被动特效种子（baseDelay 待后填）
+            passiveSeeds.push({ row: r, col: c, special, baseDelay: 0 });
 
             // 特效被引爆 → 通知 GameManager 计数
             this.callbacks.onSpecialDetonated?.();
@@ -1925,9 +1919,47 @@ return cells;
             }
         }
 
+        // ── T4a: 计算视觉延迟 ──────────────────────
+        // 1. 所有格子默认 delay=0
+        for (const key of destroyedCells) {
+            delayMap.set(key, 0);
+        }
+
+        // 2. 从主动种子计算延迟
+        for (const seed of initialSeeds) {
+            const seedKey = `${seed.row},${seed.col}`;
+            setDelayMin(seedKey, seed.baseDelay);
+            for (const key of destroyedCells) {
+                const [r, c] = key.split(',').map(Number);
+                if (!isFinite(r) || !isFinite(c)) continue;
+                setDelayMin(key, computeDelay(seed.row, seed.col, seed.special, seed.baseDelay, r, c));
+            }
+        }
+
+        // 3. 从被动种子计算延迟（baseDelay = 该格当前最小 delay）
+        for (const pseed of passiveSeeds) {
+            const pseedKey = `${pseed.row},${pseed.col}`;
+            pseed.baseDelay = delayMap.get(pseedKey) ?? 0;
+            for (const key of destroyedCells) {
+                const [r, c] = key.split(',').map(Number);
+                if (!isFinite(r) || !isFinite(c)) continue;
+                setDelayMin(key, computeDelay(pseed.row, pseed.col, pseed.special, pseed.baseDelay, r, c));
+            }
+        }
+
+        // 4. 安全降级：确保所有格子有有限 delay
+        for (const key of destroyedCells) {
+            const d = delayMap.get(key);
+            if (d === undefined || !isFinite(d) || d < 0) {
+                delayMap.set(key, 0);
+            }
+        }
+
         if (processed.size > 1) {
             console.log(`[Board] 特效引爆展开完成，待消集合: ${destroyedCells.size} 格`);
         }
+
+        return delayMap;
     }
 
     /** B3: 统计当前棋盘上数量最多的颜色 */
@@ -1969,7 +2001,15 @@ return cells;
         }
 
         // ★ B1: 展开特效引爆（LINE_H 清行 / LINE_V 清列，连环引爆）
-        this.expandSpecialSplash(destroyedCells);
+        // T4a: 同时获取视觉延迟映射
+        const delayMap = this.expandSpecialSplash(destroyedCells);
+
+        // T1: 顿帧——被动引爆特效后插入极短停顿
+        if (this._pendingHitstop > 0) {
+            const hs = this._pendingHitstop;
+            this._pendingHitstop = 0;
+            await this.hitstop(hs);
+        }
 
         // 销毁所有待消格
         for (const key of destroyedCells) {
@@ -1993,26 +2033,10 @@ return cells;
             this.tileSpecials[row][col] = SpecialType.NONE;
             this.tileInfoMap.delete(tileNode);
 
-            // 确保 UIOpacity 存在（用于淡出）
-            const opacity = tileNode.getComponent(UIOpacity) ?? tileNode.addComponent(UIOpacity);
-
+            // T4a: 延迟视觉消失动画（逻辑数据已在上文立即清理）
+            const delaySec = delayMap.get(key) ?? 0;
             promises.push(
-                new Promise<void>(resolve => {
-                    // 先快速放大 1.15（0.06s）再缩 0 + 淡出（0.14s）
-                    tween(tileNode)
-                        .to(Board.ELIMINATE_SCALE_UP, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
-                        .to(Board.ELIMINATE_SCALE_DOWN, { scale: new Vec3(0, 0, 0) }, { easing: 'quadIn' })
-                        .start();
-
-                    tween(opacity)
-                        .delay(Board.ELIMINATE_SCALE_UP)
-                        .to(Board.ELIMINATE_SCALE_DOWN, { opacity: 0 })
-                        .call(() => {
-                            tileNode.destroy();
-                            resolve();
-                        })
-                        .start();
-                }),
+                this.animateEliminatedTile(tileNode, row, col, eliminatedColor, delaySec),
             );
         }
 
@@ -2201,15 +2225,17 @@ return cells;
         }
     }
 
-    /** 激活 juice：fxOverlay 放大消失 + 粒子爆发 + 震动 + 音效 */
+    /** 激活 juice：fxOverlay 放大消失 + T3 冲击波环/光束/连线 + T3 增强粒子 + T1 闪光/震屏/顿帧 + T2 震动/音效 */
     private playSpecialBurst(row: number, col: number, special: SpecialType): void {
         if (special === SpecialType.NONE) return;
         const pos = this.tileToLocalPosition(row, col);
+        if (!isFinite(pos.x) || !isFinite(pos.y)) return;
         const effectsLayer = this.ensureEffectsLayer();
         const ts = Board.TILE_SIZE;
         const safeTs = (typeof ts === 'number' && !isNaN(ts) && isFinite(ts) && ts > 0) ? ts : 70;
         const isColorBomb = special === SpecialType.COLOR_BOMB;
-        // Fix 2: 与 applySpecialVisual 保持一致的放大比例
+        const isBomb = special === SpecialType.BOMB;
+        const isLine = special === SpecialType.LINE_H || special === SpecialType.LINE_V;
         const overlayScale = isColorBomb ? 0.9 : 0.85;
         const overlaySize = safeTs * overlayScale;
 
@@ -2232,7 +2258,6 @@ return cells;
             if (special === SpecialType.LINE_V) burst.angle = 90;
             const burstOp = burst.addComponent(UIOpacity);
             burstOp.opacity = 255;
-
             tween(burst)
                 .to(0.2, { scale: new Vec3(s * 1.3, s * 1.3, 1) }, { easing: 'quadOut' })
                 .start();
@@ -2243,57 +2268,84 @@ return cells;
                 .start();
         }
 
-        // 2. 粒子爆发（8~12 白色星点外扩）
-        const particleCount = isColorBomb ? 12 : 8;
+        // T3: 冲击波环（所有特效都加）
+        this.spawnShockwaveRing(pos, special, safeTs, effectsLayer);
+
+        // T3: 线消光束
+        if (special === SpecialType.LINE_H) {
+            this.spawnLineBeam(row, col, true, effectsLayer);
+        } else if (special === SpecialType.LINE_V) {
+            this.spawnLineBeam(row, col, false, effectsLayer);
+        }
+
+        // T3: 彩球连线
+        if (isColorBomb) {
+            this.spawnColorBombRays(pos, effectsLayer);
+        }
+
+        // 2. T3 增强粒子爆发（12~16颗、14~20px、60~90px外扩、0.45s存活）
+        const particleCount = isColorBomb ? 16 : isBomb ? 14 : 12;
+        const particleColors: Color[] = isColorBomb
+            ? Board.COLORS.map(c => c.clone())
+            : isBomb
+                ? [new Color(0xFF, 0xA5, 0x00), new Color(0xFF, 0xD7, 0x00), new Color(0xFF, 0x8C, 0x00)]
+                : [new Color(255, 255, 255)];
         for (let i = 0; i < particleCount; i++) {
             const p = new Node('particle');
             p.parent = effectsLayer;
             p.setPosition(pos);
+            const pSize = 14 + Math.random() * 6;
             const pUT = p.addComponent(UITransform);
             pUT.setAnchorPoint(0.5, 0.5);
-            pUT.setContentSize(10, 10);
-            const pSprite = p.addComponent(Sprite);
-            pSprite.sizeMode = Sprite.SizeMode.CUSTOM;
-            pSprite.trim = false;
-            pSprite.spriteFrame = this.whiteFrame;
-            pUT.setContentSize(10, 10);
+            pUT.setContentSize(pSize, pSize);
+            const pG = p.addComponent(Graphics);
+            const pc = particleColors[Math.floor(Math.random() * particleColors.length)];
+            pG.fillColor = new Color(pc.r, pc.g, pc.b, 230);
+            pG.circle(0, 0, pSize / 2);
+            pG.fill();
             p.setScale(0.8, 0.8, 1);
-
             const angle = (i / particleCount) * Math.PI * 2 + Math.random() * 0.3;
-            const dist = 40 + Math.random() * 20;
+            const dist = 60 + Math.random() * 30;
             const dx = Math.cos(angle) * dist;
             const dy = Math.sin(angle) * dist;
             const pOp = p.addComponent(UIOpacity);
             pOp.opacity = 255;
-
             tween(p)
-                .to(0.3, { position: new Vec3(pos.x + dx, pos.y + dy, 0) }, { easing: 'quadOut' })
+                .to(0.45, { position: new Vec3(pos.x + dx, pos.y + dy, 0) }, { easing: 'quadOut' })
                 .start();
             tween(p)
-                .delay(0.15)
-                .to(0.15, { scale: new Vec3(0, 0, 1) })
+                .delay(0.2)
+                .to(0.25, { scale: new Vec3(0, 0, 1) })
                 .call(() => { if (p.isValid) p.destroy(); })
                 .start();
             tween(pOp)
-                .to(0.3, { opacity: 0 })
+                .to(0.45, { opacity: 0 })
                 .start();
         }
 
-        // 3. 震动（轻档；彩球/双特效用中档）
-        if (isColorBomb) {
-            VibrateManager.inst?.medium();
-        } else {
-            VibrateManager.inst?.light();
-        }
+        // T1: 冲击闪光
+        if (isLine) this.impactFlash('line');
+        else if (isBomb) this.impactFlash('bomb');
+        else if (isColorBomb) this.impactFlash('color');
 
-        // 4. 音效
-        if (special === SpecialType.LINE_H || special === SpecialType.LINE_V) {
-            AudioManager.inst?.playSpecialLine();
-        } else if (special === SpecialType.BOMB) {
-            AudioManager.inst?.playSpecialBomb();
-        } else if (special === SpecialType.COLOR_BOMB) {
-            AudioManager.inst?.playSpecialColorBomb();
-        }
+        // T1: 强震屏（按类型分级）
+        if (isColorBomb) this.shakeBoard(20);
+        else if (isBomb) this.shakeBoard(14);
+        else if (isLine) this.shakeBoard(8);
+
+        // T1: 顿帧时长存入 _pendingHitstop（取最大值，async 链中 await）
+        if (isColorBomb) this._pendingHitstop = Math.max(this._pendingHitstop, 150);
+        else if (isBomb) this._pendingHitstop = Math.max(this._pendingHitstop, 110);
+        else if (isLine) this._pendingHitstop = Math.max(this._pendingHitstop, 60);
+
+        // T2: 震动力度分层（线消/炸弹→heavy、彩球→long）
+        if (isColorBomb) VibrateManager.inst?.long();
+        else if (isBomb || isLine) VibrateManager.inst?.heavy();
+
+        // 4. 音效（T2: AudioManager 内部已做差异化降级+音量加成）
+        if (isLine) AudioManager.inst?.playSpecialLine();
+        else if (isBomb) AudioManager.inst?.playSpecialBomb();
+        else if (isColorBomb) AudioManager.inst?.playSpecialColorBomb();
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -2419,23 +2471,206 @@ return cells;
         });
     }
 
-    /** 轻震屏：对棋盘根节点做小幅抖动（±intensity px、0.125s 快速回位） */
+    /** T1: 强震屏 — 位移峰值≈intensity*1.2px（上限24）、±1.5°旋转抖、0.28s 多次衰减回位 */
     private shakeBoard(intensity: number): void {
+        const safeI = (typeof intensity === 'number' && isFinite(intensity) && intensity > 0) ? intensity : 4;
+        const peak = Math.min(safeI * 1.2, 24);
         const origPos = this.node.getPosition();
         const ox = origPos.x;
         const oy = origPos.y;
+        const rot = 1.5; // ±1.5° 旋转抖
         Tween.stopAllByTarget(this.node);
+        // 6 步衰减抖动 0.28s：大幅→中→小→归位
         tween(this.node)
-            .to(0.025, { position: new Vec3(ox + intensity, oy, 0) })
-            .to(0.025, { position: new Vec3(ox - intensity, oy, 0) })
-            .to(0.025, { position: new Vec3(ox, oy + intensity, 0) })
-            .to(0.025, { position: new Vec3(ox, oy - intensity * 0.5, 0) })
-            .to(0.025, { position: origPos })
+            .to(0.04, { position: new Vec3(ox + peak, oy + peak * 0.3, 0), angle: rot })
+            .to(0.04, { position: new Vec3(ox - peak * 0.8, oy - peak * 0.5, 0), angle: -rot })
+            .to(0.04, { position: new Vec3(ox + peak * 0.5, oy - peak * 0.3, 0), angle: rot * 0.5 })
+            .to(0.04, { position: new Vec3(ox - peak * 0.3, oy + peak * 0.2, 0), angle: -rot * 0.3 })
+            .to(0.04, { position: new Vec3(ox + peak * 0.12, oy - peak * 0.08, 0), angle: 0 })
+            .to(0.08, { position: origPos, angle: 0 }) // 严格归位防漂移
             .start();
     }
 
-    /** C2 补丁: COMBO 弹字 — 高对比亮橙 + 深紫描边 + 投影 + 加大加粗 + 冲击弹入 */
+    /** T1: 顿帧 — 特效引爆瞬间插入极短停顿制造打击感（硬顶 180ms） */
+    private hitstop(ms: number): Promise<void> {
+        const safeMs = (typeof ms === 'number' && isFinite(ms) && ms > 0) ? Math.min(ms, 180) : 0;
+        if (safeMs <= 0) return Promise.resolve();
+        return new Promise<void>(resolve => {
+            setTimeout(() => resolve(), safeMs);
+        });
+    }
+
+    /** T1: 冲击闪光 — 线消=细亮带、炸弹=白全屏闪、彩球=彩色全屏闪 */
+    private impactFlash(type: 'line' | 'bomb' | 'color'): void {
+        try {
+            const layer = this.ensureEffectsLayer();
+            const boardUT = this.node.getComponent(UITransform);
+            const fw = (boardUT && isFinite(boardUT.width) && boardUT.width > 0) ? boardUT.width : 600;
+            const fh = (boardUT && isFinite(boardUT.height) && boardUT.height > 0) ? boardUT.height : 600;
+            const flashNode = new Node(`ImpactFlash_${type}`);
+            flashNode.parent = layer;
+            flashNode.setPosition(0, 0, 0);
+            const ut = flashNode.addComponent(UITransform);
+            const g = flashNode.addComponent(Graphics);
+            const op = flashNode.addComponent(UIOpacity);
+            op.opacity = 0;
+
+            if (type === 'line') {
+                const bandH = fh * 0.08;
+                ut.setContentSize(fw, bandH);
+                g.fillColor = new Color(255, 255, 255, 80);
+                g.rect(-fw / 2, -bandH / 2, fw, bandH);
+                g.fill();
+                tween(op)
+                    .to(0.03, { opacity: 255 })
+                    .to(0.12, { opacity: 0 })
+                    .call(() => { if (flashNode.isValid) flashNode.destroy(); })
+                    .start();
+            } else if (type === 'bomb') {
+                ut.setContentSize(fw, fh);
+                g.fillColor = new Color(255, 255, 255, 90);
+                g.rect(-fw / 2, -fh / 2, fw, fh);
+                g.fill();
+                tween(op)
+                    .to(0.03, { opacity: 255 })
+                    .to(0.14, { opacity: 0 })
+                    .call(() => { if (flashNode.isValid) flashNode.destroy(); })
+                    .start();
+            } else {
+                ut.setContentSize(fw, fh);
+                g.fillColor = new Color(0xFF, 0xB3, 0x00, 120);
+                g.rect(-fw / 2, -fh / 2, fw, fh);
+                g.fill();
+                tween(op)
+                    .to(0.03, { opacity: 255 })
+                    .to(0.18, { opacity: 0 })
+                    .call(() => { if (flashNode.isValid) flashNode.destroy(); })
+                    .start();
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    /** T3: 冲击波环 — 描边圆环从~10px 扩到~1.6 格，0.35s quadOut 淡出 */
+    private spawnShockwaveRing(pos: Vec3, special: SpecialType, ts: number, layer: Node): void {
+        try {
+            const isColor = special === SpecialType.COLOR_BOMB;
+            const isBomb = special === SpecialType.BOMB;
+            const maxR = isColor ? ts * 1.8 : isBomb ? ts * 1.6 : ts * 1.4;
+            const safeMaxR = (isFinite(maxR) && maxR > 0) ? maxR : ts * 1.4;
+            const ringNode = new Node('ShockwaveRing');
+            ringNode.parent = layer;
+            ringNode.setPosition(pos);
+            const ut = ringNode.addComponent(UITransform);
+            ut.setAnchorPoint(0.5, 0.5);
+            ut.setContentSize(safeMaxR * 2, safeMaxR * 2);
+            const g = ringNode.addComponent(Graphics);
+            g.strokeColor = isColor
+                ? new Color(0xFF, 0xB3, 0x00, 220)
+                : isBomb
+                    ? new Color(255, 200, 100, 220)
+                    : new Color(255, 255, 255, 220);
+            g.lineWidth = 6;
+            g.circle(0, 0, safeMaxR);
+            g.stroke();
+            const op = ringNode.addComponent(UIOpacity);
+            op.opacity = 220;
+            // 从小scale扩到大scale
+            const startScale = 10 / safeMaxR;
+            ringNode.setScale(startScale, startScale, 1);
+            tween(ringNode)
+                .to(0.35, { scale: new Vec3(1, 1, 1) }, { easing: 'quadOut' })
+                .start();
+            tween(op)
+                .to(0.35, { opacity: 0 })
+                .call(() => { if (ringNode.isValid) ringNode.destroy(); })
+                .start();
+        } catch (e) { /* ignore */ }
+    }
+
+    /** T3: 线消光束 — 沿整行/列画贯穿亮带，0.05s 拉开+0.15s 淡出 */
+    private spawnLineBeam(row: number, col: number, isHorizontal: boolean, layer: Node): void {
+        try {
+            const { ROWS, COLS, TILE_SIZE, GAP } = Board;
+            const totalW = COLS * TILE_SIZE + (COLS - 1) * GAP;
+            const totalH = ROWS * TILE_SIZE + (ROWS - 1) * GAP;
+            const bandT = TILE_SIZE * 0.5;
+            const beamNode = new Node('LineBeam');
+            beamNode.parent = layer;
+            const pos = this.tileToLocalPosition(row, col);
+            // 水平光束居中在行、垂直光束居中在列
+            if (isHorizontal) {
+                beamNode.setPosition(0, pos.y, 0);
+            } else {
+                beamNode.setPosition(pos.x, 0, 0);
+            }
+            const ut = beamNode.addComponent(UITransform);
+            ut.setAnchorPoint(0.5, 0.5);
+            const g = beamNode.addComponent(Graphics);
+            g.fillColor = new Color(255, 248, 220, 180);
+            if (isHorizontal) {
+                ut.setContentSize(totalW, bandT);
+                g.rect(-totalW / 2, -bandT / 2, totalW, bandT);
+                g.fill();
+                beamNode.setScale(1, 0.1, 1);
+            } else {
+                ut.setContentSize(bandT, totalH);
+                g.rect(-bandT / 2, -totalH / 2, bandT, totalH);
+                g.fill();
+                beamNode.setScale(0.1, 1, 1);
+            }
+            const op = beamNode.addComponent(UIOpacity);
+            op.opacity = 255;
+            tween(beamNode)
+                .to(0.05, { scale: new Vec3(1, 1, 1) }, { easing: 'quadOut' })
+                .start();
+            tween(op)
+                .delay(0.05)
+                .to(0.15, { opacity: 0 })
+                .call(() => { if (beamNode.isValid) beamNode.destroy(); })
+                .start();
+        } catch (e) { /* ignore */ }
+    }
+
+    /** T3: 彩球连线 — 从中心向每个同色格画渐隐光线 */
+    private spawnColorBombRays(pos: Vec3, layer: Node): void {
+        try {
+            const { ROWS, COLS } = Board;
+            const targetColor = this.getMostCommonColor();
+            const rayColor = new Color(0xFF, 0xB3, 0x00, 200);
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (this.grid[r] && this.grid[r][c] === targetColor) {
+                        const cellPos = this.tileToLocalPosition(r, c);
+                        const dx = cellPos.x - pos.x;
+                        const dy = cellPos.y - pos.y;
+                        if (!isFinite(dx) || !isFinite(dy)) continue;
+                        const rayNode = new Node('ColorRay');
+                        rayNode.parent = layer;
+                        rayNode.setPosition(pos);
+                        const g = rayNode.addComponent(Graphics);
+                        g.strokeColor = rayColor.clone();
+                        g.lineWidth = 3;
+                        g.moveTo(0, 0);
+                        g.lineTo(dx, dy);
+                        g.stroke();
+                        const op = rayNode.addComponent(UIOpacity);
+                        op.opacity = 200;
+                        tween(op)
+                            .to(0.25, { opacity: 0 })
+                            .call(() => { if (rayNode.isValid) rayNode.destroy(); })
+                            .start();
+                    }
+                }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    /** C2 补丁: COMBO 弹字 — 随段数升级字号/scale/颜色 + 冲击弹入 */
     private showComboLabel(chainCount: number, matches: Array<{ row: number; col: number }>): void {
+        // N 经 safeNum，算不出回退 1（不弹）
+        const N = (typeof chainCount === 'number' && isFinite(chainCount) && chainCount >= 1) ? Math.floor(chainCount) : 1;
+        if (N < 2) return; // N=1 不弹（普通消除不显示）
+
         // 计算消除中心
         let sumX = 0, sumY = 0, cnt = 0;
         for (const { row, col } of matches) {
@@ -2450,30 +2685,51 @@ return cells;
         // NaN 护栏
         if (!isFinite(cx) || !isFinite(cy)) return;
 
+        // ★ H1: 字号/弹入 scale 随 N 增大
+        const fontSize = N >= 5 ? 64 : N >= 4 ? 56 : N >= 3 ? 52 : 44;
+        const popScale = N >= 5 ? 1.35 : N >= 4 ? 1.28 : N >= 3 ? 1.22 : 1.15;
+
+        // ★ H1: 颜色随深度渐变（治愈系不刺眼）
+        let fillColor: Color;
+        let outlineCol: Color;
+        if (N >= 5) {
+            // 深连锁(N≥5)：品红描边金字
+            fillColor = new Color(0xFF, 0xB3, 0x00);   // 暖金 #FFB300
+            outlineCol = new Color(0xD6, 0x4A, 0x8E);   // 品红 #D64A8E
+        } else if (N >= 4) {
+            // 中(N4)：暖金 #FFB300
+            fillColor = new Color(0xFF, 0xB3, 0x00);
+            outlineCol = new Color(0x4A, 0x2B, 0x6B);
+        } else {
+            // 浅连锁(N2-3)：糖粉 #F5A9C7
+            fillColor = new Color(0xF5, 0xA9, 0xC7);
+            outlineCol = new Color(0x4A, 0x2B, 0x6B);
+        }
+
         const comboNode = new Node('Combo');
         comboNode.parent = this.ensureEffectsLayer();
         comboNode.setPosition(cx, cy, 0);
 
         const comboUT = comboNode.addComponent(UITransform);
-        comboUT.setContentSize(300, 80);
+        comboUT.setContentSize(340, 90);
 
         const comboLabel = comboNode.addComponent(Label);
-        comboLabel.string = `COMBO x${chainCount}`;
-        comboLabel.fontSize = 48;               // 加大：38→48
-        comboLabel.lineHeight = 54;
-        comboLabel.isBold = true;                // 加粗
-        comboLabel.color = new Color(0xFF, 0x7A, 0x00);  // 高饱和亮橙 #FF7A00
+        comboLabel.string = `COMBO x${N}!`;
+        comboLabel.fontSize = fontSize;
+        comboLabel.lineHeight = Math.round(fontSize * 1.15);
+        comboLabel.isBold = true;
+        comboLabel.color = fillColor;
         comboLabel.useSystemFont = true;
         comboLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
         comboLabel.verticalAlign = Label.VerticalAlign.CENTER;
         comboLabel.overflow = Label.Overflow.NONE;
 
-        // 深紫描边 #4A2B6B width 4
+        // 描边
         comboLabel.enableOutline = true;
-        comboLabel.outlineColor = new Color(0x4A, 0x2B, 0x6B, 255);
-        comboLabel.outlineWidth = 4;
+        comboLabel.outlineColor = outlineCol;
+        comboLabel.outlineWidth = N >= 5 ? 5 : 4;
 
-        // 投影：向下偏移 3px + 半透明黑 + 模糊 4
+        // 投影
         comboLabel.enableShadow = true;
         comboLabel.shadowColor = new Color(0, 0, 0, 160);
         comboLabel.shadowOffset = new Vec2(0, -3);
@@ -2482,12 +2738,12 @@ return cells;
         const opacity = comboNode.addComponent(UIOpacity);
         comboNode.setScale(0, 0, 1);  // 从 0 开始冲击
 
-        // C2 补丁: scale 0→1.2→1.0 冲击弹入 (backOut) + 短暂停留 + 上浮 + 淡出
+        // scale 0→popScale→1.0 冲击弹入 (backOut) + 短暂停留 + 上浮 + 淡出
         tween(comboNode)
-            .to(0.18, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
+            .to(0.18, { scale: new Vec3(popScale, popScale, 1) }, { easing: 'backOut' })
             .to(0.08, { scale: new Vec3(1.0, 1.0, 1) })
-            .delay(0.15)  // 短暂停留
-            .by(0.5, { position: new Vec3(0, 50, 0) })  // 上浮 50px
+            .delay(0.15)
+            .by(0.5, { position: new Vec3(0, 50, 0) })
             .start();
 
         // 淡出 + 销毁
@@ -2496,6 +2752,88 @@ return cells;
             .to(0.3, { opacity: 0 })
             .call(() => {
                 comboNode.destroy();
+            })
+            .start();
+
+        // ★ H1: 深连锁柔色闪（N≥4）— 全屏极淡糖色柔光快速淡入淡出 0.25s
+        if (N >= 4) {
+            this.showChainFlash();
+        }
+    }
+
+    /** H2: 在消除位置喷 4 颗同色柔光小圆点，0.35s 向外扩散+淡出后回收 */
+    private spawnEliminateParticles(cx: number, cy: number, color: Color): void {
+        if (!isFinite(cx) || !isFinite(cy)) return;
+        const layer = this.ensureEffectsLayer();
+        const count = 4; // 3-5 颗
+        const baseColor = color.clone();
+
+        for (let i = 0; i < count; i++) {
+            const angle = (Math.PI * 2 * i) / count + Math.random() * 0.5;
+            const dist = 25 + Math.random() * 20; // 扩散距离 25-45px
+            const dx = Math.cos(angle) * dist;
+            const dy = Math.sin(angle) * dist;
+            const size = 8 + Math.random() * 6; // 小圆点 8-14px
+
+            const p = new Node('Particle');
+            p.parent = layer;
+            p.setPosition(cx, cy, 0);
+
+            const ut = p.addComponent(UITransform);
+            ut.setContentSize(size, size);
+
+            const g = p.addComponent(Graphics);
+            g.fillColor = new Color(baseColor.r, baseColor.g, baseColor.b, 200);
+            g.circle(0, 0, size / 2);
+            g.fill();
+
+            const op = p.addComponent(UIOpacity);
+            op.opacity = 220;
+
+            // 向外扩散 + 淡出 0.35s → 销毁回收
+            tween(p)
+                .to(0.35, { position: new Vec3(cx + dx, cy + dy, 0) }, { easing: 'quadOut' })
+                .start();
+
+            tween(op)
+                .to(0.35, { opacity: 0 })
+                .call(() => {
+                    p.destroy();
+                })
+                .start();
+        }
+    }
+
+    /** H1: 深连锁柔色闪 — 全屏极淡糖色柔光(alpha≤40)，0.25s 淡入淡出，用完回收 */
+    private showChainFlash(): void {
+        const layer = this.ensureEffectsLayer();
+        const flashNode = new Node('ChainFlash');
+        flashNode.parent = layer;
+
+        // 覆盖全棋盘
+        const boardUT = this.node.getComponent(UITransform);
+        const fw = (boardUT && isFinite(boardUT.width) && boardUT.width > 0) ? boardUT.width : 600;
+        const fh = (boardUT && isFinite(boardUT.height) && boardUT.height > 0) ? boardUT.height : 600;
+
+        const ut = flashNode.addComponent(UITransform);
+        ut.setContentSize(fw, fh);
+        flashNode.setPosition(0, 0, 0);
+
+        const g = flashNode.addComponent(Graphics);
+        // 极淡糖色 alpha=35（≤40），不晃眼
+        g.fillColor = new Color(0xF5, 0xA9, 0xC7, 35);
+        g.rect(-fw / 2, -fh / 2, fw, fh);
+        g.fill();
+
+        const op = flashNode.addComponent(UIOpacity);
+        op.opacity = 0;
+
+        // 快速淡入(0.1s) → 淡出(0.15s) → 销毁回收
+        tween(op)
+            .to(0.1, { opacity: 255 })
+            .to(0.15, { opacity: 0 })
+            .call(() => {
+                flashNode.destroy();
             })
             .start();
     }
