@@ -59,6 +59,13 @@ interface VisualWaveSeed {
 interface SpecialExchangeResult {
     cells: Set<string>;
     waveSeeds: VisualWaveSeed[];
+    isFullBoardClear: boolean;
+}
+
+/** T5: expandSpecialSplash 返回结构 */
+interface SplashResult {
+    delayMap: Map<string, number>;
+    waveStyleMap: Map<string, 'normal' | 'color' | 'full'>;
 }
 
 /** 一组匹配（连续同色） */
@@ -112,11 +119,15 @@ export class Board extends Component {
     static readonly GUIDE_HINT_DELAY = 3;   // C0: L1 手势引导触发秒数
     static readonly HINT_SCALE = 1.15;     // 提示高亮缩放
     static readonly MAX_STATE_TIME = 15;   // C3: 非IDLE态最大停留秒数（防卡死）
-    // T4a: 视觉波纹常量（只控制表现，不参与逻辑计算）
-    static readonly WAVE_LINE_STEP = 0.035;    // 线消：35ms/格
-    static readonly WAVE_BOMB_STEP = 0.045;    // 炸弹：45ms/圈
-    static readonly WAVE_COLOR_STEP = 0.04;    // 彩球：40ms/距离层
-    static readonly WAVE_MAX_DELAY = 0.4;      // 最大视觉启动延迟：400ms
+    // T4a/T5: 视觉波纹常量（只控制表现，不参与逻辑计算）
+    static readonly WAVE_LINE_STEP = 0.035;        // 线消：35ms/格
+    static readonly WAVE_BOMB_STEP = 0.045;        // 炸弹：45ms/圈
+    static readonly WAVE_DEFAULT_MAX_DELAY = 0.4;  // 线消/炸弹最大视觉启动延迟
+    static readonly WAVE_COLOR_STEP = 0.07;        // 彩球清色：70ms/距离层
+    static readonly WAVE_COLOR_MAX_DELAY = 0.85;   // 彩球清色最大启动延迟
+    static readonly WAVE_FULL_CLEAR_STEP = 0.075;  // 全屏清除：75ms/距离层
+    static readonly WAVE_FULL_CLEAR_MAX_DELAY = 1.1; // 全屏清除最大启动延迟
+    static readonly WAVE_HARD_MAX_DELAY = 1.1;     // 绝对硬上限
 
     // 6 色底色（L1/L2 用前 5 种，L3 用全部 6 种）— 明度阶梯：黄最亮→紫最暗
     static readonly COLORS: Color[] = [
@@ -937,14 +948,16 @@ export class Board extends Component {
                 const specialCells = specialResult.cells;
                 // 特效交换被触发 → 展开 + 销毁 + 连锁
                 hadMatches = true;
-                const delayMap = this.expandSpecialSplash(specialCells, specialResult.waveSeeds);
+                const { delayMap, waveStyleMap } = this.expandSpecialSplash(
+                    specialCells, specialResult.waveSeeds, specialResult.isFullBoardClear,
+                );
                 // T1: 顿帧——特效引爆后插入极短停顿
                 if (this._pendingHitstop > 0) {
                     const hs = this._pendingHitstop;
                     this._pendingHitstop = 0;
                     await this.hitstop(hs);
                 }
-                await this.destroyCellSet(specialCells, delayMap);
+                await this.destroyCellSet(specialCells, delayMap, waveStyleMap);
 
                 this.callbacks.onValidSwap?.();
                 this.setState(BoardState.CHAINING);
@@ -1005,6 +1018,7 @@ export class Board extends Component {
 
         const cells = new Set<string>();
         const waveSeeds: VisualWaveSeed[] = [];
+        let isFullBoardClear = false;
         const addCell = (r: number, c: number) => {
             if (r >= 0 && r < ROWS && c >= 0 && c < COLS) cells.add(`${r},${c}`);
         };
@@ -1047,6 +1061,7 @@ export class Board extends Component {
                 console.log(`[B4] 组合激活 类型=彩球+${SpecialType[otherSpecial]} 清${cells.size}格`);
             } else if (isColor(sa) && isColor(sb)) {
                 // 彩球+彩球 = 全盘清屏
+                isFullBoardClear = true;
                 for (let r = 0; r < ROWS; r++)
                     for (let c = 0; c < COLS; c++) addCell(r, c);
                 console.log(`[B4] 组合激活 类型=彩球+彩球 清${cells.size}格`);
@@ -1060,8 +1075,10 @@ this.tileSpecials[b.row][b.col] = SpecialType.NONE;
 this.callbacks.onSpecialDetonated?.();
 this.callbacks.onSpecialDetonated?.();
 // 激活 juice：放大爆裂 + 粒子 + 震动 + 音效
-this.playSpecialBurst(a.row, a.col, sa);
-this.playSpecialBurst(b.row, b.col, sb);
+// T5: 彩球组合传入真实目标格 + isFullBoardClear
+const specialVisualTargets = (isColor(sa) || isColor(sb)) ? cells : undefined;
+this.playSpecialBurst(a.row, a.col, sa, specialVisualTargets, isFullBoardClear);
+this.playSpecialBurst(b.row, b.col, sb, specialVisualTargets, isFullBoardClear);
 // 移除视觉层（tile 即将被 destroyCellSet 销毁，提前清视觉避免残留闪烁）
 const tileA = this.tiles[a.row]?.[a.col];
 const tileB = this.tiles[b.row]?.[b.col];
@@ -1070,7 +1087,7 @@ if (tileB) this.removeSpecialVisual(tileB);
 // T4a: 保存表现种子
 if (sa !== SpecialType.NONE) waveSeeds.push({ row: a.row, col: a.col, special: sa, baseDelay: 0 });
 if (sb !== SpecialType.NONE) waveSeeds.push({ row: b.row, col: b.col, special: sb, baseDelay: 0 });
-return { cells, waveSeeds };
+return { cells, waveSeeds, isFullBoardClear };
         }
 
         // ── 一个 COLOR_BOMB + 一个普通 → 清该色全盘 + 彩球自身 ──
@@ -1089,13 +1106,14 @@ this.tileSpecials[bombPos.row][bombPos.col] = SpecialType.NONE;
 // 特效主动引爆 → 通知 GameManager 计数（1 个彩球）
 this.callbacks.onSpecialDetonated?.();
 // 激活 juice
-this.playSpecialBurst(bombPos.row, bombPos.col, SpecialType.COLOR_BOMB);
+// T5: 传入真实目标格
+this.playSpecialBurst(bombPos.row, bombPos.col, SpecialType.COLOR_BOMB, cells, false);
 // 移除视觉层
 const tileBomb = this.tiles[bombPos.row]?.[bombPos.col];
 if (tileBomb) this.removeSpecialVisual(tileBomb);
 // T4a: 保存表现种子
 waveSeeds.push({ row: bombPos.row, col: bombPos.col, special: SpecialType.COLOR_BOMB, baseDelay: 0 });
-return { cells, waveSeeds };
+return { cells, waveSeeds, isFullBoardClear: false };
         }
 
         // ── 一个 LINE/BOMB + 一个普通 → 走普通匹配（特效格可能被波及而被动激活）──
@@ -1103,7 +1121,11 @@ return { cells, waveSeeds };
     }
 
     /** B3/B4: 从 Set<string> 销毁所有格（动画 + 清理数据），与 eliminateMatches 逻辑一致 */
-    private async destroyCellSet(cells: Set<string>, delayMap: Map<string, number> = new Map()): Promise<void> {
+    private async destroyCellSet(
+        cells: Set<string>,
+        delayMap: Map<string, number> = new Map(),
+        waveStyleMap: Map<string, 'normal' | 'color' | 'full'> = new Map(),
+    ): Promise<void> {
         const promises: Promise<void>[] = [];
         let destroyedCount = 0;
 
@@ -1131,8 +1153,9 @@ return { cells, waveSeeds };
 
             // T4a: 延迟视觉消失动画（逻辑数据已在上文立即清理）
             const delaySec = delayMap.get(key) ?? 0;
+            const ws = waveStyleMap.get(key) ?? 'normal';
             promises.push(
-                this.animateEliminatedTile(tileNode, row, col, eliminatedColor, delaySec),
+                this.animateEliminatedTile(tileNode, row, col, eliminatedColor, delaySec, ws),
             );
         }
 
@@ -1155,10 +1178,11 @@ return { cells, waveSeeds };
         col: number,
         eliminatedColor: number,
         delaySec: number,
+        waveStyle: 'normal' | 'color' | 'full' = 'normal',
     ): Promise<void> {
         let safeDelay = 0;
         if (typeof delaySec === 'number' && isFinite(delaySec) && delaySec > 0) {
-            safeDelay = Math.min(delaySec, Board.WAVE_MAX_DELAY);
+            safeDelay = Math.min(delaySec, Board.WAVE_HARD_MAX_DELAY);
         }
 
         return new Promise<void>(resolve => {
@@ -1167,6 +1191,8 @@ return { cells, waveSeeds };
                     resolve();
                     return;
                 }
+                const isColorWave = waveStyle === 'color' || waveStyle === 'full';
+
                 // ★ H2: 在消除位置喷同色柔光粒子
                 if (eliminatedColor >= 0 && eliminatedColor < Board.COLORS.length) {
                     const pos = this.tileToLocalPosition(row, col);
@@ -1174,16 +1200,44 @@ return { cells, waveSeeds };
                         this.spawnEliminateParticles(pos.x, pos.y, Board.COLORS[eliminatedColor]);
                     }
                 }
+
                 const opacity = tileNode.getComponent(UIOpacity) ?? tileNode.addComponent(UIOpacity);
-                tween(tileNode)
-                    .to(Board.ELIMINATE_SCALE_UP, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
-                    .to(Board.ELIMINATE_SCALE_DOWN, { scale: new Vec3(0, 0, 0) }, { easing: 'quadIn' })
-                    .start();
-                tween(opacity)
-                    .delay(Board.ELIMINATE_SCALE_UP)
-                    .to(Board.ELIMINATE_SCALE_DOWN, { opacity: 0 })
-                    .call(() => { if (tileNode.isValid) tileNode.destroy(); resolve(); })
-                    .start();
+
+                if (isColorWave) {
+                    // T5: 彩球波纹格——先亮起 + 光圈，再缩小消失（延长至 0.18s）
+                    const brightTime = 0.06;
+                    const vanishTime = 0.18;
+
+                    // 1. 快速亮起
+                    tween(tileNode)
+                        .to(brightTime, { scale: new Vec3(1.18, 1.18, 1) }, { easing: 'quadOut' })
+                        .to(vanishTime, { scale: new Vec3(0, 0, 0) }, { easing: 'quadIn' })
+                        .start();
+
+                    // 2. 产生对应颜色小光圈
+                    const pos = this.tileToLocalPosition(row, col);
+                    if (isFinite(pos.x) && isFinite(pos.y)) {
+                        this.spawnWaveRing(pos, eliminatedColor);
+                    }
+
+                    // 3. 淡出
+                    tween(opacity)
+                        .delay(brightTime)
+                        .to(vanishTime, { opacity: 0 })
+                        .call(() => { if (tileNode.isValid) tileNode.destroy(); resolve(); })
+                        .start();
+                } else {
+                    // 普通模式：原速度
+                    tween(tileNode)
+                        .to(Board.ELIMINATE_SCALE_UP, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
+                        .to(Board.ELIMINATE_SCALE_DOWN, { scale: new Vec3(0, 0, 0) }, { easing: 'quadIn' })
+                        .start();
+                    tween(opacity)
+                        .delay(Board.ELIMINATE_SCALE_UP)
+                        .to(Board.ELIMINATE_SCALE_DOWN, { opacity: 0 })
+                        .call(() => { if (tileNode.isValid) tileNode.destroy(); resolve(); })
+                        .start();
+                }
             };
 
             if (safeDelay > 0) {
@@ -1813,14 +1867,18 @@ return { cells, waveSeeds };
     private expandSpecialSplash(
         destroyedCells: Set<string>,
         initialSeeds: VisualWaveSeed[] = [],
-    ): Map<string, number> {
+        isFullBoardClear: boolean = false,
+    ): SplashResult {
         const { ROWS, COLS } = Board;
         const delayMap = new Map<string, number>();
+        const waveStyleMap = new Map<string, 'normal' | 'color' | 'full'>();
+        let hasColorBombSeed = isFullBoardClear;
 
-        // ── T4a: 延迟计算工具 ──────────────────────
+        // ── T4a/T5: 延迟计算工具 ──────────────────────
         const computeDelay = (sr: number, sc: number, special: SpecialType, baseDelay: number, r: number, c: number): number => {
             let dist = 0;
             let step = Board.WAVE_LINE_STEP;
+            let maxDelay = Board.WAVE_DEFAULT_MAX_DELAY;
             if (special === SpecialType.LINE_H) {
                 if (r === sr) {
                     dist = Math.abs(c - sc);
@@ -1828,6 +1886,7 @@ return { cells, waveSeeds };
                     dist = Math.abs(r - sr) + Math.abs(c - sc); // Manhattan fallback
                 }
                 step = Board.WAVE_LINE_STEP;
+                maxDelay = Board.WAVE_DEFAULT_MAX_DELAY;
             } else if (special === SpecialType.LINE_V) {
                 if (c === sc) {
                     dist = Math.abs(r - sr);
@@ -1835,21 +1894,30 @@ return { cells, waveSeeds };
                     dist = Math.abs(r - sr) + Math.abs(c - sc);
                 }
                 step = Board.WAVE_LINE_STEP;
+                maxDelay = Board.WAVE_DEFAULT_MAX_DELAY;
             } else if (special === SpecialType.BOMB) {
                 dist = Math.max(Math.abs(r - sr), Math.abs(c - sc));
                 step = Board.WAVE_BOMB_STEP;
+                maxDelay = Board.WAVE_DEFAULT_MAX_DELAY;
             } else if (special === SpecialType.COLOR_BOMB) {
                 dist = Math.abs(r - sr) + Math.abs(c - sc);
-                step = Board.WAVE_COLOR_STEP;
+                if (isFullBoardClear) {
+                    step = Board.WAVE_FULL_CLEAR_STEP;
+                    maxDelay = Board.WAVE_FULL_CLEAR_MAX_DELAY;
+                } else {
+                    step = Board.WAVE_COLOR_STEP;
+                    maxDelay = Board.WAVE_COLOR_MAX_DELAY;
+                }
             } else {
                 dist = Math.abs(r - sr) + Math.abs(c - sc);
                 step = Board.WAVE_LINE_STEP;
+                maxDelay = Board.WAVE_DEFAULT_MAX_DELAY;
             }
-            return Math.min(baseDelay + dist * step, Board.WAVE_MAX_DELAY);
+            return Math.min(baseDelay + dist * step, maxDelay);
         };
 
         const setDelayMin = (k: string, d: number) => {
-            const safeD = (typeof d === 'number' && isFinite(d) && d >= 0) ? Math.min(d, Board.WAVE_MAX_DELAY) : 0;
+            const safeD = (typeof d === 'number' && isFinite(d) && d >= 0) ? Math.min(d, Board.WAVE_HARD_MAX_DELAY) : 0;
             const prev = delayMap.get(k);
             if (prev === undefined || safeD < prev) {
                 delayMap.set(k, safeD);
@@ -1889,33 +1957,46 @@ return { cells, waveSeeds };
 
             // T4a: 记录被动特效种子（baseDelay 待后填）
             passiveSeeds.push({ row: r, col: c, special, baseDelay: 0 });
+            if (special === SpecialType.COLOR_BOMB) hasColorBombSeed = true;
 
             // 特效被引爆 → 通知 GameManager 计数
             this.callbacks.onSpecialDetonated?.();
-            // 激活 juice：放大爆裂 + 粒子 + 震动 + 音效
-            this.playSpecialBurst(r, c, special);
 
             if (special === SpecialType.LINE_H) {
                 console.log(`[Board] 💥 特效引爆: (${r},${c}) = LINE_H`);
                 for (let cc = 0; cc < COLS; cc++) addCell(r, cc);
+                // 激活 juice
+                this.playSpecialBurst(r, c, special);
             } else if (special === SpecialType.LINE_V) {
                 console.log(`[Board] 💥 特效引爆: (${r},${c}) = LINE_V`);
                 for (let rr = 0; rr < ROWS; rr++) addCell(rr, c);
+                // 激活 juice
+                this.playSpecialBurst(r, c, special);
             } else if (special === SpecialType.BOMB) {
                 // B2: 以 (r,c) 为中心 3×3
                 let cnt = 0;
                 for (let dr = -1; dr <= 1; dr++)
                     for (let dc = -1; dc <= 1; dc++) { addCell(r + dr, c + dc); cnt++; }
                 console.log(`[B2] 炸弹激活 (${r},${c}) 清${cnt}格`);
+                // 激活 juice
+                this.playSpecialBurst(r, c, special);
             } else if (special === SpecialType.COLOR_BOMB) {
                 // B3: 被动引爆 — 清最多色全盘 + 彩球自身
                 const targetColor = this.getMostCommonColor();
+                const passiveTargets = new Set<string>();
                 let cnt = 0;
                 for (let rr = 0; rr < ROWS; rr++)
                     for (let cc = 0; cc < COLS; cc++)
-                        if (this.grid[rr] && this.grid[rr][cc] === targetColor) { addCell(rr, cc); cnt++; }
+                        if (this.grid[rr] && this.grid[rr][cc] === targetColor) {
+                            addCell(rr, cc);
+                            passiveTargets.add(`${rr},${cc}`);
+                            cnt++;
+                        }
                 addCell(r, c); // 彩球自身
+                passiveTargets.add(`${r},${c}`);
                 console.log(`[B3] 彩球激活(被动) (${r},${c}) 目标色=${targetColor} 清${cnt}格`);
+                // T5: 激活 juice（传入真实目标格）
+                this.playSpecialBurst(r, c, special, passiveTargets, false);
             }
         }
 
@@ -1951,14 +2032,20 @@ return { cells, waveSeeds };
             }
         }
 
-        // 3. 安全降级：无种子的格子（含普通匹配）降级为 0；有值但越界的 clamp 到 0～0.4
+        // 3. 安全降级：无种子的格子（含普通匹配）降级为 0；有值但越界的 clamp 到 0～WAVE_HARD_MAX_DELAY
         for (const key of destroyedCells) {
             const delay = delayMap.get(key);
             if (typeof delay !== 'number' || !isFinite(delay) || delay < 0) {
                 delayMap.set(key, 0);
-            } else if (delay > Board.WAVE_MAX_DELAY) {
-                delayMap.set(key, Board.WAVE_MAX_DELAY);
+            } else if (delay > Board.WAVE_HARD_MAX_DELAY) {
+                delayMap.set(key, Board.WAVE_HARD_MAX_DELAY);
             }
+        }
+
+        // T5: 构建 waveStyleMap
+        const ws: 'normal' | 'color' | 'full' = isFullBoardClear ? 'full' : hasColorBombSeed ? 'color' : 'normal';
+        for (const key of destroyedCells) {
+            waveStyleMap.set(key, ws);
         }
 
         // 4. 防回归诊断（仅在存在特效种子时输出）
@@ -1982,7 +2069,7 @@ return { cells, waveSeeds };
             console.log(`[Board] 特效引爆展开完成，待消集合: ${destroyedCells.size} 格`);
         }
 
-        return delayMap;
+        return { delayMap, waveStyleMap };
     }
 
     /** B3: 统计当前棋盘上数量最多的颜色 */
@@ -2025,7 +2112,8 @@ return { cells, waveSeeds };
 
         // ★ B1: 展开特效引爆（LINE_H 清行 / LINE_V 清列，连环引爆）
         // T4a: 同时获取视觉延迟映射
-        const delayMap = this.expandSpecialSplash(destroyedCells);
+        // T5: 同时获取 waveStyleMap
+        const { delayMap, waveStyleMap } = this.expandSpecialSplash(destroyedCells);
 
         // T1: 顿帧——被动引爆特效后插入极短停顿
         if (this._pendingHitstop > 0) {
@@ -2058,8 +2146,9 @@ return { cells, waveSeeds };
 
             // T4a: 延迟视觉消失动画（逻辑数据已在上文立即清理）
             const delaySec = delayMap.get(key) ?? 0;
+            const ws = waveStyleMap.get(key) ?? 'normal';
             promises.push(
-                this.animateEliminatedTile(tileNode, row, col, eliminatedColor, delaySec),
+                this.animateEliminatedTile(tileNode, row, col, eliminatedColor, delaySec, ws),
             );
         }
 
@@ -2249,7 +2338,13 @@ return { cells, waveSeeds };
     }
 
     /** 激活 juice：fxOverlay 放大消失 + T3 冲击波环/光束/连线 + T3 增强粒子 + T1 闪光/震屏/顿帧 + T2 震动/音效 */
-    private playSpecialBurst(row: number, col: number, special: SpecialType): void {
+    private playSpecialBurst(
+        row: number,
+        col: number,
+        special: SpecialType,
+        visualTargets?: Set<string>,
+        isFullBoardClear: boolean = false,
+    ): void {
         if (special === SpecialType.NONE) return;
         const pos = this.tileToLocalPosition(row, col);
         if (!isFinite(pos.x) || !isFinite(pos.y)) return;
@@ -2291,8 +2386,12 @@ return { cells, waveSeeds };
                 .start();
         }
 
-        // T3: 冲击波环（所有特效都加）
-        this.spawnShockwaveRing(pos, special, safeTs, effectsLayer);
+        // T3: 冲击波环（线消/炸弹用单环，彩球用多重冲击波）
+        if (isColorBomb) {
+            this.spawnColorBombShockwaves(pos, safeTs, effectsLayer, isFullBoardClear);
+        } else {
+            this.spawnShockwaveRing(pos, special, safeTs, effectsLayer);
+        }
 
         // T3: 线消光束
         if (special === SpecialType.LINE_H) {
@@ -2303,16 +2402,20 @@ return { cells, waveSeeds };
 
         // T3: 彩球连线
         if (isColorBomb) {
-            this.spawnColorBombRays(pos, effectsLayer);
+            this.spawnColorBombRays(pos, effectsLayer, visualTargets, isFullBoardClear);
         }
 
-        // 2. T3 增强粒子爆发（12~16颗、14~20px、60~90px外扩、0.45s存活）
-        const particleCount = isColorBomb ? 16 : isBomb ? 14 : 12;
+        // 2. T3/T5 增强粒子爆发
+        // T5: 彩球加量——普通 24颗/0.85s，全屏 33颗两批/1.1s
+        const particleCount = isFullBoardClear ? 33 : isColorBomb ? 24 : isBomb ? 14 : 12;
         const particleColors: Color[] = isColorBomb
             ? Board.COLORS.map(c => c.clone())
             : isBomb
                 ? [new Color(0xFF, 0xA5, 0x00), new Color(0xFF, 0xD7, 0x00), new Color(0xFF, 0x8C, 0x00)]
                 : [new Color(255, 255, 255)];
+        const particleDist = isColorBomb ? 95 : 60;
+        const particleLife = isColorBomb ? 0.85 : 0.45;
+        const batchDelay = (isColorBomb && isFullBoardClear) ? 0.2 : 0;
         for (let i = 0; i < particleCount; i++) {
             const p = new Node('particle');
             p.parent = effectsLayer;
@@ -2328,28 +2431,37 @@ return { cells, waveSeeds };
             pG.fill();
             p.setScale(0.8, 0.8, 1);
             const angle = (i / particleCount) * Math.PI * 2 + Math.random() * 0.3;
-            const dist = 60 + Math.random() * 30;
+            const dist = particleDist + Math.random() * 30;
             const dx = Math.cos(angle) * dist;
             const dy = Math.sin(angle) * dist;
             const pOp = p.addComponent(UIOpacity);
             pOp.opacity = 255;
+            // T5: 全屏清除分两批，第二批延迟 0.2s
+            const thisDelay = (isFullBoardClear && i >= Math.floor(particleCount / 2)) ? batchDelay : 0;
             tween(p)
-                .to(0.45, { position: new Vec3(pos.x + dx, pos.y + dy, 0) }, { easing: 'quadOut' })
+                .delay(thisDelay)
+                .to(particleLife, { position: new Vec3(pos.x + dx, pos.y + dy, 0) }, { easing: 'quadOut' })
                 .start();
             tween(p)
-                .delay(0.2)
-                .to(0.25, { scale: new Vec3(0, 0, 1) })
+                .delay(thisDelay + particleLife * 0.4)
+                .to(particleLife * 0.3, { scale: new Vec3(0, 0, 1) })
                 .call(() => { if (p.isValid) p.destroy(); })
                 .start();
             tween(pOp)
-                .to(0.45, { opacity: 0 })
+                .delay(thisDelay)
+                .to(particleLife, { opacity: 0 })
                 .start();
         }
 
         // T1: 冲击闪光
         if (isLine) this.impactFlash('line');
         else if (isBomb) this.impactFlash('bomb');
-        else if (isColorBomb) this.impactFlash('color');
+        else if (isColorBomb) this.impactFlash('color', isFullBoardClear);
+
+        // T5: 全屏清除稀有提示
+        if (isFullBoardClear) {
+            this.spawnFullClearLabel();
+        }
 
         // T1: 强震屏（按类型分级）
         if (isColorBomb) this.shakeBoard(20);
@@ -2524,7 +2636,7 @@ return { cells, waveSeeds };
     }
 
     /** T1: 冲击闪光 — 线消=细亮带、炸弹=白全屏闪、彩球=彩色全屏闪 */
-    private impactFlash(type: 'line' | 'bomb' | 'color'): void {
+    private impactFlash(type: 'line' | 'bomb' | 'color', isFullBoardClear: boolean = false): void {
         try {
             const layer = this.ensureEffectsLayer();
             const boardUT = this.node.getComponent(UITransform);
@@ -2560,15 +2672,38 @@ return { cells, waveSeeds };
                     .call(() => { if (flashNode.isValid) flashNode.destroy(); })
                     .start();
             } else {
+                // T5: 彩球闪光延长——0.05s亮起 + 0.15s缓降 + 0.35s柔淡 ≈ 0.55s
                 ut.setContentSize(fw, fh);
                 g.fillColor = new Color(0xFF, 0xB3, 0x00, 120);
                 g.rect(-fw / 2, -fh / 2, fw, fh);
                 g.fill();
                 tween(op)
-                    .to(0.03, { opacity: 255 })
-                    .to(0.18, { opacity: 0 })
+                    .to(0.05, { opacity: 255 })
+                    .to(0.15, { opacity: 180 })
+                    .to(0.35, { opacity: 0 })
                     .call(() => { if (flashNode.isValid) flashNode.destroy(); })
                     .start();
+
+                // T5: 全屏清除补一次更淡的彩色回闪
+                if (isFullBoardClear) {
+                    const flash2 = new Node('ImpactFlash_color2');
+                    flash2.parent = layer;
+                    flash2.setPosition(0, 0, 0);
+                    const ut2 = flash2.addComponent(UITransform);
+                    ut2.setContentSize(fw, fh);
+                    const g2 = flash2.addComponent(Graphics);
+                    g2.fillColor = new Color(0xB5, 0x83, 0xE0, 60);
+                    g2.rect(-fw / 2, -fh / 2, fw, fh);
+                    g2.fill();
+                    const op2 = flash2.addComponent(UIOpacity);
+                    op2.opacity = 0;
+                    tween(op2)
+                        .delay(0.2)
+                        .to(0.08, { opacity: 200 })
+                        .to(0.47, { opacity: 0 })
+                        .call(() => { if (flash2.isValid) flash2.destroy(); })
+                        .start();
+                }
             }
         } catch (e) { /* ignore */ }
     }
@@ -2606,6 +2741,131 @@ return { cells, waveSeeds };
             tween(op)
                 .to(0.35, { opacity: 0 })
                 .call(() => { if (ringNode.isValid) ringNode.destroy(); })
+                .start();
+        } catch (e) { /* ignore */ }
+    }
+
+    /** T5: 彩球专属多重冲击波 — 3 层环逐层扩散，粉/金/淡紫 */
+    private spawnColorBombShockwaves(pos: Vec3, ts: number, layer: Node, isFullBoardClear: boolean): void {
+        try {
+            const rings = [
+                { delay: 0,    duration: 0.65, maxR: ts * 1.6, color: new Color(0xFF, 0xB3, 0xCC, 180), lw: 5 },
+                { delay: 0.16, duration: 0.70, maxR: ts * 2.0, color: new Color(0xFF, 0xD7, 0x00, 150), lw: 4 },
+                { delay: 0.32, duration: 0.75, maxR: ts * 2.4, color: new Color(0xB5, 0x83, 0xE0, 130), lw: 4 },
+            ];
+            for (const ring of rings) {
+                const safeMaxR = (isFinite(ring.maxR) && ring.maxR > 0) ? ring.maxR : ts * 1.6;
+                const ringNode = new Node('ColorBombShockwave');
+                ringNode.parent = layer;
+                ringNode.setPosition(pos);
+                const ut = ringNode.addComponent(UITransform);
+                ut.setAnchorPoint(0.5, 0.5);
+                ut.setContentSize(safeMaxR * 2, safeMaxR * 2);
+                const g = ringNode.addComponent(Graphics);
+                g.strokeColor = ring.color.clone();
+                g.lineWidth = ring.lw;
+                g.circle(0, 0, safeMaxR);
+                g.stroke();
+                const op = ringNode.addComponent(UIOpacity);
+                op.opacity = 0;
+                const startScale = 10 / safeMaxR;
+                ringNode.setScale(startScale, startScale, 1);
+                tween(ringNode)
+                    .delay(ring.delay)
+                    .to(ring.duration, { scale: new Vec3(1, 1, 1) }, { easing: 'quadOut' })
+                    .start();
+                tween(op)
+                    .delay(ring.delay)
+                    .to(0.05, { opacity: 220 })
+                    .to(ring.duration - 0.05, { opacity: 0 })
+                    .call(() => { if (ringNode.isValid) ringNode.destroy(); })
+                    .start();
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    /** T5: 彩球波纹格光圈 — 格子消失时产生对应颜色小光圈 */
+    private spawnWaveRing(pos: Vec3, colorId: number): void {
+        try {
+            const layer = this.ensureEffectsLayer();
+            const ringNode = new Node('WaveRing');
+            ringNode.parent = layer;
+            ringNode.setPosition(pos);
+            const ut = ringNode.addComponent(UITransform);
+            ut.setAnchorPoint(0.5, 0.5);
+            const maxR = Board.TILE_SIZE * 0.9;
+            ut.setContentSize(maxR * 2, maxR * 2);
+            const g = ringNode.addComponent(Graphics);
+            const color = (colorId >= 0 && colorId < Board.COLORS.length)
+                ? Board.COLORS[colorId]
+                : new Color(255, 255, 255);
+            g.strokeColor = new Color(color.r, color.g, color.b, 200);
+            g.lineWidth = 4;
+            g.circle(0, 0, maxR);
+            g.stroke();
+            const op = ringNode.addComponent(UIOpacity);
+            op.opacity = 220;
+            ringNode.setScale(0.2, 0.2, 1);
+            tween(ringNode)
+                .to(0.3, { scale: new Vec3(1, 1, 1) }, { easing: 'quadOut' })
+                .start();
+            tween(op)
+                .to(0.3, { opacity: 0 })
+                .call(() => { if (ringNode.isValid) ringNode.destroy(); })
+                .start();
+        } catch (e) { /* ignore */ }
+    }
+
+    /** T5: 全屏清除稀有提示 — 「🌈 全屏清除！」 */
+    private spawnFullClearLabel(): void {
+        try {
+            const layer = this.ensureEffectsLayer();
+            const labelNode = new Node('FullClearLabel');
+            labelNode.parent = layer;
+
+            // 棋盘中心偏上
+            const boardUT = this.node.getComponent(UITransform);
+            const cy = (boardUT && isFinite(boardUT.height) && boardUT.height > 0) ? boardUT.height * 0.15 : 60;
+            labelNode.setPosition(0, cy, 0);
+
+            const ut = labelNode.addComponent(UITransform);
+            ut.setContentSize(400, 100);
+
+            const label = labelNode.addComponent(Label);
+            label.string = '\u{1F308} \u5168\u5C4F\u6E05\u9664\uFF01';
+            label.fontSize = 48;
+            label.lineHeight = Math.round(48 * 1.15);
+            label.isBold = true;
+            label.color = new Color(0xFF, 0xF5, 0xE0);  // 奶白
+            label.useSystemFont = true;
+            label.horizontalAlign = Label.HorizontalAlign.CENTER;
+            label.verticalAlign = Label.VerticalAlign.CENTER;
+            label.overflow = Label.Overflow.NONE;
+
+            // 深紫描边
+            label.enableOutline = true;
+            label.outlineColor = new Color(0x4A, 0x2B, 0x6B);
+            label.outlineWidth = 5;
+
+            // 投影
+            label.enableShadow = true;
+            label.shadowColor = new Color(0, 0, 0, 160);
+            label.shadowOffset = new Vec2(0, -3);
+            label.shadowBlur = 4;
+
+            const op = labelNode.addComponent(UIOpacity);
+            // scale 0.6 → 1.2 → 1.0 backOut
+            labelNode.setScale(0.6, 0.6, 1);
+            tween(labelNode)
+                .to(0.2, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
+                .to(0.08, { scale: new Vec3(1.0, 1.0, 1) })
+                .delay(0.45)
+                .start();
+            // 淡出
+            tween(op)
+                .delay(0.65)
+                .to(0.35, { opacity: 0 })
+                .call(() => { if (labelNode.isValid) labelNode.destroy(); })
                 .start();
         } catch (e) { /* ignore */ }
     }
@@ -2654,36 +2914,86 @@ return { cells, waveSeeds };
         } catch (e) { /* ignore */ }
     }
 
-    /** T3: 彩球连线 — 从中心向每个同色格画渐隐光线 */
-    private spawnColorBombRays(pos: Vec3, layer: Node): void {
+    /** T3/T5: 彩球连线 — 从中心向目标格画渐隐光线，按距离分批出现 */
+    private spawnColorBombRays(
+        pos: Vec3,
+        layer: Node,
+        targetCells?: Set<string>,
+        isFullBoardClear: boolean = false,
+    ): void {
         try {
             const { ROWS, COLS } = Board;
-            const targetColor = this.getMostCommonColor();
             const rayColor = new Color(0xFF, 0xB3, 0x00, 200);
-            for (let r = 0; r < ROWS; r++) {
-                for (let c = 0; c < COLS; c++) {
-                    if (this.grid[r] && this.grid[r][c] === targetColor) {
-                        const cellPos = this.tileToLocalPosition(r, c);
-                        const dx = cellPos.x - pos.x;
-                        const dy = cellPos.y - pos.y;
-                        if (!isFinite(dx) || !isFinite(dy)) continue;
-                        const rayNode = new Node('ColorRay');
-                        rayNode.parent = layer;
-                        rayNode.setPosition(pos);
-                        const g = rayNode.addComponent(Graphics);
-                        g.strokeColor = rayColor.clone();
-                        g.lineWidth = 3;
-                        g.moveTo(0, 0);
-                        g.lineTo(dx, dy);
-                        g.stroke();
-                        const op = rayNode.addComponent(UIOpacity);
-                        op.opacity = 200;
-                        tween(op)
-                            .to(0.25, { opacity: 0 })
-                            .call(() => { if (rayNode.isValid) rayNode.destroy(); })
-                            .start();
+
+            // T5: 优先使用 targetCells，没传时降级到最多色
+            const targets: Array<{ r: number; c: number }> = [];
+            if (targetCells && targetCells.size > 0) {
+                for (const key of targetCells) {
+                    const [r, c] = key.split(',').map(Number);
+                    if (!isFinite(r) || !isFinite(c)) continue;
+                    if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
+                    // 过滤彩球中心自身
+                    const cellPos = this.tileToLocalPosition(r, c);
+                    if (Math.abs(cellPos.x - pos.x) < 1 && Math.abs(cellPos.y - pos.y) < 1) continue;
+                    targets.push({ r, c });
+                }
+            } else {
+                // 降级：使用当前最多色
+                const targetColor = this.getMostCommonColor();
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (this.grid[r] && this.grid[r][c] === targetColor) {
+                            targets.push({ r, c });
+                        }
                     }
                 }
+            }
+
+            if (targets.length === 0) return;
+
+            // T5: 按 Manhattan distance 排序
+            const centerRow = Math.round((ROWS - 1) / 2);
+            const centerCol = Math.round((COLS - 1) / 2);
+            targets.sort((a, b) => {
+                const da = Math.abs(a.r - centerRow) + Math.abs(a.c - centerCol);
+                const db = Math.abs(b.r - centerRow) + Math.abs(b.c - centerCol);
+                return da - db;
+            });
+
+            // T5: 分批出现——每层延迟约 50ms
+            const stepDelay = 0.05;
+            const maxBatchDelay = isFullBoardClear ? 1.0 : 0.8;
+            const rayLife = isFullBoardClear ? 0.45 : 0.40;
+
+            for (let i = 0; i < targets.length; i++) {
+                const { r, c } = targets[i];
+                const cellPos = this.tileToLocalPosition(r, c);
+                const dx = cellPos.x - pos.x;
+                const dy = cellPos.y - pos.y;
+                if (!isFinite(dx) || !isFinite(dy)) continue;
+
+                const thisDelay = Math.min(i * stepDelay, maxBatchDelay);
+
+                const rayNode = new Node('ColorRay');
+                rayNode.parent = layer;
+                rayNode.setPosition(pos);
+                const g = rayNode.addComponent(Graphics);
+                g.strokeColor = rayColor.clone();
+                g.lineWidth = 3;
+                g.moveTo(0, 0);
+                g.lineTo(dx, dy);
+                g.stroke();
+                const op = rayNode.addComponent(UIOpacity);
+                op.opacity = 0;
+
+                // T5: 按距离延迟闪入 + 保持 + 淡出
+                tween(op)
+                    .delay(thisDelay)
+                    .to(0.05, { opacity: 200 })
+                    .delay(0.15)
+                    .to(rayLife - 0.2, { opacity: 0 })
+                    .call(() => { if (rayNode.isValid) rayNode.destroy(); })
+                    .start();
             }
         } catch (e) { /* ignore */ }
     }
