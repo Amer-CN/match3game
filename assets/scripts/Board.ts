@@ -1920,12 +1920,9 @@ return { cells, waveSeeds };
         }
 
         // ── T4a: 计算视觉延迟 ──────────────────────
-        // 1. 所有格子默认 delay=0
-        for (const key of destroyedCells) {
-            delayMap.set(key, 0);
-        }
+        // 注意：不要提前把所有格子初始化为 0，否则正数延迟永远无法覆盖。
 
-        // 2. 从主动种子计算延迟
+        // 1. 从主动种子计算延迟（delayMap 此时为空，首次写入即为真实值）
         for (const seed of initialSeeds) {
             const seedKey = `${seed.row},${seed.col}`;
             setDelayMin(seedKey, seed.baseDelay);
@@ -1936,10 +1933,17 @@ return { cells, waveSeeds };
             }
         }
 
-        // 3. 从被动种子计算延迟（baseDelay = 该格当前最小 delay）
+        // 2. 从被动种子计算延迟（baseDelay 继承该格已计算的 delay）
         for (const pseed of passiveSeeds) {
             const pseedKey = `${pseed.row},${pseed.col}`;
-            pseed.baseDelay = delayMap.get(pseedKey) ?? 0;
+            const inheritedDelay = delayMap.get(pseedKey);
+            pseed.baseDelay =
+                typeof inheritedDelay === 'number' &&
+                isFinite(inheritedDelay) &&
+                inheritedDelay >= 0
+                    ? inheritedDelay
+                    : 0;
+            setDelayMin(pseedKey, pseed.baseDelay);
             for (const key of destroyedCells) {
                 const [r, c] = key.split(',').map(Number);
                 if (!isFinite(r) || !isFinite(c)) continue;
@@ -1947,11 +1951,30 @@ return { cells, waveSeeds };
             }
         }
 
-        // 4. 安全降级：确保所有格子有有限 delay
+        // 3. 安全降级：无种子的格子（含普通匹配）降级为 0；有值但越界的 clamp 到 0～0.4
         for (const key of destroyedCells) {
-            const d = delayMap.get(key);
-            if (d === undefined || !isFinite(d) || d < 0) {
+            const delay = delayMap.get(key);
+            if (typeof delay !== 'number' || !isFinite(delay) || delay < 0) {
                 delayMap.set(key, 0);
+            } else if (delay > Board.WAVE_MAX_DELAY) {
+                delayMap.set(key, Board.WAVE_MAX_DELAY);
+            }
+        }
+
+        // 4. 防回归诊断（仅在存在特效种子时输出）
+        const seedCount = initialSeeds.length + passiveSeeds.length;
+        if (seedCount > 0 && destroyedCells.size > 1) {
+            const delays = Array.from(delayMap.values()).filter(
+                d => typeof d === 'number' && isFinite(d),
+            );
+            const positiveCount = delays.filter(d => d > 0).length;
+            const maxDelay = delays.length > 0 ? Math.max(...delays) : 0;
+            console.log(
+                `[T4a] 视觉波纹 seeds=${seedCount} cells=${destroyedCells.size} ` +
+                `positive=${positiveCount} maxDelay=${maxDelay.toFixed(3)}s`,
+            );
+            if (positiveCount === 0) {
+                console.warn('[T4a] 特效波纹没有产生正数延迟，请检查 delayMap 计算');
             }
         }
 
