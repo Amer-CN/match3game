@@ -68,6 +68,13 @@ interface SplashResult {
     waveStyleMap: Map<string, 'normal' | 'color' | 'full'>;
 }
 
+/** U1: 冰层障碍配置（单格） */
+export interface IceCellConfig {
+    row: number;
+    col: number;
+    layers: number;  // 1=单层冰, 2=双层冰
+}
+
 /** 一组匹配（连续同色） */
 interface MatchGroup {
     cells: Array<{ row: number; col: number }>;
@@ -99,6 +106,10 @@ export interface BoardCallbacks {
     onTileEliminated?: (colorId: number) => void;
     /** 特效块被引爆 → GameManager 特效计数（每次 +1） */
     onSpecialDetonated?: () => void;
+    /** U1: 冰层被击破一层（layersRemaining > 0 表示仍有残余） */
+    onIceDamaged?: (row: number, col: number, layersRemaining: number) => void;
+    /** U1: 冰层完全清除（某一格的冰层归零） */
+    onIceCleared?: (row: number, col: number) => void;
 }
 
 @ccclass('Board')
@@ -184,6 +195,14 @@ export class Board extends Component {
     private tiles: Node[][] = [];
     private tileSpecials: SpecialType[][] = [];  // B0: 每格的特效类型
     private tileInfoMap: Map<Node, TileInfo> = new Map();
+
+    // ── U1: 冰层障碍 ──────────────────────────
+    /** 冰层数据矩阵：0=无冰, 1=单层, 2=双层 */
+    private iceLayers: number[][] = [];
+    /** 冰层视觉节点矩阵（与 iceLayers 对应，null=无节点） */
+    private iceNodes: Array<Array<Node | null>> = [];
+    /** 冰层专用渲染层（在方块之上、特效层之下） */
+    private _obstacleLayer: Node | null = null;
     private whiteFrame: SpriteFrame | null = null;
     /** 特效贴图 SpriteFrame 缓存 */
     private fxLineFrame: SpriteFrame | null = null;
@@ -202,6 +221,8 @@ export class Board extends Component {
     private framesReady = false;
     /** 加载期间暂存的 resetBoard 参数 */
     private pendingColorCount: number | null = null;
+    /** U1: 加载期间暂存的冰层配置 */
+    private pendingIceConfig: IceCellConfig[] | null = null;
 
     /** 当前关卡使用的颜色种类数 */
     private colorCount: number = 5;
@@ -343,8 +364,10 @@ export class Board extends Component {
     private flushPending(): void {
         if (this.pendingColorCount !== null) {
             const cc = this.pendingColorCount;
+            const ice = this.pendingIceConfig;
             this.pendingColorCount = null;
-            this.resetBoard(cc);
+            this.pendingIceConfig = null;
+            this.resetBoard(cc, ice ?? []);
         }
     }
 
@@ -358,12 +381,16 @@ export class Board extends Component {
     }
 
     /** 重置棋盘：销毁所有方块，用新的颜色种类数重新生成 */
-    public resetBoard(colorCount: number): void {
+    public resetBoard(colorCount: number, iceConfig: IceCellConfig[] = []): void {
         // 头像未加载完时暂存请求
         if (!this.framesReady) {
             this.pendingColorCount = colorCount;
+            this.pendingIceConfig = iceConfig.length > 0 ? iceConfig : null;
             return;
         }
+
+        // U1: 规范化冰层配置
+        const safeIce = this.normalizeIceConfig(iceConfig);
 
         // 停止所有 tween
         for (let r = 0; r < Board.ROWS; r++) {
@@ -375,6 +402,9 @@ export class Board extends Component {
                 }
             }
         }
+
+        // U1: 清理旧冰层视觉
+        this.clearIceVisuals();
 
         this.grid = [];
         this.tiles = [];
@@ -392,7 +422,50 @@ export class Board extends Component {
         this.totalScore = 0;
         this.colorCount = Math.min(colorCount, Board.COLORS.length);
 
+        // U1: 初始化冰层数据矩阵（在 generateBoard 之前设置，供其读取）
+        this._pendingIceInit = safeIce;
+
         this.generateBoard();
+    }
+
+    /** U1: 暂存的冰层初始化配置（generateBoard 读取后清空） */
+    private _pendingIceInit: IceCellConfig[] = [];
+
+    /** U1: 规范化冰层配置 — 去重、越界裁剪、layers 范围限制 */
+    private normalizeIceConfig(raw: IceCellConfig[]): IceCellConfig[] {
+        if (!raw || raw.length === 0) return [];
+        const seen = new Set<string>();
+        const result: IceCellConfig[] = [];
+        for (const item of raw) {
+            const r = Math.floor(item.row);
+            const c = Math.floor(item.col);
+            if (r < 0 || r >= Board.ROWS || c < 0 || c >= Board.COLS) continue;
+            const layers = Math.max(1, Math.min(2, Math.floor(item.layers)));
+            const key = `${r},${c}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            result.push({ row: r, col: c, layers });
+        }
+        return result;
+    }
+
+    /** U1: 清理所有冰层视觉节点 */
+    private clearIceVisuals(): void {
+        if (this.iceNodes) {
+            for (let r = 0; r < this.iceNodes.length; r++) {
+                if (!this.iceNodes[r]) continue;
+                for (let c = 0; c < this.iceNodes[r].length; c++) {
+                    const node = this.iceNodes[r][c];
+                    if (node && node.isValid) {
+                        Tween.stopAllByTarget(node);
+                        node.destroy();
+                    }
+                    this.iceNodes[r][c] = null;
+                }
+            }
+        }
+        this.iceLayers = [];
+        this.iceNodes = [];
     }
 
     /** 外部锁定/解锁棋盘（弹层时用） */
@@ -408,6 +481,34 @@ export class Board extends Component {
 
     public getScore(): number {
         return this.totalScore;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  U1: 冰层障碍 — 公开只读接口（供 GameManager 查询）
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** U1: 获取仍有冰层的格子数量 */
+    public getRemainingIceCells(): number {
+        let count = 0;
+        for (let r = 0; r < Board.ROWS; r++) {
+            if (!this.iceLayers[r]) continue;
+            for (let c = 0; c < Board.COLS; c++) {
+                if (this.iceLayers[r][c] > 0) count++;
+            }
+        }
+        return count;
+    }
+
+    /** U1: 获取剩余冰层总层数（单层=1, 双层=2） */
+    public getRemainingIceLayers(): number {
+        let total = 0;
+        for (let r = 0; r < Board.ROWS; r++) {
+            if (!this.iceLayers[r]) continue;
+            for (let c = 0; c < Board.COLS; c++) {
+                total += this.iceLayers[r][c];
+            }
+        }
+        return total;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -431,6 +532,9 @@ export class Board extends Component {
             this.grid[r] = [];
             this.tiles[r] = [];
             this.tileSpecials[r] = [];
+            // U1: 初始化冰层数据矩阵
+            this.iceLayers[r] = [];
+            this.iceNodes[r] = [];
             for (let c = 0; c < COLS; c++) {
                 const colorId = this.pickSafeColor(r, c);
                 const tileNode = this.createTileNode(r, c, colorId);
@@ -438,7 +542,19 @@ export class Board extends Component {
                 this.tiles[r][c] = tileNode;
                 this.tileSpecials[r][c] = SpecialType.NONE;
                 this.tileInfoMap.set(tileNode, { row: r, col: c });
+                // U1: 默认无冰
+                this.iceLayers[r][c] = 0;
+                this.iceNodes[r][c] = null;
             }
+        }
+
+        // U1: 应用冰层配置（从 _pendingIceInit 读取）
+        if (this._pendingIceInit && this._pendingIceInit.length > 0) {
+            for (const ice of this._pendingIceInit) {
+                this.iceLayers[ice.row][ice.col] = ice.layers;
+            }
+            this._pendingIceInit = [];  // 消费完毕
+            console.log(`[Board] 🧊 冰层配置已应用: ${this.getRemainingIceCells()} 格有冰`);
         }
 
         // ★ A3: 开局/切关保证 — 无现成三连 && 有可行步（静默，无提示文字）
@@ -446,6 +562,9 @@ export class Board extends Component {
 
         // C2: 创建特效层（确保在方块之上）
         this.ensureEffectsLayer();
+
+        // U1: 创建障碍层 + 刷新冰层视觉
+        this.refreshIceVisual();
 
         // 临时验证日志（测完删除）
         const matchCount = this.findMatches().length;
@@ -1145,6 +1264,8 @@ return { cells, waveSeeds, isFullBoardClear: false };
             // B4 修复: 先从矩阵移除引用，再销毁，避免本帧后续逻辑碰到悬空引用
             const eliminatedColor = this.grid[row][col];
             if (eliminatedColor >= 0) this.callbacks.onTileEliminated?.(eliminatedColor);
+            // U1: 对冰层造成伤害（在清 grid 之前）
+            this.damageIceAt(row, col);
             this.grid[row][col] = -1;
             this.tiles[row][col] = null;
             this.tileSpecials[row][col] = SpecialType.NONE;
@@ -1726,11 +1847,16 @@ return { cells, waveSeeds, isFullBoardClear: false };
         this.tileInfoMap.clear();
         this.selectedTile = null;
 
+        // U1: 冰层数据保持不变（forceRegenerate 只重置方块，不重置障碍）
+
         // 直接调 generateBoard（内部用 pickSafeColor 保证无三连）
         for (let r = 0; r < ROWS; r++) {
             this.grid[r] = [];
             this.tiles[r] = [];
             this.tileSpecials[r] = [];
+            // U1: 确保冰层矩阵存在（forceRegenerate 不清冰）
+            if (!this.iceLayers[r]) this.iceLayers[r] = [];
+            if (!this.iceNodes[r]) this.iceNodes[r] = [];
             for (let c = 0; c < COLS; c++) {
                 const colorId = this.pickSafeColor(r, c);
                 const tileNode = this.createTileNode(r, c, colorId);
@@ -1738,10 +1864,13 @@ return { cells, waveSeeds, isFullBoardClear: false };
                 this.tiles[r][c] = tileNode;
                 this.tileSpecials[r][c] = SpecialType.NONE;
                 this.tileInfoMap.set(tileNode, { row: r, col: c });
+                if (this.iceLayers[r][c] === undefined) this.iceLayers[r][c] = 0;
+                if (!this.iceNodes[r][c]) this.iceNodes[r][c] = null;
             }
         }
         console.log('[Board] 强制重生成完成');
         this.ensureEffectsLayer();  // C2: 确保特效层在方块之上
+        this.refreshIceVisual();    // U1: 刷新冰层视觉
     }
 
     /** 「重新洗牌」提示文字：弹入 + 上浮 + 淡出 */
@@ -2139,6 +2268,8 @@ return { cells, waveSeeds, isFullBoardClear: false };
             // B4 修复: 先从矩阵移除引用，再销毁
             const eliminatedColor = this.grid[row][col];
             if (eliminatedColor >= 0) this.callbacks.onTileEliminated?.(eliminatedColor);
+            // U1: 对冰层造成伤害（在清 grid 之前）
+            this.damageIceAt(row, col);
             this.grid[row][col] = -1;
             this.tiles[row][col] = null;
             this.tileSpecials[row][col] = SpecialType.NONE;
@@ -2573,6 +2704,8 @@ return { cells, waveSeeds, isFullBoardClear: false };
 
         // C2: 确保特效层在方块之上（新方块可能加在了特效层后面）
         this.ensureEffectsLayer();
+        // U1: 确保障碍层在方块之上、特效层之下
+        this.ensureObstacleLayer();
 
         if (anyFell) {
             AudioManager.inst?.playFall();
@@ -2609,6 +2742,237 @@ return { cells, waveSeeds, isFullBoardClear: false };
         // 始终移到最后（确保在所有方块之上）
         this._effectsLayer.setSiblingIndex(this.node.children.length - 1);
         return this._effectsLayer;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  U1: 冰层障碍 — 视觉层管理
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** U1: 获取/创建障碍层（在方块之上、特效层之下） */
+    private ensureObstacleLayer(): Node {
+        if (!this._obstacleLayer || !this._obstacleLayer.isValid) {
+            this._obstacleLayer = new Node('ObstacleLayer');
+            this._obstacleLayer.parent = this.node;
+            const ut = this._obstacleLayer.addComponent(UITransform);
+            const boardUT = this.node.getComponent(UITransform);
+            if (boardUT) ut.setContentSize(boardUT.width, boardUT.height);
+        }
+        // 确保 obstacleLayer 在 effectsLayer 之下（两者都存在时 obstacle 在前）
+        const effectsIdx = this._effectsLayer ? this._effectsLayer.getSiblingIndex() : this.node.children.length;
+        this._obstacleLayer.setSiblingIndex(Math.max(0, effectsIdx - 1));
+        return this._obstacleLayer;
+    }
+
+    /** U1: 根据 iceLayers 数据刷新全部冰层视觉节点 */
+    private refreshIceVisual(): void {
+        if (!this.iceLayers || this.iceLayers.length === 0) return;
+        const layer = this.ensureObstacleLayer();
+
+        for (let r = 0; r < Board.ROWS; r++) {
+            if (!this.iceLayers[r]) continue;
+            for (let c = 0; c < Board.COLS; c++) {
+                const layers = this.iceLayers[r][c];
+                const existing = this.iceNodes[r]?.[c] ?? null;
+
+                if (layers <= 0) {
+                    // 无冰 → 销毁旧节点
+                    if (existing && existing.isValid) {
+                        Tween.stopAllByTarget(existing);
+                        existing.destroy();
+                    }
+                    if (this.iceNodes[r]) this.iceNodes[r][c] = null;
+                } else {
+                    // 有冰 → 创建/更新视觉
+                    if (!existing || !existing.isValid) {
+                        const node = this.createIceNode(r, c, layers);
+                        node.parent = layer;
+                        if (!this.iceNodes[r]) this.iceNodes[r] = [];
+                        this.iceNodes[r][c] = node;
+                    } else {
+                        // 更新现有节点（层数可能变化）
+                        this.drawIceNode(existing, layers);
+                    }
+                }
+            }
+        }
+    }
+
+    /** U1: 创建冰层视觉节点 */
+    private createIceNode(row: number, col: number, layers: number): Node {
+        const node = new Node(`Ice_${row}_${col}`);
+        const pos = this.tileToLocalPosition(row, col);
+        node.setPosition(pos);
+
+        const ut = node.addComponent(UITransform);
+        ut.setContentSize(Board.TILE_SIZE, Board.TILE_SIZE);
+
+        this.drawIceNode(node, layers);
+        return node;
+    }
+
+    /** U1: 在节点上绘制冰层图形（layers=1 单层, layers=2 双层） */
+    private drawIceNode(node: Node, layers: number): void {
+        let g = node.getComponent(Graphics);
+        if (!g) g = node.addComponent(Graphics);
+        g.clear();
+
+        const ts = Board.TILE_SIZE;
+        const half = ts / 2;
+
+        // 底层冰面：淡蓝色半透明圆角矩形
+        g.fillColor = new Color(0xB0, 0xE0, 0xF0, 100);
+        g.roundRect(-half, -half, ts, ts, 8);
+        g.fill();
+
+        // 冰面高光线条（模拟冰晶反光）
+        g.strokeColor = new Color(0xE0, 0xF0, 0xFF, 160);
+        g.lineWidth = 2;
+        g.moveTo(-half + 8, half - 8);
+        g.lineTo(-half + 20, half - 20);
+        g.moveTo(half - 8, half - 8);
+        g.lineTo(half - 20, half - 20);
+        g.moveTo(-half + 8, -half + 8);
+        g.lineTo(-half + 16, -half + 16);
+        g.stroke();
+
+        if (layers >= 2) {
+            // 双层冰：叠加更深的蓝色 + 额外冰晶纹
+            g.fillColor = new Color(0x80, 0xC0, 0xE0, 80);
+            g.roundRect(-half + 4, -half + 4, ts - 8, ts - 8, 6);
+            g.fill();
+
+            // 双层标记：对角斜线纹
+            g.strokeColor = new Color(0xC0, 0xE0, 0xFF, 120);
+            g.lineWidth = 1.5;
+            for (let i = -half + 10; i < half; i += 12) {
+                g.moveTo(i, -half + 2);
+                g.lineTo(i + 10, -half + 12);
+            }
+            g.stroke();
+        }
+    }
+
+    /** U1: 对指定格的冰层造成 1 点伤害（唯一入口） */
+    private damageIceAt(row: number, col: number): void {
+        // 边界检查
+        if (row < 0 || row >= Board.ROWS || col < 0 || col >= Board.COLS) return;
+        if (!this.iceLayers[row]) return;
+        const current = this.iceLayers[row][col];
+        if (current <= 0) return;  // 无冰可打
+
+        // 扣 1 层
+        const remaining = current - 1;
+        this.iceLayers[row][col] = remaining;
+
+        // 视觉效果
+        this.playIceHitEffect(row, col, remaining <= 0);
+
+        if (remaining <= 0) {
+            // 冰层完全清除
+            this.callbacks.onIceCleared?.(row, col);
+            console.log(`[Board] 🧊 冰层清除 (${row},${col})`);
+
+            // 延迟销毁视觉节点（等动画播完）
+            const node = this.iceNodes[row]?.[col] ?? null;
+            if (node && node.isValid) {
+                this.scheduleOnce(() => {
+                    if (node && node.isValid) {
+                        Tween.stopAllByTarget(node);
+                        node.destroy();
+                    }
+                    if (this.iceNodes[row]) this.iceNodes[row][col] = null;
+                }, 0.35);
+            }
+        } else {
+            // 仍有残余冰层 → 更新视觉
+            const node = this.iceNodes[row]?.[col] ?? null;
+            if (node && node.isValid) {
+                this.drawIceNode(node, remaining);
+            }
+            this.callbacks.onIceDamaged?.(row, col, remaining);
+            console.log(`[Board] 🧊 冰层受损 (${row},${col}) → 剩余 ${remaining} 层`);
+        }
+    }
+
+    /** U1: 冰层被击中/清除时的视觉特效 */
+    private playIceHitEffect(row: number, col: number, isCleared: boolean): void {
+        const layer = this.ensureEffectsLayer();
+        const pos = this.tileToLocalPosition(row, col);
+
+        // 冰屑粒子
+        const shardNode = new Node('IceShard');
+        shardNode.parent = layer;
+        shardNode.setPosition(pos);
+
+        const shardCount = isCleared ? 8 : 4;
+        const shardColors = [
+            new Color(0xE0, 0xF0, 0xFF, 220),
+            new Color(0xB0, 0xD0, 0xF0, 200),
+            new Color(0xC0, 0xE0, 0xFF, 180),
+        ];
+
+        for (let i = 0; i < shardCount; i++) {
+            const angle = (Math.PI * 2 * i) / shardCount + Math.random() * 0.3;
+            const dist = isCleared ? 30 + Math.random() * 20 : 15 + Math.random() * 10;
+            const dx = Math.cos(angle) * dist;
+            const dy = Math.sin(angle) * dist;
+            const size = 4 + Math.random() * 4;
+
+            const shard = new Node(`shard${i}`);
+            shard.parent = shardNode;
+            shard.setPosition(0, 0, 0);
+
+            const ut = shard.addComponent(UITransform);
+            ut.setContentSize(size, size);
+
+            const g = shard.addComponent(Graphics);
+            g.fillColor = shardColors[i % shardColors.length];
+            g.rect(-size / 2, -size / 2, size, size);
+            g.fill();
+
+            const op = shard.addComponent(UIOpacity);
+            op.opacity = 220;
+
+            tween(shard)
+                .to(0.3, { position: new Vec3(dx, dy, 0) }, { easing: 'quadOut' })
+                .start();
+            tween(op)
+                .delay(0.15)
+                .to(0.15, { opacity: 0 })
+                .start();
+        }
+
+        // 清除时额外播放波纹
+        if (isCleared) {
+            const ringNode = new Node('IceClearRing');
+            ringNode.parent = layer;
+            ringNode.setPosition(pos);
+
+            const ut = ringNode.addComponent(UITransform);
+            ut.setContentSize(Board.TILE_SIZE, Board.TILE_SIZE);
+
+            const g = ringNode.addComponent(Graphics);
+            g.strokeColor = new Color(0xE0, 0xF0, 0xFF, 200);
+            g.lineWidth = 3;
+            g.circle(0, 0, Board.TILE_SIZE * 0.3);
+            g.stroke();
+
+            const op = ringNode.addComponent(UIOpacity);
+            op.opacity = 220;
+
+            tween(ringNode)
+                .to(0.35, { scale: new Vec3(1.8, 1.8, 1) }, { easing: 'quadOut' })
+                .start();
+            tween(op)
+                .to(0.35, { opacity: 0 })
+                .call(() => ringNode.destroy())
+                .start();
+        }
+
+        // 延迟清理 shard 容器
+        this.scheduleOnce(() => {
+            if (shardNode && shardNode.isValid) shardNode.destroy();
+        }, 0.5);
     }
 
     /** 延时工具（用于无效交换回弹前的停顿） */

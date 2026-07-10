@@ -23,7 +23,7 @@ import {
     UIOpacity,
     resources,
 } from 'cc';
-import { Board, BoardCallbacks } from './Board';
+import { Board, BoardCallbacks, IceCellConfig } from './Board';
 import { AudioManager } from './AudioManager';
 import { VibrateManager } from './VibrateManager';
 import { AdManager } from './AdManager';
@@ -40,7 +40,7 @@ const { ccclass } = _decorator;
 declare const wx: any;
 
 /** 过关目标类型 */
-type GoalType = 'score' | 'collect' | 'special';
+type GoalType = 'score' | 'collect' | 'special' | 'ice';
 
 /** 关卡配置 */
 interface LevelConfig {
@@ -54,6 +54,10 @@ interface LevelConfig {
     specialCount?: number;      // goalType=special 时需引爆的特效块总数
     moves: number;              // 总步数
     colors: number;             // 本关颜色数（5 或 6）
+    /** U1: 冰层配置 */
+    ice?: IceCellConfig[];
+    /** U1: 冰层清除目标数（goalType=ice 时需清除的冰格数） */
+    iceTarget?: number;
 }
 
 /** 颜色键 → colorId 映射 */
@@ -68,6 +72,37 @@ const COLOR_KEY_MAP: Record<string, number> = {
 
 /** colorId → emoji 映射（HUD 收集进度显示用） */
 const COLOR_EMOJI_MAP: string[] = ['🐰', '🐻', '🐘', '🦌', '🐉', '🦊'];
+
+/** J1: 公仔名字（monId 0-5） */
+const MON_NAME: string[] = ['奶糖', '云宝', '抹茶', '小满', '葡萄', '蜜桃'];
+
+/** J1: 公仔性格文案（monId 0-5） */
+const MON_DESC: string[] = [
+    '爱睡午觉的软妹子',
+    '慢半拍的暖心担当',
+    '记性超好的小书虫',
+    '蹦蹦跳跳的元气鹿',
+    '爱发光的许愿龙',
+    '古灵精怪的收藏控',
+];
+
+/** J1: 公仔稀有度（monId 0-5） */
+const MON_RARITY: ('R' | 'SR' | 'SSR')[] = ['R', 'R', 'R', 'SR', 'SR', 'SSR'];
+
+/** Q1: 主题数据（id 0-3，0=免费默认） */
+const THEME_DATA: { name: string; bg: Color; emoji: string }[] = [
+    { name: '默认粉', bg: new Color(0xFD, 0xF2, 0xF8), emoji: '🌸' },
+    { name: '薄荷绿', bg: new Color(0xEA, 0xF5, 0xEF), emoji: '🍃' },
+    { name: '暮光紫', bg: new Color(0xF0, 0xEA, 0xF7), emoji: '🔮' },
+    { name: '深海蓝', bg: new Color(0xE8, 0xF0, 0xFA), emoji: '🌊' },
+];
+
+/** Q1: 配饰数据（id 0-2，全部需广告解锁） */
+const ACCESSORY_DATA: { name: string; emoji: string }[] = [
+    { name: '王冠', emoji: '👑' },
+    { name: '墨镜', emoji: '🕶️' },
+    { name: '蝴蝶结', emoji: '🎀' },
+];
 
 /** Widget 对齐参数 */
 interface WidgetOptions {
@@ -101,6 +136,53 @@ export class GameManager extends Component {
         { level: 13, chapter: 3, isBoss: false, goalType: 'special', specialCount: 5, moves: 20, colors: 6 },
         { level: 14, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 3800, moves: 18, colors: 6 },
         { level: 15, chapter: 3, isBoss: true,  goalType: 'score',   targetScore: 4800, moves: 18, colors: 6 },
+        // —— 第 4 章：新篇 · 冰层障碍（6 色）——
+        // U1: L16 冰层入门 — 清除 8 格单层冰
+        { level: 16, chapter: 4, isBoss: false, goalType: 'ice', iceTarget: 8, moves: 24, colors: 6,
+          ice: [
+              {row:1,col:1,layers:1},{row:1,col:6,layers:1},
+              {row:3,col:3,layers:1},{row:3,col:4,layers:1},
+              {row:4,col:3,layers:1},{row:4,col:4,layers:1},
+              {row:6,col:1,layers:1},{row:6,col:6,layers:1},
+          ],
+        },
+        // U1: L17 收集 + 冰层障碍
+        { level: 17, chapter: 4, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green', 'yellow'], goalCount: [18, 18, 18], moves: 26, colors: 6,
+          ice: [
+              {row:0,col:2,layers:1},{row:0,col:5,layers:1},
+              {row:2,col:0,layers:1},{row:2,col:7,layers:1},
+              {row:3,col:3,layers:1},{row:3,col:4,layers:1},
+              {row:4,col:3,layers:1},{row:4,col:4,layers:1},
+              {row:5,col:0,layers:1},{row:5,col:7,layers:1},
+          ],
+        },
+        // U1: L18 特效引爆 + 混合冰层（单层+双层）
+        { level: 18, chapter: 4, isBoss: false, goalType: 'special', specialCount: 6, moves: 22, colors: 6,
+          ice: [
+              {row:1,col:1,layers:2},{row:1,col:6,layers:2},
+              {row:3,col:2,layers:1},{row:3,col:5,layers:1},
+              {row:4,col:2,layers:1},{row:4,col:5,layers:1},
+              {row:6,col:1,layers:2},{row:6,col:6,layers:2},
+          ],
+        },
+        // U1: L19 高分 + 重冰（全双层）
+        { level: 19, chapter: 4, isBoss: false, goalType: 'score', targetScore: 4200, moves: 22, colors: 6,
+          ice: [
+              {row:0,col:1,layers:2},{row:0,col:3,layers:2},{row:0,col:5,layers:2},{row:0,col:7,layers:2},
+              {row:2,col:0,layers:2},{row:2,col:2,layers:2},{row:2,col:5,layers:2},{row:2,col:7,layers:2},
+              {row:5,col:0,layers:2},{row:5,col:2,layers:2},{row:5,col:5,layers:2},{row:5,col:7,layers:2},
+          ],
+        },
+        // U1: L20 Boss — 清除 14 格混合冰层
+        { level: 20, chapter: 4, isBoss: true, goalType: 'ice', iceTarget: 14, moves: 20, colors: 6,
+          ice: [
+              {row:0,col:0,layers:2},{row:0,col:3,layers:2},{row:0,col:7,layers:2},
+              {row:2,col:1,layers:1},{row:2,col:4,layers:2},{row:2,col:6,layers:1},
+              {row:4,col:1,layers:1},{row:4,col:4,layers:2},{row:4,col:6,layers:1},
+              {row:5,col:3,layers:2},{row:6,col:0,layers:1},{row:6,col:7,layers:2},
+              {row:7,col:2,layers:1},{row:7,col:5,layers:1},
+          ],
+        },
     ];
 
     // ── 运行时状态 ────────────────────────────
@@ -116,6 +198,8 @@ export class GameManager extends Component {
     // ── 关卡运行时计数器（进关清零） ────────────
     private collectedCount: Record<string, number> = {};
     private detonatedSpecials = 0;
+    private clearedIceCells = 0;  // U1: 已清除的冰格数
+    private iceTutorialShown = false;  // U1: L16 冰层教学是否已展示
 
     // ── 引用 ──────────────────────────────────
     private board: Board | null = null;
@@ -141,6 +225,14 @@ export class GameManager extends Component {
     private resultSelectLabel: Label | null = null;
     /** 结算页扭蛋币提示 Label */
     private resultCoinLabel: Label | null = null;
+    /** 结算页章末公仔解锁提示 Label */
+    private resultMonsterLabel: Label | null = null;
+
+    // ── H2: 分数滚动插值 ───────────────────
+    /** 分数显示插值当前值 */
+    private _displayScore = 0;
+    /** P3: 分数滚动链计数器（新链自增使旧链自动退出） */
+    private _scoreAnimToken = 0;
     /** 本次发放的扭蛋币数量（结算显示用） */
     private lastCoinReward = 0;
     /** 扭蛋币翻倍广告是否已用（本关结算期间） */
@@ -166,15 +258,62 @@ export class GameManager extends Component {
     private gachaResultRarity: Label | null = null;
     private gachaResultNew: Label | null = null;
     private gachaPulling = false;
+    /** C: 抽卡结果光效节点 */
+    private gachaGlowNode: Node | null = null;
 
     // ── 图鉴页（E3） ─────────────────────────────
     private collectionPanel: Node | null = null;
     private collectionCompletionLabel: Label | null = null;
     private collectionCells: { emojiLabel: Label; starLabel: Label; countLabel: Label; bgNode: Node; upgradeBtn: Node }[] = [];
+    /** J1: 公仔详情弹卡节点 */
+    private monsterDetailCard: Node | null = null;
+
+    // ── 装扮页（Q1） ─────────────────────────────
+    private dressupPanel: Node | null = null;
+    private dressupPreviewBg: Graphics | null = null;
+    private dressupPreviewEmoji: Label | null = null;
+    private dressupPreviewAcc: Label | null = null;
+    private dressupThemeCells: { id: number; node: Node; statusLabel: Label }[] = [];
+    private dressupAccessoryCells: { id: number; node: Node; statusLabel: Label }[] = [];
+
+    // ── 设置面板（R2） ─────────────────────────────
+    private settingsPanel: Node | null = null;
+    private settingsSoundCapsule: Node | null = null;
+    private settingsSoundLabel: Label | null = null;
+    private settingsVibrateCapsule: Node | null = null;
+    private settingsVibrateLabel: Label | null = null;
+
+    // ── 每日签到（R3） ─────────────────────────────
+    private dailySignPanel: Node | null = null;
+    private dailySignCells: { node: Node; bg: Graphics; dayLabel: Label; rewardLabel: Label; statusLabel: Label }[] = [];
+    private dailySignClaimBtn: Node | null = null;
+    private dailySignClaimLabel: Label | null = null;
+    private dailySignHasShownToday = false;
+
+    // ── A: 结算卡片动态布局引用 ───────────────────
+    private resultCardG: Graphics | null = null;
+    private resultShadowG: Graphics | null = null;
+    private resultCardUT: UITransform | null = null;
+    private resultShadowUT: UITransform | null = null;
+    private resultCardNode: Node | null = null;
+    private readonly resultCardW = 560;
+
+    // ── B: 关卡选择页资源徽章 ─────────────────────
+    private levelSelectCoinBadge: Label | null = null;
+    private levelSelectCollectionBadge: Label | null = null;
 
     // ── 首页层（F0） ─────────────────────────────
     private homePanel: Node | null = null;
     private homeBgSprite: Sprite | null = null;
+    // S1: 首页资源总览条
+    private homeCoinBadge: Label | null = null;
+    private homeCollectionBadge: Label | null = null;
+    // S2: 首页「继续上次」快捷入口
+    private homeContinueBtn: Node | null = null;
+    private homeContinueLabel: Label | null = null;
+    // S3: 首页音效/震动状态角标
+    private homeSoundBadge: Label | null = null;
+    private homeVibrateBadge: Label | null = null;
 
     private stepsPanel: Node | null = null;
     private hidingPanels: Set<Node> = new Set();
@@ -182,6 +321,30 @@ export class GameManager extends Component {
     private chapterTitleLabel: Label | null = null;
     private chapterSubtitleLabel: Label | null = null;
     private chapterBossLabel: Label | null = null;
+
+    // ── 暂停弹层 ──
+    private pauseBtn: Node | null = null;
+    private pausePanel: Node | null = null;
+    private pauseCard: Node | null = null;
+    private pauseConfirmCard: Node | null = null;
+    /** 是否在关卡中（控制暂停键可见性） */
+    private _inLevel = false;
+
+    // ── 游戏背景层（章节主题色） ─────────────────
+    private gameBgNode: Node | null = null;
+    private gameBgG: Graphics | null = null;
+    private gameBgOp: UIOpacity | null = null;
+
+    /** 每章背景主题色（顶/底，低饱和软萌调） */
+    private static readonly CHAPTER_BG_THEMES: { top: string; bottom: string }[] = [
+        { top: '#FDF2F8', bottom: '#F5E8F0' }, // 第1章「初识」暖粉奶油
+        { top: '#EAF5EF', bottom: '#DCEDE4' }, // 第2章「进阶」薄荷奶绿
+        { top: '#F0EAF7', bottom: '#E2D8EE' }, // 第3章「终章」暮光薰衣草
+        { top: '#FFF4E6', bottom: '#F5E6D3' }, // 第4章「新篇」暖橘奶油
+    ];
+
+    /** 章末Boss首次通关赠送的公仔 monId（按章号 1/2/3 → 0兔/3鹿/5狐） */
+    private static readonly CHAPTER_BOSS_MONSTER: number[] = [0, 3, 5, 4];
 
     // ── 录屏 videoPath ─────────────────────────
     private recordedVideoPath: string | null = null;
@@ -260,6 +423,8 @@ export class GameManager extends Component {
                 onChainComplete: () => this.onChainComplete(),
                 onTileEliminated: (colorId: number) => this.onTileEliminated(colorId),
                 onSpecialDetonated: () => this.onSpecialDetonated(),
+                onIceCleared: (row: number, col: number) => this.onIceCleared(row, col),
+                onIceDamaged: (row: number, col: number, layersRemaining: number) => this.onIceDamaged(row, col, layersRemaining),
             } as BoardCallbacks);
         }
 
@@ -286,55 +451,7 @@ export class GameManager extends Component {
         this.layoutBoard();
         // F0: 启动先显示首页（不再直接进关卡选择页）
         this.showHomePanel();
-
-        // ===== TEMP DEBUG (收藏系统真机验收用·上线前删) =====
-        // 待偿债务：collectionDebug 调试入口，上线前必须删除
-        this._setupCollectionDebug();
-        // ===== END TEMP DEBUG =====
     }
-
-    // ===== TEMP DEBUG (收藏系统真机验收用·上线前删) =====
-    /** 待偿债务：挂全局调试对象，上线前删 */
-    private _setupCollectionDebug(): void {
-        const g = globalThis as any;
-        if (!g) return; // 非 browser/wx 环境安全跳过
-
-        g.collectionDebug = {
-            /** TEMP: 给扭蛋币，测抽卡 */
-            grantCoins: (n: number = 500): void => {
-                const safeN = (typeof n === 'number' && !isNaN(n) && isFinite(n)) ? Math.floor(n) : 500;
-                SaveManager.inst.addCoins(safeN);
-                const coins = SaveManager.inst.getCoins();
-                console.log(`[collectionDebug] grantCoins(${safeN}) → 余额=${coins}`);
-            },
-
-            /** TEMP: 给指定怪物 count 次，测升星 */
-            grantMonster: (id: number, count: number = 3): void => {
-                const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 5) ? Math.floor(id) : 0;
-                const safeCount = (typeof count === 'number' && !isNaN(count) && isFinite(count)) ? Math.floor(count) : 3;
-                for (let i = 0; i < safeCount; i++) {
-                    SaveManager.inst.addMonster(safeId);
-                }
-                const rec = SaveManager.inst.getMonster(safeId);
-                const coins = SaveManager.inst.getCoins();
-                console.log(`[collectionDebug] grantMonster(id=${safeId}, count=${safeCount}) → count=${rec.count} star=${rec.star} | coins=${coins}`);
-            },
-
-            /** TEMP: 清空收藏 + 币归零，测首抽 NEW */
-            clearCollection: (): void => {
-                SaveManager.inst.resetAll();
-                const coins = SaveManager.inst.getCoins();
-                console.log(`[collectionDebug] clearCollection() → 存档已清空 | coins=${coins}`);
-                for (let i = 0; i < 6; i++) {
-                    const rec = SaveManager.inst.getMonster(i);
-                    console.log(`  monId=${i}: count=${rec.count} star=${rec.star}`);
-                }
-            },
-        };
-
-        console.log('[collectionDebug] ★ 调试入口已挂载: collectionDebug.grantCoins(500) / .grantMonster(0,3) / .clearCollection()');
-    }
-    // ===== END TEMP DEBUG =====
 
     // ══════════════════════════════════════════════════════════════════════════
     //  Canvas 尺寸读取
@@ -761,22 +878,23 @@ export class GameManager extends Component {
         // 进关清零计数器
         this.collectedCount = {};
         this.detonatedSpecials = 0;
+        this.clearedIceCells = 0;  // U1: 清零冰格计数
 
         this.hidePanel(this.resultPanel);
         this.hidePanel(this.stepsPanel);
+        this.hidePanel(this.pausePanel);
 
         // 游戏进行中 → 隐藏游戏圈按钮
         this.gameClubEntry?.hide();
 
         this.board?.setLevel(levelIndex);  // C0: 设置关卡号（L1=0 触发手势引导）
-        this.board?.resetBoard(config.colors);
+        this.board?.resetBoard(config.colors, config.ice ?? []);  // U1: 传入冰层配置
         // setBusy(false) 移到章节卡逻辑末尾（避免过场卡期间棋盘可交互）
 
         this.updateHUD();
 
-        // Fix 1.1: 延迟打印 HUD 诊断（确保 updateHUD 已设好 string）
+        // Fix 1.1: 延迟重算布局
         this.scheduleOnce(() => {
-            this.dumpHudTree();
             this.layoutBoard();
         }, 0.1);
 
@@ -785,8 +903,13 @@ export class GameManager extends Component {
 
         console.log(`[GameManager] ── L${config.level} (第${config.chapter}章${config.isBoss ? '·Boss' : ''}) 开始 | 目标=${config.goalType} | ${config.moves} 步 | ${config.colors} 色 ──`);
 
-        // ★ 章节过场卡：进入新章首关时弹一次
+        // ★ 章节主题色：按 config.chapter 切换背景（首次或切章时淡变，同章不重复）
         const newChapter = this.safeNum(config.chapter, 1);
+        if (this.lastChapter === 0 || this.lastChapter !== newChapter) {
+            this.applyChapterTheme(newChapter);
+        }
+
+        // ★ 章节过场卡：进入新章首关时弹一次
         if (this.lastChapter !== 0 && this.lastChapter !== newChapter) {
             this.showChapterCard(newChapter, config.isBoss);
         } else {
@@ -794,6 +917,51 @@ export class GameManager extends Component {
             this.lastChapter = newChapter;
             this.board?.setBusy(false);
         }
+
+        // 标记进入关卡，更新暂停键可见性
+        this._inLevel = true;
+        this.updatePauseBtnVisible();
+
+        // U1: L16 首次进入时显示冰层教学提示
+        if (levelIndex === 15 && !this.iceTutorialShown) {
+            this.iceTutorialShown = true;
+            this.scheduleOnce(() => {
+                this.showIceTutorial();
+            }, 2.0);
+        }
+    }
+
+    /** U1: 显示冰层教学提示（短暂弹层） */
+    private showIceTutorial(): void {
+        const tutorialNode = new Node('IceTutorial');
+        tutorialNode.parent = this.node;
+
+        const ut = tutorialNode.addComponent(UITransform);
+        const pw = this.safeNum(this.canvasW, 720);
+        ut.setContentSize(pw, 80);
+
+        const label = tutorialNode.addComponent(Label);
+        label.string = '🧊 消除冰格旁的方块可击碎冰层！双层冰需要消除两次';
+        label.fontSize = 24;
+        label.lineHeight = 28;
+        label.color = new Color(0x33, 0x66, 0xAA);
+        label.useSystemFont = true;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.overflow = Label.Overflow.SHRINK;
+
+        tutorialNode.setPosition(0, this.safeNum(this.canvasH, 1280) * 0.3, 0);
+
+        const op = tutorialNode.addComponent(UIOpacity);
+        op.opacity = 0;
+
+        tween(op)
+            .to(0.3, { opacity: 255 })
+            .delay(3.0)
+            .to(0.5, { opacity: 0 })
+            .call(() => {
+                if (tutorialNode && tutorialNode.isValid) tutorialNode.destroy();
+            })
+            .start();
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -807,16 +975,51 @@ export class GameManager extends Component {
     }
 
     private onScoreChange(score: number): void {
-        this.currentScore = score;
-        this.updateHUD();
-        // ★ 分数跳动 punch scale (1→1.25→1, 0.15s)
-        if (this.scoreLabel) {
-            Tween.stopAllByTarget(this.scoreLabel.node);
+        const newScore = this.safeNum(score, 0);
+        const oldScore = this.safeNum(this.currentScore, 0);
+        this.currentScore = newScore;
+
+        // ★ H2: 分数 lerp 滚动（0.3s quadOut）+ scale 弹动
+        if (this.scoreLabel && newScore !== oldScore && isFinite(oldScore) && isFinite(newScore)) {
+            // ★ P3: 从当前显示值续接，不硬重置起点；用计数器取消旧链
+            const startVal = this._displayScore;
+            const endVal = newScore;
+            const duration = 0.3;
+            const token = ++this._scoreAnimToken;
+
+            // 用 scheduleOnce 模拟 lerp（每帧更新 label.string）
+            const startTime = Date.now();
+            const updateLabel = () => {
+                if (token !== this._scoreAnimToken) return; // 被新链取代
+                if (!this.scoreLabel || !this.scoreLabel.isValid) { return; }
+                const elapsed = (Date.now() - startTime) / 1000;
+                const t = Math.min(elapsed / duration, 1);
+                // quadOut: t*(2-t)
+                const eased = t * (2 - t);
+                this._displayScore = Math.round(startVal + (endVal - startVal) * eased);
+                const config = this.levelConfigs[this.currentLevel];
+                this.scoreLabel.string = this.getGoalHudTextWithScore(config, this._displayScore);
+
+                if (t >= 1) {
+                    this._displayScore = endVal;
+                    // 最终确保显示正确
+                    this.updateHUD();
+                    return;
+                }
+                this.scheduleOnce(updateLabel, 0);
+            };
+            updateLabel();
+
+            // ★ H2: scale 1→1.15→1 轻弹（复用现有 punch 思路，幅度更柔）
             this.scoreLabel.node.setScale(1, 1, 1);
             tween(this.scoreLabel.node)
-                .to(0.075, { scale: new Vec3(1.25, 1.25, 1) })
-                .to(0.075, { scale: new Vec3(1, 1, 1) })
+                .to(0.1, { scale: new Vec3(1.15, 1.15, 1) }, { easing: 'quadOut' })
+                .to(0.1, { scale: new Vec3(1, 1, 1) })
                 .start();
+        } else {
+            // NaN 直接显示目标值不滚动
+            this._displayScore = newScore;
+            this.updateHUD();
         }
     }
 
@@ -858,6 +1061,8 @@ export class GameManager extends Component {
             }
             case 'special':
                 return this.detonatedSpecials >= this.safeNum(cfg.specialCount, Infinity);
+            case 'ice':
+                return this.clearedIceCells >= this.safeNum(cfg.iceTarget, Infinity);
             default:
                 return false;
         }
@@ -878,6 +1083,18 @@ export class GameManager extends Component {
         this.detonatedSpecials++;
         this.updateHUD();
         console.log(`[GameManager] 特效引爆计数: ${this.detonatedSpecials}`);
+    }
+
+    /** U1: Board 回调 — 冰层完全清除 */
+    private onIceCleared(row: number, col: number): void {
+        this.clearedIceCells++;
+        this.updateHUD();
+        console.log(`[GameManager] 🧊 冰格清除 (${row},${col}) → 累计 ${this.clearedIceCells}`);
+    }
+
+    /** U1: Board 回调 — 冰层受损（仍有残余） */
+    private onIceDamaged(row: number, col: number, layersRemaining: number): void {
+        console.log(`[GameManager] 🧊 冰格受损 (${row},${col}) → 剩余 ${layersRemaining} 层`);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -910,16 +1127,22 @@ export class GameManager extends Component {
 
     /** 章节副标题 */
     private getChapterSubtitle(chapter: number): string {
-        const subtitles = ['', '初识', '进阶', '终章'];
+        const subtitles = ['', '初识 · 甜甜的开始', '进阶 · 越消越上头', '终章 · 收集控の狂欢', '新篇 · 冰层大冒险'];
         const idx = this.safeNum(chapter, 1);
         return subtitles[idx] ?? `第${idx}章`;
     }
 
     /** 根据 goalType 生成 HUD 中间段的目标进度文本 */
     private getGoalHudText(cfg: LevelConfig): string {
+        return this.getGoalHudTextWithScore(cfg, this.currentScore);
+    }
+
+    /** H2: 用指定分数值生成 HUD 文本（供滚动插值使用） */
+    private getGoalHudTextWithScore(cfg: LevelConfig, displayScore: number): string {
+        const safeScore = this.safeNum(displayScore, 0);
         switch (cfg.goalType) {
             case 'score':
-                return `🎯 ${this.currentScore}/${this.safeNum(cfg.targetScore, 0)}`;
+                return `🎯 ${safeScore}/${this.safeNum(cfg.targetScore, 0)}`;
             case 'collect': {
                 const colors = Array.isArray(cfg.goalColor) ? cfg.goalColor : [cfg.goalColor!];
                 const counts = Array.isArray(cfg.goalCount) ? cfg.goalCount : [cfg.goalCount!];
@@ -934,8 +1157,10 @@ export class GameManager extends Component {
             }
             case 'special':
                 return `💥 ${this.detonatedSpecials}/${this.safeNum(cfg.specialCount, 0)}`;
+            case 'ice':
+                return `🧊 ${this.clearedIceCells}/${this.safeNum(cfg.iceTarget, 0)}`;
             default:
-                return `🎯 ${this.currentScore}`;
+                return `🎯 ${safeScore}`;
         }
     }
 
@@ -946,10 +1171,13 @@ export class GameManager extends Component {
     private showResultPanel(isWin: boolean): void {
         if (!this.resultPanel) return;
 
+        // 确保与暂停弹层互斥
+        this.hidePanel(this.pausePanel);
+
         // 停止录屏（onStop 会拿到 videoPath）
         RecorderManager.getInstance().stop();
 
-        this.showPanel(this.resultPanel);
+        this.showPanel(this.resultPanel, true);
 
         // 结算页 → 显示游戏圈按钮
         this.gameClubEntry?.show();
@@ -962,7 +1190,15 @@ export class GameManager extends Component {
         const config = this.levelConfigs[this.currentLevel];
         if (isWin && config.isBoss) {
             const chapter = this.safeNum(config.chapter, 1);
-            this.resultScore!.string = `第${chapter}章 完成！\n` + this.getResultScoreText(config);
+            const chapterClearTexts = [
+                '',
+                '第1章 通关！萌盒+1',
+                '第2章 通关！',
+                '第3章 通关！',
+                '🎉 第4章 通关！萌力全开',
+            ];
+            const clearText = chapterClearTexts[chapter] ?? `第${chapter}章 完成！`;
+            this.resultScore!.string = `${clearText}\n` + this.getResultScoreText(config);
             this.spawnBossCelebration();
         }
 
@@ -996,6 +1232,37 @@ export class GameManager extends Component {
             VibrateManager.inst?.long();
             // Boss 关额外震动
             if (config.isBoss) VibrateManager.inst?.heavy();
+
+            // ★ 章末Boss首次通关：解锁公仔（必须在 markCleared 之前判断 isCleared）
+            let unlockedMonId = -1;
+            if (config.isBoss) {
+                const levelNum = this.safeNum(config.level, this.currentLevel + 1);
+                const isFirstClear = !SaveManager.inst.isCleared(levelNum);
+                if (isFirstClear) {
+                    const chapter = this.safeNum(config.chapter, 1);
+                    // 章号 → monId 映射（越界回退 -1 不赠送）
+                    if (chapter >= 1 && chapter <= GameManager.CHAPTER_BOSS_MONSTER.length) {
+                        unlockedMonId = GameManager.CHAPTER_BOSS_MONSTER[chapter - 1];
+                        // monId 范围防护 0-5
+                        if (unlockedMonId < 0 || unlockedMonId > 5) unlockedMonId = -1;
+                    }
+                    if (unlockedMonId >= 0) {
+                        try {
+                            SaveManager.inst.addMonster(unlockedMonId);
+                            console.log(`[GameManager] ★ 章末Boss首次通关 → 解锁公仔 monId=${unlockedMonId} (${COLOR_EMOJI_MAP[unlockedMonId] ?? '?'})`);
+                            // ★ H3: 解锁公仔上扬小音阶（复用 combo3→combo5，无文件静默）
+                            try {
+                                AudioManager.inst?.playCombo(3);
+                                this.scheduleOnce(() => { try { AudioManager.inst?.playCombo(5); } catch (_) { /* ignore */ } }, 0.12);
+                            } catch (e) { /* ignore */ }
+                        } catch (e) {
+                            console.warn('[GameManager] addMonster 异常:', e);
+                            unlockedMonId = -1;
+                        }
+                    }
+                }
+            }
+
             // D1: 过关写入存档（level 号从 LevelConfig.level 取，1~15）
             SaveManager.inst.markCleared(this.safeNum(config.level, this.currentLevel + 1), this.currentScore);
             // E1: 过关发放扭蛋币（普通关 +10、Boss 关 +30）
@@ -1007,6 +1274,24 @@ export class GameManager extends Component {
                 this.resultCoinLabel.string = `+${this.lastCoinReward} 🎲 扭蛋币`;
                 this.resultCoinLabel.node.active = true;
             }
+            // ★ 章末公仔解锁提示 + backOut 弹入动画
+            if (this.resultMonsterLabel) {
+                if (unlockedMonId >= 0) {
+                    const emoji = COLOR_EMOJI_MAP[unlockedMonId] ?? '?';
+                    this.resultMonsterLabel.string = `🏅 第${chapter}章通关 · 解锁 ${emoji}`;
+                    this.resultMonsterLabel.fontSize = 36;
+                    this.resultMonsterLabel.node.active = true;
+                    // backOut 弹入（复用章节卡同款缓动）
+                    Tween.stopAllByTarget(this.resultMonsterLabel.node);
+                    this.resultMonsterLabel.node.setScale(0, 0, 1);
+                    tween(this.resultMonsterLabel.node)
+                        .to(0.3, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
+                        .to(0.1, { scale: new Vec3(1, 1, 1) })
+                        .start();
+                } else {
+                    this.resultMonsterLabel.node.active = false;
+                }
+            }
         } else {
             AudioManager.inst?.playLose();
             VibrateManager.inst?.long();
@@ -1015,7 +1300,13 @@ export class GameManager extends Component {
             if (this.resultCoinLabel) {
                 this.resultCoinLabel.node.active = false;
             }
+            // 失败不显示公仔解锁
+            if (this.resultMonsterLabel) {
+                this.resultMonsterLabel.node.active = false;
+            }
         }
+        // A: 动态布局结算卡片（通过 monsterLabel.active 判断是否有公仔解锁）
+        this.layoutResultPanel(isWin, this.resultMonsterLabel?.node.active ?? false);
         console.log(`[GameManager] 结算: ${isWin ? '过关' : '失败'} | 得分 ${this.currentScore}`);
     }
 
@@ -1039,6 +1330,8 @@ export class GameManager extends Component {
             }
             case 'special':
                 return `引爆: ${this.detonatedSpecials}/${this.safeNum(cfg.specialCount, 0)}  |  得分 ${score}`;
+            case 'ice':
+                return `🧊 碎冰: ${this.clearedIceCells}/${this.safeNum(cfg.iceTarget, 0)}  |  得分 ${score}`;
             default:
                 return `本关得分: ${score}`;
         }
@@ -1194,7 +1487,9 @@ export class GameManager extends Component {
     // ══════════════════════════════════════════════════════════════════════════
 
     private showStepsPanel(): void {
-        this.showPanel(this.stepsPanel);
+        // 确保与暂停弹层互斥
+        this.hidePanel(this.pausePanel);
+        this.showPanel(this.stepsPanel, true);
         // 步数耗尽弹层 → 显示游戏圈按钮
         this.gameClubEntry?.show();
         // 停止录屏
@@ -1234,7 +1529,7 @@ export class GameManager extends Component {
     private createAllUI(): void {
         const canvas = this.node.parent!;
 
-        // ── 1. 背景：压暗淡紫粉竖向渐变 + 暗角 + 柔点装饰 ──
+        // ── 1. 背景：章节主题色竖向渐变 + 暗角 + 柔点装饰 ──
         const bgNode = new Node('Background');
         bgNode.parent = canvas;
         bgNode.setSiblingIndex(0); // 放最底
@@ -1244,37 +1539,22 @@ export class GameManager extends Component {
         bgUT.setContentSize(bgW, bgH);
 
         const bgG = bgNode.addComponent(Graphics);
-        // 竖向渐变：顶部 #CDB8CE → 中间 #E4D2E2 → 底部 #CDB8CE（3段近似）
-        const segH = bgH / 3;
-        bgG.fillColor = new Color(0xCD, 0xB8, 0xCE);
-        bgG.rect(-bgW / 2, bgH / 6, bgW, segH);
-        bgG.fill();
-        bgG.fillColor = new Color(0xE4, 0xD2, 0xE2);
-        bgG.rect(-bgW / 2, -bgH / 6, bgW, segH);
-        bgG.fill();
-        bgG.fillColor = new Color(0xCD, 0xB8, 0xCE);
-        bgG.rect(-bgW / 2, -bgH / 2, bgW, segH);
-        bgG.fill();
+        // 存储引用供章节切换时重绘
+        this.gameBgNode = bgNode;
+        this.gameBgG = bgG;
+        this.gameBgOp = bgNode.addComponent(UIOpacity);
 
-        // 暗角 vignette：四边叠深色边框，把视线漏斗到棋盘
-        const vCol = new Color(60, 40, 60, 40);
-        bgG.fillColor = vCol.clone();
-        bgG.rect(-bgW / 2, bgH / 2 - 70, bgW, 70);   // 顶部
-        bgG.fill();
-        bgG.rect(-bgW / 2, -bgH / 2, bgW, 70);       // 底部
-        bgG.fill();
-        bgG.rect(-bgW / 2, -bgH / 2, 50, bgH);       // 左侧
-        bgG.fill();
-        bgG.rect(bgW / 2 - 50, -bgH / 2, 50, bgH);   // 右侧
-        bgG.fill();
-
-        // 装饰柔点：大而柔、低透明度，不抢方块
-        bgG.fillColor = new Color(0xD4, 0xC0, 0xD5, 30);
-        bgG.ellipse(-bgW * 0.3, bgH * 0.2, 120, 120);
-        bgG.fill();
-        bgG.fillColor = new Color(0xE0, 0xCC, 0xE0, 25);
-        bgG.ellipse(bgW * 0.25, -bgH * 0.15, 100, 100);
-        bgG.fill();
+        // 初始绘制第1章主题色（后续 startLevel 会按 config.chapter 切换）
+        const initTheme = GameManager.CHAPTER_BG_THEMES[0];
+        const initTop = this.parseHexColor(initTheme.top, new Color(0xFD, 0xF2, 0xF8));
+        const initBot = this.parseHexColor(initTheme.bottom, new Color(0xF5, 0xE8, 0xF0));
+        const initMid = new Color(
+            Math.round((initTop.r + initBot.r) / 2),
+            Math.round((initTop.g + initBot.g) / 2),
+            Math.round((initTop.b + initBot.b) / 2),
+            255,
+        );
+        this.drawChapterBackground(initTop, initMid, initBot);
 
         this.addWidget(bgNode, { top: 0, bottom: 0, left: 0, right: 0 });
 
@@ -1291,12 +1571,17 @@ export class GameManager extends Component {
 
         // ── 3. HUD / 弹层 ──
         this.createHUD();
+        this.createPauseButton();
         this.createResultPanel();
         this.createStepsPanel();
         this.createLevelSelectPanel();
         this.createGachaPanel();
         this.createCollectionPanel();
+        this.createPausePanel();
         this.createHomePanel();
+        this.createDressupPanel();
+        this.createSettingsPanel();
+        this.createDailySignPanel();
     }
 
     // ── HUD（细长药丸 + Layout 横排 + 三段单行 Label） ──────────
@@ -1389,73 +1674,60 @@ export class GameManager extends Component {
         bar.roundRect(-w / 2, -h / 2, w, h, h / 2);
         bar.fill();
         bar.stroke();
-
-        // 诊断：打印完整 HUD 结构
-        this.dumpHudTree();
     }
 
-    /** 递归打印 HUD 节点树（根节点 + 所有子节点 + Label 详情） */
-    private dumpHudTree(): void {
-        if (!this.hudNode || !this.hudNode.isValid) {
-            console.log('[HUD-DUMP] hudNode is null or destroyed');
-            return;
-        }
+    // ── 暂停按钮（左上角圆形，游戏中常驻） ──────────────────
 
-        const hud = this.hudNode;
-        const hudUT = hud.getComponent(UITransform);
-        const hudWP = hud.worldPosition;
+    private createPauseButton(): void {
+        this.pauseBtn = new Node('PauseBtn');
+        this.pauseBtn.parent = this.node.parent!;
 
-        // 1. 打印 HUD 根节点
-        console.log(
-            `[HUD-DUMP] Root: name=${hud.name} active=${hud.active} ` +
-            `size=(${this.safeNum(hudUT?.width, -1).toFixed(0)}×${this.safeNum(hudUT?.height, -1).toFixed(0)}) ` +
-            `anchor=(${hudUT?.anchorX ?? '?'},${hudUT?.anchorY ?? '?'}) ` +
-            `worldPos=(${hudWP.x.toFixed(1)},${hudWP.y.toFixed(1)}) ` +
-            `layer=${hud.layer}`,
-        );
+        const size = 64;
+        const ut = this.pauseBtn.addComponent(UITransform);
+        ut.setContentSize(size, size);
+        ut.setAnchorPoint(0.5, 0.5);
 
-        // 打印 boundingBox
-        if (hudUT) {
-            const bb = hudUT.getBoundingBoxToWorld();
-            console.log(
-                `[HUD-DUMP] Root BBox: x=${bb.x.toFixed(1)} y=${bb.y.toFixed(1)} ` +
-                `w=${bb.width.toFixed(1)} h=${bb.height.toFixed(1)}`,
-            );
-        }
+        // Widget：top-left，与 HUD 同高，避开右上角微信胶囊
+        this.addWidget(this.pauseBtn, {
+            top: this.safeNum(this.topInset + 12, 112),
+            left: 16,
+        });
 
-        // 2. 递归打印所有子节点
-        const childCount = hud.children.length;
-        console.log(`[HUD-DUMP] Children count: ${childCount}`);
-        for (let i = 0; i < childCount; i++) {
-            const child = hud.children[i];
-            const childUT = child.getComponent(UITransform);
-            const childWP = child.worldPosition;
-            const label = child.getComponent(Label);
-            const parentName = child.parent?.name ?? '(none)';
+        // 圆形底 + 描边
+        const g = this.pauseBtn.addComponent(Graphics);
+        g.fillColor = this.COLOR_HUD_BAR.clone();
+        g.strokeColor = this.COLOR_CARD_BORDER.clone();
+        g.lineWidth = 2;
+        g.circle(0, 0, size / 2);
+        g.fill();
+        g.stroke();
 
-            if (label) {
-                console.log(
-                    `[HUD-DUMP]   [${i}] name=${child.name} active=${child.active} ` +
-                    `parent=${parentName} ` +
-                    `Label: string="${label.string}" ` +
-                    `color=(${label.color.r},${label.color.g},${label.color.b},${label.color.a}) ` +
-                    `fontSize=${label.fontSize} ` +
-                    `overflow=${label.overflow} ` +
-                    `size=(${this.safeNum(childUT?.width, -1).toFixed(0)}×${this.safeNum(childUT?.height, -1).toFixed(0)}) ` +
-                    `localPos=(${child.position.x.toFixed(1)},${child.position.y.toFixed(1)}) ` +
-                    `worldPos=(${childWP.x.toFixed(1)},${childWP.y.toFixed(1)}) ` +
-                    `layer=${child.layer}`,
-                );
-            } else {
-                console.log(
-                    `[HUD-DUMP]   [${i}] name=${child.name} active=${child.active} ` +
-                    `parent=${parentName} (no Label) ` +
-                    `size=(${this.safeNum(childUT?.width, -1).toFixed(0)}×${this.safeNum(childUT?.height, -1).toFixed(0)}) ` +
-                    `worldPos=(${childWP.x.toFixed(1)},${childWP.y.toFixed(1)}) ` +
-                    `layer=${child.layer}`,
-                );
-            }
-        }
+        // 两竖条 ⏸ 图标
+        const barW = 6;
+        const barH = 24;
+        const barGap = 8;
+        g.fillColor = this.COLOR_HUD_TEXT.clone();
+        g.roundRect(-barGap / 2 - barW, -barH / 2, barW, barH, 3);
+        g.fill();
+        g.roundRect(barGap / 2, -barH / 2, barW, barH, 3);
+        g.fill();
+
+        // ★ P1: Button.Transition.NONE（手动 tween 统一控制缩放）
+        const button = this.pauseBtn.addComponent(Button);
+        button.transition = Button.Transition.NONE;
+
+        button.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            Tween.stopAllByTarget(this.pauseBtn!);
+            this.pauseBtn!.setScale(0.95, 0.95, 1);
+            tween(this.pauseBtn!)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+        button.node.on(Button.EventType.CLICK, () => this.onPauseClick(), this);
+
+        // 初始隐藏（未进关卡）
+        this.pauseBtn.active = false;
     }
 
     // ── 结算弹层（遮罩 + 奶白圆角卡片 + Layout 竖排） ──
@@ -1483,8 +1755,8 @@ export class GameManager extends Component {
         maskNode.addComponent(UIOpacity); // 用于淡入淡出
         this.addWidget(maskNode, { top: 0, bottom: 0, left: 0, right: 0 });
 
-        // Card 尺寸（NaN 兜底）
-        const cardW = 560, cardH = 780;
+        // Card 尺寸（NaN 兜底）— 高度由 layoutResultPanel 动态计算
+        const cardW = this.resultCardW, cardH = 780;
 
         // Shadow：向下投影（偏移 -6px、半透明黑、略大于卡片）
         const shadowNode = new Node('CardShadow');
@@ -1501,6 +1773,8 @@ export class GameManager extends Component {
         shadowG.fill();
         shadowNode.addComponent(UIOpacity);
         this.addWidget(shadowNode, { hCenter: 0, vCenter: 34 }); // 40 - 6 = 34，向下偏移
+        this.resultShadowG = shadowG;
+        this.resultShadowUT = shadowUT;
 
         // Card：奶白圆角卡片 + 淡紫描边
         const card = new Node('Card');
@@ -1508,6 +1782,8 @@ export class GameManager extends Component {
         const cardUT = card.addComponent(UITransform);
         cardUT.setContentSize(cardW, cardH);
         this.addWidget(card, { hCenter: 0, vCenter: 40 });
+        this.resultCardNode = card;
+        this.resultCardUT = cardUT;
 
         const cardG = card.addComponent(Graphics);
         cardG.fillColor = this.COLOR_CARD.clone();
@@ -1516,16 +1792,9 @@ export class GameManager extends Component {
         cardG.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 28);
         cardG.fill();
         cardG.stroke();
+        this.resultCardG = cardG;
 
-        // Layout 竖排
-        const cardLayout = card.addComponent(Layout);
-        cardLayout.type = Layout.Type.VERTICAL;
-        cardLayout.spacingY = 24;
-        cardLayout.paddingTop = 44;
-        cardLayout.paddingBottom = 44;
-        cardLayout.horizontalDirection = Layout.HorizontalDirection.CENTER;
-        cardLayout.verticalDirection = Layout.VerticalDirection.TOP_TO_BOTTOM;
-        cardLayout.resizeMode = Layout.ResizeMode.NONE;
+        // A: 去掉 Layout(VERTICAL)，改由 layoutResultPanel 手动 setPosition 排列
 
         // Title（深紫高对比、加粗、SHRINK 防裁切）
         this.resultTitle = this.createLabel(card, 'Title', '', 52, this.COLOR_TITLE_WIN);
@@ -1552,20 +1821,29 @@ export class GameManager extends Component {
         this.resultCoinLabel.enableWrapText = false;
         this.resultCoinLabel.node.active = false;
 
-        // 广告按钮（暖金高亮实心）
+        // 章末公仔解锁提示（仅 Boss 首次通关时显示）
+        this.resultMonsterLabel = this.createLabel(card, 'MonsterUnlock', '', 32, this.COLOR_CHAPTER_GOLD);
+        this.resultMonsterLabel.isBold = true;
+        const monW = this.safeNum(cardW - 80, 440);
+        this.resultMonsterLabel.node.getComponent(UITransform)!.setContentSize(monW, 48);
+        this.resultMonsterLabel.overflow = Label.Overflow.SHRINK;
+        this.resultMonsterLabel.enableWrapText = false;
+        this.resultMonsterLabel.node.active = false;
+
+        // 广告按钮（暖金高亮实心）— A: 高度 94→82
         this.resultAdBtn = this.createRoundButton(card, 'AdBtn', '▶  看广告·得分翻倍',
-            this.COLOR_BTN_AD, 440, 94, () => this.onResultAdClick());
+            this.COLOR_BTN_AD, 440, 82, () => this.onResultAdClick());
         this.resultAdLabel = this.resultAdBtn.getChildByName('Label')!.getComponent(Label)!;
 
-        // 分享按钮
+        // 分享按钮 — A: 高度 94→82
         this.resultShareBtn = this.createRoundButton(card, 'ShareBtn', '录屏不可用',
-            this.COLOR_BTN_GIVEUP, 440, 94, () => this.onShareRecordClick());
+            this.COLOR_BTN_GIVEUP, 440, 82, () => this.onShareRecordClick());
         this.resultShareLabel = this.resultShareBtn.getChildByName('Label')!.getComponent(Label)!;
         this.resultShareBtn.getComponent(Button)!.interactable = false;
 
-        // 主按钮（下一关/重玩 = 主色实心）
+        // 主按钮（下一关/重玩 = 主色实心）— A: 高度 94→82
         this.resultNextBtn = this.createRoundButton(card, 'NextBtn', '下一关',
-            this.COLOR_BTN_PRIMARY, 440, 94, () => this.onResultNextClick());
+            this.COLOR_BTN_PRIMARY, 440, 82, () => this.onResultNextClick());
         this.resultNextLabel = this.resultNextBtn.getChildByName('Label')!.getComponent(Label)!;
 
         // 关卡选择按钮（幽灵按钮：透明底 + 描边）
@@ -1581,6 +1859,85 @@ export class GameManager extends Component {
         this.resultCoinAdBtn.active = false;
 
         this.resultPanel.active = false;
+    }
+
+    /** A: 结算弹层动态布局 — 根据显示项计算卡片高度并手动排列 */
+    private layoutResultPanel(isWin: boolean, hasMonsterUnlock: boolean): void {
+        if (!this.resultCardG || !this.resultCardUT || !this.resultCardNode) return;
+
+        const cardW = this.safeNum(this.resultCardW, 560);
+
+        // 确定本次显示哪些元素
+        const showCoinLabel = isWin;
+        const showMonsterLabel = hasMonsterUnlock;
+        const showCoinAdBtn = isWin && this.safeNum(this.lastCoinReward, 0) > 0;
+
+        // 元素高度
+        const titleH = 76, scoreH = 56, coinLabelH = 40, monsterLabelH = 48;
+        const adBtnH = 82, shareBtnH = 82, nextBtnH = 82, selectBtnH = 80, coinAdBtnH = 80;
+        const gapLabel = 12, gapBtn = 18, paddingTop = 40, paddingBottom = 40;
+
+        // 计算所需高度
+        let needH = paddingTop + titleH + gapLabel + scoreH;
+        if (showCoinLabel) needH += gapLabel + coinLabelH;
+        if (showMonsterLabel) needH += gapLabel + monsterLabelH;
+        needH += gapBtn + adBtnH + gapBtn + shareBtnH + gapBtn + nextBtnH + gapBtn + selectBtnH;
+        if (showCoinAdBtn) needH += gapBtn + coinAdBtnH;
+        needH += paddingBottom;
+
+        const cardH = Math.max(720, Math.min(1060, needH));
+
+        // 重绘卡片背景
+        this.resultCardG.clear();
+        this.resultCardG.fillColor = this.COLOR_CARD.clone();
+        this.resultCardG.strokeColor = this.COLOR_CARD_BORDER.clone();
+        this.resultCardG.lineWidth = 2;
+        this.resultCardG.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 28);
+        this.resultCardG.fill();
+        this.resultCardG.stroke();
+        this.resultCardUT.setContentSize(cardW, cardH);
+
+        // 重绘投影
+        if (this.resultShadowG && this.resultShadowUT) {
+            const sPad = 14;
+            this.resultShadowG.clear();
+            this.resultShadowG.fillColor = new Color(0, 0, 0, 50);
+            this.resultShadowG.roundRect(
+                -(cardW + sPad * 2) / 2, -(cardH + sPad * 2) / 2,
+                cardW + sPad * 2, cardH + sPad * 2, 28 + sPad,
+            );
+            this.resultShadowG.fill();
+            this.resultShadowUT.setContentSize(cardW + sPad * 2, cardH + sPad * 2);
+        }
+
+        // 从卡片顶部往下手动排列
+        let y = this.safeNum(cardH / 2 - paddingTop, 0);
+
+        const place = (node: Node | null, h: number, gap: number) => {
+            if (!node) return;
+            y -= gap + h / 2;
+            node.setPosition(0, this.safeNum(y, 0), 0);
+            y -= h / 2;
+        };
+
+        // Title
+        if (this.resultTitle) { y -= titleH / 2; this.resultTitle.node.setPosition(0, this.safeNum(y, 0), 0); y -= titleH / 2; }
+        // Score
+        if (this.resultScore) { y -= scoreH / 2; this.resultScore.node.setPosition(0, this.safeNum(y, 0), 0); y -= scoreH / 2; }
+        // CoinLabel (only win)
+        if (showCoinLabel) place(this.resultCoinLabel?.node ?? null, coinLabelH, gapLabel);
+        // MonsterLabel (only boss first clear)
+        if (showMonsterLabel) place(this.resultMonsterLabel?.node ?? null, monsterLabelH, gapLabel);
+        // AdBtn
+        place(this.resultAdBtn, adBtnH, gapBtn);
+        // ShareBtn
+        place(this.resultShareBtn, shareBtnH, gapBtn);
+        // NextBtn
+        place(this.resultNextBtn, nextBtnH, gapBtn);
+        // SelectBtn
+        place(this.resultSelectBtn, selectBtnH, gapBtn);
+        // CoinAdBtn (only win with coins)
+        if (showCoinAdBtn) place(this.resultCoinAdBtn, coinAdBtnH, gapBtn);
     }
 
     // ── 步数耗尽弹层（同款遮罩 + 奶白卡片） ──
@@ -1671,6 +2028,155 @@ export class GameManager extends Component {
         this.stepsPanel.active = false;
     }
 
+    // ── 暂停弹层（遮罩 + 奶白卡片 + 三按钮竖排 + 重玩二次确认） ──────────
+
+    private createPausePanel(): void {
+        this.pausePanel = new Node('PausePanel');
+        this.pausePanel.parent = this.node.parent!;
+        const panelUT = this.pausePanel.addComponent(UITransform);
+        const pw = this.safeNum(this.canvasW, 720);
+        const ph = this.safeNum(this.canvasH, 1280);
+        panelUT.setContentSize(pw, ph);
+        this.addWidget(this.pausePanel, { top: 0, bottom: 0, left: 0, right: 0 });
+
+        // Mask
+        const maskNode = new Node('Mask');
+        maskNode.parent = this.pausePanel;
+        const maskUT = maskNode.addComponent(UITransform);
+        maskUT.setContentSize(pw, ph);
+        const maskG = maskNode.addComponent(Graphics);
+        maskG.fillColor = new Color(0, 0, 0, 150);
+        maskG.rect(-pw / 2, -ph / 2, pw, ph);
+        maskG.fill();
+        maskNode.addComponent(BlockInputEvents);
+        maskNode.addComponent(UIOpacity);
+        this.addWidget(maskNode, { top: 0, bottom: 0, left: 0, right: 0 });
+
+        // Card 尺寸（动态求和：paddingTop44 + 标题76 + 3按钮×88 + 3间距×28 + paddingBottom44 = 512）
+        const cardW = 480;
+        const cardH = this.safeNum(44 + 76 + 3 * 88 + 3 * 28 + 44, 512);
+
+        // Shadow
+        const shadowNode = new Node('CardShadow');
+        shadowNode.parent = this.pausePanel;
+        const shadowUT = shadowNode.addComponent(UITransform);
+        const sPad = 14;
+        shadowUT.setContentSize(cardW + sPad * 2, cardH + sPad * 2);
+        const shadowG = shadowNode.addComponent(Graphics);
+        shadowG.fillColor = new Color(0, 0, 0, 50);
+        shadowG.roundRect(
+            -(cardW + sPad * 2) / 2, -(cardH + sPad * 2) / 2,
+            cardW + sPad * 2, cardH + sPad * 2, 28 + sPad,
+        );
+        shadowG.fill();
+        shadowNode.addComponent(UIOpacity);
+        this.addWidget(shadowNode, { hCenter: 0, vCenter: -6 });
+
+        // ── 主卡片 ──
+        const card = new Node('Card');
+        card.parent = this.pausePanel;
+        const cardUT = card.addComponent(UITransform);
+        cardUT.setContentSize(cardW, cardH);
+        this.addWidget(card, { hCenter: 0, vCenter: 0 });
+        this.pauseCard = card;
+
+        const cardG = card.addComponent(Graphics);
+        cardG.fillColor = this.COLOR_CARD.clone();
+        cardG.strokeColor = this.COLOR_CARD_BORDER.clone();
+        cardG.lineWidth = 2;
+        cardG.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 28);
+        cardG.fill();
+        cardG.stroke();
+
+        const cardLayout = card.addComponent(Layout);
+        cardLayout.type = Layout.Type.VERTICAL;
+        cardLayout.spacingY = 28;
+        cardLayout.paddingTop = 44;
+        cardLayout.paddingBottom = 44;
+        cardLayout.horizontalDirection = Layout.HorizontalDirection.CENTER;
+        cardLayout.verticalDirection = Layout.VerticalDirection.TOP_TO_BOTTOM;
+        cardLayout.resizeMode = Layout.ResizeMode.NONE;
+
+        // Title
+        const titleLabel = this.createLabel(card, 'Title', '暂停', 48, this.COLOR_TITLE_WIN);
+        titleLabel.isBold = true;
+        const titleW = this.safeNum(cardW - 80, 400);
+        titleLabel.node.getComponent(UITransform)!.setContentSize(titleW, 76);
+        titleLabel.overflow = Label.Overflow.SHRINK;
+        titleLabel.enableWrapText = false;
+
+        // ① 继续（主色实心）
+        this.createRoundButton(card, 'ContinueBtn', '继续',
+            this.COLOR_BTN_PRIMARY, 440, 88, () => this.onPauseContinue());
+
+        // ② 重玩本关（幽灵按钮）
+        this.createRoundButton(card, 'RestartBtn', '重玩本关',
+            this.COLOR_BTN_GIVEUP, 440, 88, () => this.onPauseRestartClick(),
+            { ghost: true });
+
+        // ③ 返回关卡选择（幽灵按钮）
+        this.createRoundButton(card, 'LevelSelectBtn', '返回关卡选择',
+            this.COLOR_BTN_GIVEUP, 440, 88, () => this.onPauseLevelSelect(),
+            { ghost: true });
+
+        // ── 确认卡片（重玩二次确认，初始隐藏） ──
+        const confirmCard = new Node('ConfirmCard');
+        confirmCard.parent = this.pausePanel;
+        const confirmUT = confirmCard.addComponent(UITransform);
+        // 确认卡尺寸（动态求和：paddingTop44 + 标题66 + 提示44 + 2按钮×88 + 3间距×24 + paddingBottom44 = 446）
+        const confirmW = 480;
+        const confirmH = this.safeNum(44 + 66 + 44 + 2 * 88 + 3 * 24 + 44, 446);
+        confirmUT.setContentSize(confirmW, confirmH);
+        this.addWidget(confirmCard, { hCenter: 0, vCenter: 0 });
+        this.pauseConfirmCard = confirmCard;
+
+        const confirmG = confirmCard.addComponent(Graphics);
+        confirmG.fillColor = this.COLOR_CARD.clone();
+        confirmG.strokeColor = this.COLOR_CARD_BORDER.clone();
+        confirmG.lineWidth = 2;
+        confirmG.roundRect(-confirmW / 2, -confirmH / 2, confirmW, confirmH, 28);
+        confirmG.fill();
+        confirmG.stroke();
+
+        const confirmLayout = confirmCard.addComponent(Layout);
+        confirmLayout.type = Layout.Type.VERTICAL;
+        confirmLayout.spacingY = 24;
+        confirmLayout.paddingTop = 44;
+        confirmLayout.paddingBottom = 44;
+        confirmLayout.horizontalDirection = Layout.HorizontalDirection.CENTER;
+        confirmLayout.verticalDirection = Layout.VerticalDirection.TOP_TO_BOTTOM;
+        confirmLayout.resizeMode = Layout.ResizeMode.NONE;
+
+        // 确认标题
+        const confirmTitle = this.createLabel(confirmCard, 'ConfirmTitle', '确认重玩？', 42, this.COLOR_TITLE_WIN);
+        confirmTitle.isBold = true;
+        const cTitleW = this.safeNum(confirmW - 80, 400);
+        confirmTitle.node.getComponent(UITransform)!.setContentSize(cTitleW, 66);
+        confirmTitle.overflow = Label.Overflow.SHRINK;
+        confirmTitle.enableWrapText = false;
+
+        // 确认提示
+        const confirmDesc = this.createLabel(confirmCard, 'ConfirmDesc', '本关进度将清零', 28, this.COLOR_TEXT_MAIN);
+        const cDescW = this.safeNum(confirmW - 80, 400);
+        confirmDesc.node.getComponent(UITransform)!.setContentSize(cDescW, 44);
+        confirmDesc.overflow = Label.Overflow.SHRINK;
+        confirmDesc.enableWrapText = false;
+
+        // 确认按钮（主色实心）
+        this.createRoundButton(confirmCard, 'ConfirmBtn', '确认重玩',
+            this.COLOR_BTN_PRIMARY, 440, 88, () => this.onPauseRestartConfirm());
+
+        // 取消按钮（幽灵按钮）
+        this.createRoundButton(confirmCard, 'CancelBtn', '取消',
+            this.COLOR_BTN_GIVEUP, 440, 88, () => this.onPauseRestartCancel(),
+            { ghost: true });
+
+        // 确认卡片初始隐藏
+        confirmCard.active = false;
+
+        this.pausePanel.active = false;
+    }
+
     // ── 关卡选择页（全屏层 · 遮罩 + 奶白卡片 · 3 章分组） ──────────────────
 
     private createLevelSelectPanel(): void {
@@ -1695,9 +2201,9 @@ export class GameManager extends Component {
         maskNode.addComponent(UIOpacity);
         this.addWidget(maskNode, { top: 0, bottom: 0, left: 0, right: 0 });
 
-        // Card 尺寸（加高以容纳全部内容 + 底部入口按钮）
+        // Card 尺寸（N: 加高 900→1080 以容纳第4章 4 组关卡按钮）
         const cardW = this.safeNum(640, 640);
-        const cardH = this.safeNum(840, 840);
+        const cardH = this.safeNum(1080, 1080);
 
         // Shadow
         const shadowNode = new Node('CardShadow');
@@ -1748,19 +2254,60 @@ export class GameManager extends Component {
         headerLabel.overflow = Label.Overflow.SHRINK;
         headerLabel.enableWrapText = false;
 
-        // 3 章分组
-        const chapterNames = ['', '第 1 章 · 入门', '第 2 章 · 进阶', '第 3 章 · 挑战'];
+        // B: 资源徽章条（只读）— 左扭蛋币 / 右图鉴进度
+        const badgeBar = new Node('BadgeBar');
+        badgeBar.parent = card;
+        const badgeW = this.safeNum(cardW - 60, 580);
+        const badgeH = 36;
+        badgeBar.addComponent(UITransform).setContentSize(badgeW, badgeH);
+
+        this.levelSelectCoinBadge = this.createLabel(badgeBar, 'CoinBadge', '', 24, this.COLOR_CHAPTER_GOLD);
+        this.levelSelectCoinBadge.isBold = true;
+        this.levelSelectCoinBadge.node.getComponent(UITransform)!.setContentSize(this.safeNum(badgeW / 2 - 10, 280), badgeH);
+        this.levelSelectCoinBadge.overflow = Label.Overflow.SHRINK;
+        this.levelSelectCoinBadge.horizontalAlign = Label.HorizontalAlign.LEFT;
+        this.levelSelectCoinBadge.node.setPosition(this.safeNum(-badgeW / 4, -145), 0, 0);
+
+        this.levelSelectCollectionBadge = this.createLabel(badgeBar, 'CollectionBadge', '', 24, this.COLOR_HUD_TEXT);
+        this.levelSelectCollectionBadge.isBold = true;
+        this.levelSelectCollectionBadge.node.getComponent(UITransform)!.setContentSize(this.safeNum(badgeW / 2 - 10, 280), badgeH);
+        this.levelSelectCollectionBadge.overflow = Label.Overflow.SHRINK;
+        this.levelSelectCollectionBadge.horizontalAlign = Label.HorizontalAlign.RIGHT;
+        this.levelSelectCollectionBadge.node.setPosition(this.safeNum(badgeW / 4, 145), 0, 0);
+
+        // 4 章分组
+        const chapterNames = ['', '第 1 章 · 入门', '第 2 章 · 进阶', '第 3 章 · 挑战', '第 4 章 · 新篇'];
+        // ★ I1: 复用 G1 章节主题色常量，每章分组标题条用该章色调底衬
+        const chapterAccentColors = [
+            this.parseHexColor(GameManager.CHAPTER_BG_THEMES[0].bottom, new Color(0xF5, 0xE8, 0xF0)), // 暖粉
+            this.parseHexColor(GameManager.CHAPTER_BG_THEMES[1].bottom, new Color(0xDC, 0xED, 0xE4)), // 薄荷
+            this.parseHexColor(GameManager.CHAPTER_BG_THEMES[2].bottom, new Color(0xE2, 0xD8, 0xEE)), // 薰衣草
+            this.parseHexColor(GameManager.CHAPTER_BG_THEMES[3].bottom, new Color(0xF5, 0xE6, 0xD3)), // 暖橘
+        ];
         const btnSize = 100;
         const gap = 15;
 
-        for (let ch = 1; ch <= 3; ch++) {
+        for (let ch = 1; ch <= 4; ch++) {
+            // ★ I1: 章节标题条底衬（该章主题色）
+            const chTitleBar = new Node(`Ch${ch}TitleBar`);
+            chTitleBar.parent = card;
+            const barW = this.safeNum(cardW - 60, 580);
+            const barH = 40;
+            chTitleBar.addComponent(UITransform).setContentSize(barW, barH);
+            const barG = chTitleBar.addComponent(Graphics);
+            const accentColor = chapterAccentColors[ch - 1];
+            barG.fillColor = new Color(accentColor.r, accentColor.g, accentColor.b, 200);
+            barG.roundRect(-barW / 2, -barH / 2, barW, barH, 12);
+            barG.fill();
+
             // 章节标题
-            const chTitle = this.createLabel(card, `Ch${ch}Title`, chapterNames[ch], 30, this.COLOR_HUD_TEXT);
+            const chTitle = this.createLabel(chTitleBar, `Ch${ch}Title`, chapterNames[ch], 28, this.COLOR_HUD_TEXT);
             chTitle.isBold = true;
-            const chTitleW = this.safeNum(cardW - 80, 560);
-            chTitle.node.getComponent(UITransform)!.setContentSize(chTitleW, 40);
+            const chTitleW = this.safeNum(barW - 20, 540);
+            chTitle.node.getComponent(UITransform)!.setContentSize(chTitleW, barH);
             chTitle.overflow = Label.Overflow.SHRINK;
             chTitle.enableWrapText = false;
+            chTitle.node.setPosition(0, 0, 0);
 
             // 按钮排容器
             const rowNode = new Node(`Ch${ch}Row`);
@@ -1792,7 +2339,155 @@ export class GameManager extends Component {
             this.COLOR_BTN_PRIMARY, 280, 70, () => this.showCollectionPanel(),
             { ghost: true });
 
+        // Q2: 装扮入口按钮
+        this.createRoundButton(card, 'DressupEntryBtn', '👗  装扮',
+            this.COLOR_BTN_AD, 280, 60, () => this.showDressupPanel());
+
+        // ★ M-A: 左上角「🏠 返回首页」浮层按钮（挂 panel 根节点，不挂 card）
+        const homeBtn = new Node('HomeBtn');
+        homeBtn.parent = this.levelSelectPanel;
+        const homeSize = 64;
+        const homeUT = homeBtn.addComponent(UITransform);
+        homeUT.setContentSize(homeSize, homeSize);
+        homeUT.setAnchorPoint(0.5, 0.5);
+        this.addWidget(homeBtn, {
+            top: this.safeNum(this.topInset + 12, 112),
+            left: 16,
+        });
+
+        const homeG = homeBtn.addComponent(Graphics);
+        homeG.fillColor = this.COLOR_HUD_BAR.clone();
+        homeG.strokeColor = this.COLOR_CARD_BORDER.clone();
+        homeG.lineWidth = 2;
+        homeG.circle(0, 0, homeSize / 2);
+        homeG.fill();
+        homeG.stroke();
+
+        // 🏠 图标
+        const homeLabelNode = new Node('Label');
+        homeLabelNode.parent = homeBtn;
+        const homeLabelUT = homeLabelNode.addComponent(UITransform);
+        homeLabelUT.setContentSize(homeSize, homeSize);
+        const homeLabel = homeLabelNode.addComponent(Label);
+        homeLabel.string = '🏠';
+        homeLabel.fontSize = 32;
+        homeLabel.lineHeight = 36;
+        homeLabel.color = this.COLOR_HUD_TEXT.clone();
+        homeLabel.useSystemFont = true;
+        homeLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        homeLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // ★ P1: Button.Transition.NONE（手动 tween 统一控制缩放）
+        const homeButton = homeBtn.addComponent(Button);
+        homeButton.transition = Button.Transition.NONE;
+        homeButton.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            Tween.stopAllByTarget(homeBtn);
+            homeBtn.setScale(0.95, 0.95, 1);
+            tween(homeBtn)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+        homeButton.node.on(Button.EventType.CLICK, () => this.onLevelSelectHome(), this);
+
+        // R2: 右上角「⚙️」设置按钮（挂 panel 根节点，与 HomeBtn 对称）
+        const settingsBtn = new Node('SettingsBtn');
+        settingsBtn.parent = this.levelSelectPanel;
+        const settingsBtnSize = 64;
+        const settingsBtnUT = settingsBtn.addComponent(UITransform);
+        settingsBtnUT.setContentSize(settingsBtnSize, settingsBtnSize);
+        settingsBtnUT.setAnchorPoint(0.5, 0.5);
+        this.addWidget(settingsBtn, {
+            top: this.safeNum(this.topInset + 12, 112),
+            right: 16,
+        });
+
+        const settingsBtnG = settingsBtn.addComponent(Graphics);
+        settingsBtnG.fillColor = this.COLOR_HUD_BAR.clone();
+        settingsBtnG.strokeColor = this.COLOR_CARD_BORDER.clone();
+        settingsBtnG.lineWidth = 2;
+        settingsBtnG.circle(0, 0, settingsBtnSize / 2);
+        settingsBtnG.fill();
+        settingsBtnG.stroke();
+
+        const settingsBtnLabelNode = new Node('Label');
+        settingsBtnLabelNode.parent = settingsBtn;
+        const settingsBtnLabelUT = settingsBtnLabelNode.addComponent(UITransform);
+        settingsBtnLabelUT.setContentSize(settingsBtnSize, settingsBtnSize);
+        const settingsBtnLabel = settingsBtnLabelNode.addComponent(Label);
+        settingsBtnLabel.string = '⚙️';
+        settingsBtnLabel.fontSize = 30;
+        settingsBtnLabel.lineHeight = 34;
+        settingsBtnLabel.color = this.COLOR_HUD_TEXT.clone();
+        settingsBtnLabel.useSystemFont = true;
+        settingsBtnLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        settingsBtnLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        const settingsButton = settingsBtn.addComponent(Button);
+        settingsButton.transition = Button.Transition.NONE;
+        settingsButton.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            Tween.stopAllByTarget(settingsBtn);
+            settingsBtn.setScale(0.95, 0.95, 1);
+            tween(settingsBtn)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+        settingsButton.node.on(Button.EventType.CLICK, () => this.showSettingsPanel(), this);
+
+        // R3: 右上角「📅」签到按钮（在⚙️左边）
+        const signBtn = new Node('SignBtn');
+        signBtn.parent = this.levelSelectPanel;
+        const signBtnSize = 64;
+        const signBtnUT = signBtn.addComponent(UITransform);
+        signBtnUT.setContentSize(signBtnSize, signBtnSize);
+        signBtnUT.setAnchorPoint(0.5, 0.5);
+        this.addWidget(signBtn, {
+            top: this.safeNum(this.topInset + 12, 112),
+            right: this.safeNum(16 + 64 + 12, 92),
+        });
+
+        const signBtnG = signBtn.addComponent(Graphics);
+        signBtnG.fillColor = this.COLOR_HUD_BAR.clone();
+        signBtnG.strokeColor = this.COLOR_CARD_BORDER.clone();
+        signBtnG.lineWidth = 2;
+        signBtnG.circle(0, 0, signBtnSize / 2);
+        signBtnG.fill();
+        signBtnG.stroke();
+
+        const signBtnLabelNode = new Node('Label');
+        signBtnLabelNode.parent = signBtn;
+        const signBtnLabelUT = signBtnLabelNode.addComponent(UITransform);
+        signBtnLabelUT.setContentSize(signBtnSize, signBtnSize);
+        const signBtnLabel = signBtnLabelNode.addComponent(Label);
+        signBtnLabel.string = '📅';
+        signBtnLabel.fontSize = 30;
+        signBtnLabel.lineHeight = 34;
+        signBtnLabel.color = this.COLOR_HUD_TEXT.clone();
+        signBtnLabel.useSystemFont = true;
+        signBtnLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        signBtnLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        const signButton = signBtn.addComponent(Button);
+        signButton.transition = Button.Transition.NONE;
+        signButton.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            Tween.stopAllByTarget(signBtn);
+            signBtn.setScale(0.95, 0.95, 1);
+            tween(signBtn)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+        signButton.node.on(Button.EventType.CLICK, () => this.showDailySignPanel(), this);
+
         this.levelSelectPanel.active = false;
+    }
+
+    /** M-A: 关卡选择页返回首页（不重置任何进度/币/图鉴/存档） */
+    private onLevelSelectHome(): void {
+        this.hidePanel(this.levelSelectPanel);
+        this.showHomePanel();
+        console.log('[GameManager] 关卡选择 → 返回首页');
     }
 
     /** 创建单个关卡按钮（三态由 refreshLevelSelectStates 控制） */
@@ -1838,12 +2533,17 @@ export class GameManager extends Component {
         if (config.isBoss) {
             const bossNode = new Node('BossBadge');
             bossNode.parent = node;
-            bossNode.addComponent(UITransform).setContentSize(size, 18);
+            bossNode.addComponent(UITransform).setContentSize(size, 20);
             const bossLabel = bossNode.addComponent(Label);
             bossLabel.string = '⭐BOSS';
-            bossLabel.fontSize = 13;
-            bossLabel.lineHeight = 16;
-            bossLabel.color = this.COLOR_CHAPTER_GOLD.clone();
+            bossLabel.fontSize = 14;
+            bossLabel.lineHeight = 18;
+            bossLabel.isBold = true;
+            bossLabel.color = Color.WHITE.clone();
+            // ★ I1: 金色描边让 Boss 更醒目
+            bossLabel.enableOutline = true;
+            bossLabel.outlineColor = this.COLOR_CHAPTER_GOLD.clone();
+            bossLabel.outlineWidth = 3;
             bossLabel.useSystemFont = true;
             bossLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
             bossLabel.verticalAlign = Label.VerticalAlign.CENTER;
@@ -1869,6 +2569,11 @@ export class GameManager extends Component {
         const maxUnlocked = SaveManager.inst.getMaxUnlocked();
         const size = 100;
 
+        // ★ I1: 停止所有关卡按钮上的脉冲 tween（切页/刷新时清理）
+        for (const btn of this.levelSelectBtns) {
+            if (btn) Tween.stopAllByTarget(btn.node);
+        }
+
         for (let i = 0; i < this.levelConfigs.length; i++) {
             const btn = this.levelSelectBtns[i];
             if (!btn) continue;
@@ -1885,14 +2590,20 @@ export class GameManager extends Component {
                 btn.bg.fillColor = this.COLOR_LEVEL_LOCKED.clone();
                 btn.bg.strokeColor = new Color(0, 0, 0, 25);
             } else if (isCurrent) {
-                btn.bg.fillColor = this.COLOR_BTN_AD.clone(); // 金色高亮
+                // ★ I1: 当前关用金色底 + 金色描边呼吸提示
+                btn.bg.fillColor = this.COLOR_BTN_AD.clone();
+                btn.bg.strokeColor = this.COLOR_CHAPTER_GOLD.clone();
+                btn.bg.lineWidth = 4;
+            } else if (config.isBoss && isCleared) {
+                // ★ I1: 已通关 Boss 关用金色底
+                btn.bg.fillColor = this.COLOR_CHAPTER_GOLD.clone();
                 btn.bg.strokeColor = new Color(0, 0, 0, 40);
             } else {
-                // 已通关：紫色
+                // 已通关普通：紫色
                 btn.bg.fillColor = this.COLOR_BTN_PRIMARY.clone();
                 btn.bg.strokeColor = new Color(0, 0, 0, 40);
             }
-            btn.bg.lineWidth = 2;
+            btn.bg.lineWidth = isCurrent ? 4 : 2;
             btn.bg.roundRect(-size / 2, -size / 2, size, size, 16);
             btn.bg.fill();
             btn.bg.stroke();
@@ -1920,6 +2631,30 @@ export class GameManager extends Component {
 
             // 可点性
             btn.node.getComponent(Button)!.interactable = !isLocked;
+
+            // ★ I1: 当前关轻脉冲呼吸（scale 1→1.06→1 循环 0.9s）
+            btn.node.setScale(1, 1, 1);
+            if (isCurrent) {
+                tween(btn.node)
+                    .to(0.45, { scale: new Vec3(1.06, 1.06, 1) }, { easing: 'sineOut' })
+                    .to(0.45, { scale: new Vec3(1, 1, 1) }, { easing: 'sineIn' })
+                    .union()
+                    .repeatForever()
+                    .start();
+            }
+        }
+
+        // B: 刷新资源徽章
+        const coins = SaveManager.inst.getCoins();
+        let collectedCount = 0;
+        for (let i = 0; i < 6; i++) {
+            if (SaveManager.inst.getMonster(i).count > 0) collectedCount++;
+        }
+        if (this.levelSelectCoinBadge) {
+            this.levelSelectCoinBadge.string = `🎲 ${this.safeNum(coins, 0)}`;
+        }
+        if (this.levelSelectCollectionBadge) {
+            this.levelSelectCollectionBadge.string = `📖 图鉴 ${collectedCount}/6`;
         }
 
         console.log(`[GameManager] 关卡选择页已刷新: maxUnlocked=${maxUnlocked}`);
@@ -1929,9 +2664,22 @@ export class GameManager extends Component {
     private showLevelSelectPanel(): void {
         if (!this.levelSelectPanel) return;
         this.refreshLevelSelectStates();
+        this._inLevel = false;
         this.showPanel(this.levelSelectPanel);
         // 选择页全屏覆盖 → 隐藏游戏圈按钮
         this.gameClubEntry?.hide();
+
+        // R3: 当天未签 → 自动弹出签到面板（仅一次）
+        try {
+            if (!this.dailySignHasShownToday) {
+                const today = this.getTodayStr();
+                const signData = SaveManager.inst.getSignData();
+                if (signData.lastDate !== today) {
+                    this.dailySignHasShownToday = true;
+                    this.scheduleOnce(() => this.showDailySignPanel(), 0.4);
+                }
+            }
+        } catch (e) { /* ignore */ }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -2021,6 +2769,48 @@ export class GameManager extends Component {
             console.log(`[HomePanel] 背景图加载成功: ${texW}×${texH} → scale=${scale.toFixed(2)} draw=${drawW.toFixed(0)}×${drawH.toFixed(0)}`);
         });
 
+        // ── S1: 资源总览条（只读，不可点，压在标题上方） ──
+        const badgeY = this.safeNum(ph * 0.5 - ph * 0.06, 560);
+        const badgeW = this.safeNum(pw * 0.4, 280);
+
+        // 左：扭蛋币
+        const coinBadgeNode = new Node('HomeCoinBadge');
+        coinBadgeNode.parent = this.homePanel;
+        coinBadgeNode.addComponent(UITransform).setContentSize(badgeW, 36);
+        coinBadgeNode.setPosition(this.safeNum(-pw * 0.22, -158), badgeY, 0);
+        this.homeCoinBadge = coinBadgeNode.addComponent(Label);
+        this.homeCoinBadge.string = '';
+        this.homeCoinBadge.fontSize = 26;
+        this.homeCoinBadge.lineHeight = 30;
+        this.homeCoinBadge.color = Color.WHITE.clone();
+        this.homeCoinBadge.useSystemFont = true;
+        this.homeCoinBadge.isBold = true;
+        this.homeCoinBadge.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.homeCoinBadge.verticalAlign = Label.VerticalAlign.CENTER;
+        this.homeCoinBadge.overflow = Label.Overflow.SHRINK;
+        this.homeCoinBadge.enableOutline = true;
+        this.homeCoinBadge.outlineColor = new Color(0x4A, 0x2B, 0x6B, 255);
+        this.homeCoinBadge.outlineWidth = 3;
+
+        // 右：图鉴进度
+        const collBadgeNode = new Node('HomeCollectionBadge');
+        collBadgeNode.parent = this.homePanel;
+        collBadgeNode.addComponent(UITransform).setContentSize(badgeW, 36);
+        collBadgeNode.setPosition(this.safeNum(pw * 0.22, 158), badgeY, 0);
+        this.homeCollectionBadge = collBadgeNode.addComponent(Label);
+        this.homeCollectionBadge.string = '';
+        this.homeCollectionBadge.fontSize = 26;
+        this.homeCollectionBadge.lineHeight = 30;
+        this.homeCollectionBadge.color = Color.WHITE.clone();
+        this.homeCollectionBadge.useSystemFont = true;
+        this.homeCollectionBadge.isBold = true;
+        this.homeCollectionBadge.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.homeCollectionBadge.verticalAlign = Label.VerticalAlign.CENTER;
+        this.homeCollectionBadge.overflow = Label.Overflow.SHRINK;
+        this.homeCollectionBadge.enableOutline = true;
+        this.homeCollectionBadge.outlineColor = new Color(0x4A, 0x2B, 0x6B, 255);
+        this.homeCollectionBadge.outlineWidth = 3;
+
         // ── 标题层（引擎渲染，不依赖背景图文字） ──
         const titleNode = new Node('Title');
         titleNode.parent = this.homePanel;
@@ -2048,7 +2838,7 @@ export class GameManager extends Component {
         sloganNode.parent = this.homePanel;
         sloganNode.addComponent(UITransform).setContentSize(pw, 40);
         const sloganLabel = sloganNode.addComponent(Label);
-        sloganLabel.string = '边消边收集软萌公仔';
+        sloganLabel.string = '消一消，攒一窝软萌公仔';
         sloganLabel.fontSize = 26;
         sloganLabel.lineHeight = 32;
         sloganLabel.color = Color.WHITE.clone();
@@ -2066,6 +2856,96 @@ export class GameManager extends Component {
             this.COLOR_BTN_AD, 320, 90, () => this.onHomeStartClick());
         const startY = this.safeNum(-ph * 0.2, -200);
         startBtn.setPosition(0, startY, 0);
+
+        // S2: 「继续 L{n}」ghost 按钮钮（在开始按钮下方）
+        this.homeContinueBtn = this.createRoundButton(this.homePanel, 'ContinueBtn', '',
+            this.COLOR_BTN_PRIMARY, 280, 64, () => this.onHomeContinueClick(),
+            { ghost: true });
+        this.homeContinueBtn.setPosition(0, this.safeNum(startY - 110, -310), 0);
+        this.homeContinueLabel = this.homeContinueBtn.getChildByName('Label')?.getComponent(Label) ?? null;
+
+        // S3: 右上角音效/震动状态角标（可点切换）
+        const badgeSize = 52;
+        const badgeTop = this.safeNum(this.topInset + 12, 112);
+        const badgeRightStart = this.safeNum(16, 16);
+
+        // 音效角标
+        const soundBadgeNode = new Node('HomeSoundBadge');
+        soundBadgeNode.parent = this.homePanel;
+        const soundBadgeUT = soundBadgeNode.addComponent(UITransform);
+        soundBadgeUT.setContentSize(badgeSize, badgeSize);
+        soundBadgeUT.setAnchorPoint(0.5, 0.5);
+        this.addWidget(soundBadgeNode, { top: badgeTop, right: badgeRightStart });
+        const soundBadgeBg = soundBadgeNode.addComponent(Graphics);
+        soundBadgeBg.fillColor = this.COLOR_HUD_BAR.clone();
+        soundBadgeBg.strokeColor = this.COLOR_CARD_BORDER.clone();
+        soundBadgeBg.lineWidth = 2;
+        soundBadgeBg.circle(0, 0, badgeSize / 2);
+        soundBadgeBg.fill();
+        soundBadgeBg.stroke();
+        const soundBadgeLabelNode = new Node('Label');
+        soundBadgeLabelNode.parent = soundBadgeNode;
+        soundBadgeLabelNode.addComponent(UITransform).setContentSize(badgeSize, badgeSize);
+        this.homeSoundBadge = soundBadgeLabelNode.addComponent(Label);
+        this.homeSoundBadge.string = '🔊';
+        this.homeSoundBadge.fontSize = 24;
+        this.homeSoundBadge.lineHeight = 28;
+        this.homeSoundBadge.color = this.COLOR_HUD_TEXT.clone();
+        this.homeSoundBadge.useSystemFont = true;
+        this.homeSoundBadge.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.homeSoundBadge.verticalAlign = Label.VerticalAlign.CENTER;
+        const soundBadgeBtn = soundBadgeNode.addComponent(Button);
+        soundBadgeBtn.transition = Button.Transition.NONE;
+        soundBadgeBtn.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            Tween.stopAllByTarget(soundBadgeNode);
+            soundBadgeNode.setScale(0.9, 0.9, 1);
+            tween(soundBadgeNode)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+        soundBadgeBtn.node.on(Button.EventType.CLICK, () => this.onHomeSoundToggle(), this);
+
+        // 震动角标（在音效角标左边）
+        const vibrateBadgeNode = new Node('HomeVibrateBadge');
+        vibrateBadgeNode.parent = this.homePanel;
+        const vibrateBadgeUT = vibrateBadgeNode.addComponent(UITransform);
+        vibrateBadgeUT.setContentSize(badgeSize, badgeSize);
+        vibrateBadgeUT.setAnchorPoint(0.5, 0.5);
+        this.addWidget(vibrateBadgeNode, { top: badgeTop, right: this.safeNum(badgeRightStart + badgeSize + 10, 78) });
+        const vibrateBadgeBg = vibrateBadgeNode.addComponent(Graphics);
+        vibrateBadgeBg.fillColor = this.COLOR_HUD_BAR.clone();
+        vibrateBadgeBg.strokeColor = this.COLOR_CARD_BORDER.clone();
+        vibrateBadgeBg.lineWidth = 2;
+        vibrateBadgeBg.circle(0, 0, badgeSize / 2);
+        vibrateBadgeBg.fill();
+        vibrateBadgeBg.stroke();
+        const vibrateBadgeLabelNode = new Node('Label');
+        vibrateBadgeLabelNode.parent = vibrateBadgeNode;
+        vibrateBadgeLabelNode.addComponent(UITransform).setContentSize(badgeSize, badgeSize);
+        this.homeVibrateBadge = vibrateBadgeLabelNode.addComponent(Label);
+        this.homeVibrateBadge.string = '📳';
+        this.homeVibrateBadge.fontSize = 24;
+        this.homeVibrateBadge.lineHeight = 28;
+        this.homeVibrateBadge.color = this.COLOR_HUD_TEXT.clone();
+        this.homeVibrateBadge.useSystemFont = true;
+        this.homeVibrateBadge.horizontalAlign = Label.HorizontalAlign.CENTER;
+        this.homeVibrateBadge.verticalAlign = Label.VerticalAlign.CENTER;
+        const vibrateBadgeBtn = vibrateBadgeNode.addComponent(Button);
+        vibrateBadgeBtn.transition = Button.Transition.NONE;
+        vibrateBadgeBtn.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            Tween.stopAllByTarget(vibrateBadgeNode);
+            vibrateBadgeNode.setScale(0.9, 0.9, 1);
+            tween(vibrateBadgeNode)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+        vibrateBadgeBtn.node.on(Button.EventType.CLICK, () => this.onHomeVibrateToggle(), this);
+
+        // S3: 角标置顶
+        soundBadgeNode.setSiblingIndex(this.homePanel.children.length - 1);
+        vibrateBadgeNode.setSiblingIndex(this.homePanel.children.length - 1);
 
         // 拦截底层触摸
         let blockInput = this.homePanel.getComponent(BlockInputEvents);
@@ -2088,8 +2968,71 @@ export class GameManager extends Component {
         // 确保 BlockInputEvents 启用
         const blockInput = this.homePanel.getComponent(BlockInputEvents);
         if (blockInput) blockInput.enabled = true;
+
+        // S1: 刷新资源总览条
+        try {
+            if (this.homeCoinBadge && this.homeCoinBadge.isValid) {
+                const coins = this.safeNum(SaveManager.inst.getCoins(), 0);
+                this.homeCoinBadge.string = `🎲 ${coins}`;
+            }
+            if (this.homeCollectionBadge && this.homeCollectionBadge.isValid) {
+                let owned = 0;
+                for (let i = 0; i < 6; i++) {
+                    if (this.safeNum(SaveManager.inst.getMonster(i).count, 0) > 0) owned++;
+                }
+                this.homeCollectionBadge.string = `📖 图鉴 ${owned}/6`;
+            }
+        } catch (e) { /* ignore */ }
+
+        // S2: 刷新「继续 L{n}」按钮关号
+        try {
+            if (this.homeContinueLabel && this.homeContinueLabel.isValid) {
+                const maxUnlocked = this.safeNum(SaveManager.inst.getMaxUnlocked(), 1);
+                this.homeContinueLabel.string = `▶ 继续 L${maxUnlocked}`;
+            }
+        } catch (e) { /* ignore */ }
+
+        // S3: 刷新音效/震动角标
+        try {
+            if (this.homeSoundBadge && this.homeSoundBadge.isValid) {
+                const soundOn = SaveManager.inst.getSoundEnabled();
+                this.homeSoundBadge.string = soundOn ? '🔊' : '🔇';
+            }
+            if (this.homeVibrateBadge && this.homeVibrateBadge.isValid) {
+                const vibrateOn = SaveManager.inst.getVibrateEnabled();
+                this.homeVibrateBadge.string = vibrateOn ? '📳' : '🚫';
+            }
+        } catch (e) { /* ignore */ }
+
         this.gameClubEntry?.hide();
         console.log('[GameManager] 显示首页');
+    }
+
+    /** S3: 首页音效角标点击切换 */
+    private onHomeSoundToggle(): void {
+        try {
+            const current = SaveManager.inst.getSoundEnabled();
+            const newVal = !current;
+            AudioManager.inst?.setEnabled(newVal); // 内部已写盘
+            if (this.homeSoundBadge && this.homeSoundBadge.isValid) {
+                this.homeSoundBadge.string = newVal ? '🔊' : '🔇';
+            }
+            console.log(`[Home] 音效 → ${newVal ? 'ON' : 'OFF'}`);
+        } catch (e) { /* ignore */ }
+    }
+
+    /** S3: 首页震动角标点击切换 */
+    private onHomeVibrateToggle(): void {
+        try {
+            const current = SaveManager.inst.getVibrateEnabled();
+            const newVal = !current;
+            VibrateManager.inst?.setVibrateEnabled(newVal);
+            SaveManager.inst.setVibrateEnabled(newVal);
+            if (this.homeVibrateBadge && this.homeVibrateBadge.isValid) {
+                this.homeVibrateBadge.string = newVal ? '📳' : '🚫';
+            }
+            console.log(`[Home] 震动 → ${newVal ? 'ON' : 'OFF'}`);
+        } catch (e) { /* ignore */ }
     }
 
     /** 首页开始按钮 → 隐藏首页 → 进关卡选择页 */
@@ -2101,6 +3044,19 @@ export class GameManager extends Component {
         }
         this.showLevelSelectPanel();
         console.log('[GameManager] 开始游戏 → 进入关卡选择');
+    }
+
+    /** S2: 首页「继续上次」→ 隐藏首页 → 直接进当前最高可玩关 */
+    private onHomeContinueClick(): void {
+        if (this.homePanel) {
+            this.homePanel.active = false;
+            const blockInput = this.homePanel.getComponent(BlockInputEvents);
+            if (blockInput) blockInput.enabled = false;
+        }
+        const maxUnlocked = this.safeNum(SaveManager.inst.getMaxUnlocked(), 1);
+        const levelIdx = Math.max(0, Math.min(maxUnlocked - 1, this.levelConfigs.length - 1));
+        this.startLevel(levelIdx);
+        console.log(`[GameManager] 继续上次 → 直接进关 L${maxUnlocked}`);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -2249,6 +3205,12 @@ export class GameManager extends Component {
         if (!this.gachaPanel) return;
         this.refreshGachaPanel();
         if (this.gachaResultNode) this.gachaResultNode.active = false;
+        // C: 清理上一次抽卡光效
+        if (this.gachaGlowNode) {
+            Tween.stopAllByTarget(this.gachaGlowNode);
+            if (this.gachaGlowNode.isValid) this.gachaGlowNode.destroy();
+            this.gachaGlowNode = null;
+        }
         this.showPanel(this.gachaPanel);
         this.gameClubEntry?.hide();
     }
@@ -2340,13 +3302,21 @@ export class GameManager extends Component {
     private showGachaResult(monId: number, rarity: 'R' | 'SR' | 'SSR', isNew: boolean): void {
         if (!this.gachaResultNode || !this.gachaResultEmoji || !this.gachaResultRarity || !this.gachaResultNew) return;
 
+        // C: 清理上一次光效
+        if (this.gachaGlowNode) {
+            Tween.stopAllByTarget(this.gachaGlowNode);
+            if (this.gachaGlowNode.isValid) this.gachaGlowNode.destroy();
+            this.gachaGlowNode = null;
+        }
+
         const emoji = COLOR_EMOJI_MAP[monId] ?? '?';
         this.gachaResultEmoji.string = emoji;
 
         // Rarity label color
         let rarityColor: Color;
+        let peakScale = 1.2; // C: SSR 用更大弹入
         switch (rarity) {
-            case 'SSR': rarityColor = this.COLOR_RARITY_SSR.clone(); break;
+            case 'SSR': rarityColor = this.COLOR_RARITY_SSR.clone(); peakScale = 1.4; break;
             case 'SR': rarityColor = this.COLOR_RARITY_SR.clone(); break;
             default: rarityColor = this.COLOR_RARITY_R.clone(); break;
         }
@@ -2356,12 +3326,80 @@ export class GameManager extends Component {
         // NEW!
         this.gachaResultNew.node.active = isNew;
 
-        // Show + animate (scale 0→1.2→1)
+        // C: 创建稀有度光效（置于 emoji 之下层）
+        const glowNode = new Node('GachaGlow');
+        glowNode.parent = this.gachaResultNode;
+        glowNode.setSiblingIndex(0); // 最底层
+        glowNode.setPosition(0, 30, 0); // 与 emoji 同位
+        const glowUT = glowNode.addComponent(UITransform);
+        glowUT.setContentSize(180, 180);
+        const glowG = glowNode.addComponent(Graphics);
+        const glowOp = glowNode.addComponent(UIOpacity);
+        glowOp.opacity = 255;
+
+        const safeId = this.safeNum(monId, 0);
+        const effRarity = (safeId >= 0 && safeId <= 5) ? (MON_RARITY[safeId] ?? 'R') : 'R';
+
+        if (effRarity === 'SSR') {
+            // 金色光环 + 旋转星芒
+            glowG.fillColor = new Color(rarityColor.r, rarityColor.g, rarityColor.b, 50);
+            glowG.circle(0, 0, 80);
+            glowG.fill();
+            glowG.strokeColor = new Color(rarityColor.r, rarityColor.g, rarityColor.b, 200);
+            glowG.lineWidth = 4;
+            glowG.circle(0, 0, 75);
+            glowG.stroke();
+            // 星芒射线
+            glowG.strokeColor = new Color(rarityColor.r, rarityColor.g, rarityColor.b, 140);
+            glowG.lineWidth = 3;
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                glowG.moveTo(Math.cos(angle) * 30, Math.sin(angle) * 30);
+                glowG.lineTo(Math.cos(angle) * 88, Math.sin(angle) * 88);
+            }
+            glowG.stroke();
+            // 旋转
+            tween(glowNode)
+                .by(3, { angle: 360 })
+                .repeatForever()
+                .start();
+            // 呼吸
+            tween(glowOp)
+                .to(0.6, { opacity: 170 })
+                .to(0.6, { opacity: 255 })
+                .union()
+                .repeatForever()
+                .start();
+        } else if (effRarity === 'SR') {
+            // 银蓝柔光环 + 轻微脉冲
+            glowG.fillColor = new Color(rarityColor.r, rarityColor.g, rarityColor.b, 35);
+            glowG.circle(0, 0, 75);
+            glowG.fill();
+            glowG.strokeColor = new Color(rarityColor.r, rarityColor.g, rarityColor.b, 110);
+            glowG.lineWidth = 3;
+            glowG.circle(0, 0, 70);
+            glowG.stroke();
+            tween(glowOp)
+                .to(0.8, { opacity: 140 })
+                .to(0.8, { opacity: 255 })
+                .union()
+                .repeatForever()
+                .start();
+        } else {
+            // R: 淡糖色柔光
+            glowG.fillColor = new Color(0xFF, 0xE0, 0xB0, 25);
+            glowG.circle(0, 0, 65);
+            glowG.fill();
+        }
+
+        this.gachaGlowNode = glowNode;
+
+        // Show + animate (scale 0→peak→1)，C: SSR 用 peakScale=1.4
         this.gachaResultNode.active = true;
         this.gachaResultNode.setScale(0, 0, 1);
         Tween.stopAllByTarget(this.gachaResultNode);
         tween(this.gachaResultNode)
-            .to(0.25, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
+            .to(0.25, { scale: new Vec3(peakScale, peakScale, 1) }, { easing: 'backOut' })
             .to(0.1, { scale: new Vec3(1, 1, 1) })
             .start();
     }
@@ -2392,8 +3430,8 @@ export class GameManager extends Component {
         maskNode.addComponent(UIOpacity);
         this.addWidget(maskNode, { top: 0, bottom: 0, left: 0, right: 0 });
 
-        // Card
-        const cardW = 640, cardH = 860;
+        // Card（Q-fix: cardH 860→932，增高 72 以容纳装扮按钮行）
+        const cardW = 640, cardH = 932;
         const shadowNode = new Node('CardShadow');
         shadowNode.parent = this.collectionPanel;
         const shadowUT = shadowNode.addComponent(UITransform);
@@ -2429,7 +3467,9 @@ export class GameManager extends Component {
         const groupTitleH = 36;
         const rowH = 130;   // cellSize
         const backH = 64;
-        const backBottomMargin = 32; // 返回按钮距卡片底部 ≥30px
+        const dressupH = 56;
+        const btnGap = 16;           // 装扮与返回之间的间距
+        const backBottomMargin = 40; // 返回按钮距卡片底部留白
 
         // 从卡片顶部开始，逐项往下排
         let cursorY = this.safeNum(cardH / 2 - padding, 400);
@@ -2500,7 +3540,7 @@ export class GameManager extends Component {
             cursorY = this.safeNum(cursorY - rowH / 2 - spacing, 0);
         }
 
-        // ── 返回按钮：用 getBoundingBoxToWorld() 实测卡片底边定位 ──
+        // ── 返回按钮：钉在卡片底部（距底 40）──
         const backBtn = this.createRoundButton(card, 'BackBtn', '返回',
             this.COLOR_BTN_GIVEUP, 440, backH, () => this.onCollectionBack(),
             { ghost: true });
@@ -2509,11 +3549,15 @@ export class GameManager extends Component {
         card.updateWorldTransform();
         const cardBox = card.getComponent(UITransform)!.getBoundingBoxToWorld();
         const actualCardH = this.safeNum(cardBox.height, cardH);
-        // 卡片底边在本地坐标系（anchor 0.5,0.5）的 Y = -actualCardH/2
-        const cardLocalBottomY = this.safeNum(-actualCardH / 2, -400);
-        // 返回按钮中心 Y = 卡片底边 + 底部留白 + 按钮高度/2
-        const backBtnY = this.safeNum(cardLocalBottomY + backBottomMargin + backH / 2, -300);
+        const cardLocalBottomY = this.safeNum(-actualCardH / 2, -466);
+        const backBtnY = this.safeNum(cardLocalBottomY + backBottomMargin + backH / 2, -398);
         backBtn.setPosition(0, backBtnY, 0);
+
+        // ── 装扮入口按钮：在返回按钮正上方，间距 16 ──
+        const dressupEntryBtn = this.createRoundButton(card, 'DressupEntryBtn', '👗  装扮',
+            this.COLOR_BTN_AD, 440, dressupH, () => this.showDressupPanel());
+        const dressupBtnY = this.safeNum(backBtnY + backH / 2 + btnGap + dressupH / 2, -330);
+        dressupEntryBtn.setPosition(0, dressupBtnY, 0);
 
         this.collectionPanel.active = false;
     }
@@ -2604,6 +3648,14 @@ export class GameManager extends Component {
         maxStarNode.active = false;
 
         this.collectionCells[monId] = { emojiLabel, starLabel, countLabel, bgNode, upgradeBtn };
+
+        // ★ J1: 点击格子弹详情卡
+        const detailBtn = node.addComponent(Button);
+        detailBtn.transition = Button.Transition.NONE;
+        detailBtn.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            this.showMonsterDetail(monId);
+        }, this);
     }
 
     /** Refresh collection panel from SaveManager */
@@ -2688,8 +3740,11 @@ export class GameManager extends Component {
                 .start();
         }
 
-        // 音效 + 震动（复用 win）
-        AudioManager.inst?.playWin();
+        // ★ H3: 升星上扬小音阶（复用 combo3→combo5，无文件静默）+ 震动
+        try {
+            AudioManager.inst?.playCombo(3);
+            this.scheduleOnce(() => { try { AudioManager.inst?.playCombo(5); } catch (_) { /* ignore */ } }, 0.12);
+        } catch (e) { /* ignore */ }
         VibrateManager.inst?.long();
 
         const rec = SaveManager.inst.getMonster(monId);
@@ -2708,6 +3763,165 @@ export class GameManager extends Component {
     private onCollectionBack(): void {
         this.hidePanel(this.collectionPanel);
         this.showLevelSelectPanel();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  J1: 公仔详情弹卡
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** J1: 显示公仔详情卡（已拥有→详情，未拥有→占位不剧透） */
+    private showMonsterDetail(monId: number): void {
+        // 防护：monId 经 safeNum + 范围 0-5
+        const id = (typeof monId === 'number' && isFinite(monId) && monId >= 0 && monId <= 5) ? Math.floor(monId) : 0;
+
+        // 先清理旧的
+        this.hideMonsterDetail();
+
+        if (!this.collectionPanel) return;
+
+        const pw = this.safeNum(this.canvasW, 720);
+        const ph = this.safeNum(this.canvasH, 1280);
+
+        // 详情卡根节点（在图鉴面板内、卡片之上）
+        const detailRoot = new Node('MonsterDetail');
+        detailRoot.parent = this.collectionPanel;
+        detailRoot.addComponent(UITransform).setContentSize(pw, ph);
+        this.monsterDetailCard = detailRoot;
+
+        // Mask 遮罩
+        const maskNode = new Node('DetailMask');
+        maskNode.parent = detailRoot;
+        maskNode.addComponent(UITransform).setContentSize(pw, ph);
+        const maskG = maskNode.addComponent(Graphics);
+        maskG.fillColor = new Color(0, 0, 0, 140);
+        maskG.rect(-pw / 2, -ph / 2, pw, ph);
+        maskG.fill();
+        maskNode.addComponent(BlockInputEvents);
+        const maskOp = maskNode.addComponent(UIOpacity);
+
+        // Card 奶白圆角
+        const cardW = 420, cardH = 480;
+        const card = new Node('DetailCard');
+        card.parent = detailRoot;
+        card.addComponent(UITransform).setContentSize(cardW, cardH);
+        const cardG = card.addComponent(Graphics);
+        cardG.fillColor = this.COLOR_CARD.clone();
+        cardG.strokeColor = this.COLOR_CARD_BORDER.clone();
+        cardG.lineWidth = 2;
+        cardG.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 24);
+        cardG.fill();
+        cardG.stroke();
+        const cardOp = card.addComponent(UIOpacity);
+
+        // Layout 竖排
+        const cardLayout = card.addComponent(Layout);
+        cardLayout.type = Layout.Type.VERTICAL;
+        cardLayout.spacingY = 16;
+        cardLayout.paddingTop = 36;
+        cardLayout.paddingBottom = 36;
+        cardLayout.horizontalDirection = Layout.HorizontalDirection.CENTER;
+        cardLayout.verticalDirection = Layout.VerticalDirection.TOP_TO_BOTTOM;
+        cardLayout.resizeMode = Layout.ResizeMode.NONE;
+
+        const rec = SaveManager.inst.getMonster(id);
+        const isOwned = rec.count > 0;
+
+        if (isOwned) {
+            // 已拥有：大 emoji + 名字 + 稀有度 + 性格 + 星级 + 数量
+            const emoji = COLOR_EMOJI_MAP[id] ?? '?';
+            const name = MON_NAME[id] ?? '???';
+            const desc = MON_DESC[id] ?? '';
+            const rarity = MON_RARITY[id] ?? 'R';
+            const star = this.safeNum(rec.star, 0);
+            const count = this.safeNum(rec.count, 0);
+
+            // 大 emoji
+            const emojiLabel = this.createLabel(card, 'Emoji', emoji, 72, this.COLOR_TEXT_MAIN);
+            emojiLabel.node.getComponent(UITransform)!.setContentSize(cardW - 40, 90);
+
+            // 名字 + 稀有度
+            let rarityColor: Color;
+            switch (rarity) {
+                case 'SSR': rarityColor = this.COLOR_RARITY_SSR.clone(); break;
+                case 'SR': rarityColor = this.COLOR_RARITY_SR.clone(); break;
+                default: rarityColor = this.COLOR_RARITY_R.clone(); break;
+            }
+            const nameLabel = this.createLabel(card, 'Name', `${name}  [${rarity}]`, 32, rarityColor);
+            nameLabel.isBold = true;
+            nameLabel.node.getComponent(UITransform)!.setContentSize(cardW - 40, 44);
+
+            // 性格文案
+            const descLabel = this.createLabel(card, 'Desc', desc, 24, this.COLOR_TEXT_MAIN);
+            descLabel.node.getComponent(UITransform)!.setContentSize(cardW - 60, 36);
+
+            // 星级 + 数量
+            const infoLabel = this.createLabel(card, 'Info', `⭐${star}  ×${count}`, 26, this.COLOR_CHAPTER_GOLD);
+            infoLabel.isBold = true;
+            infoLabel.node.getComponent(UITransform)!.setContentSize(cardW - 40, 36);
+        } else {
+            // 未拥有：不剧透
+            const emojiLabel = this.createLabel(card, 'Emoji', '？？？', 64, this.COLOR_COLLECTION_SILHOUETTE);
+            emojiLabel.node.getComponent(UITransform)!.setContentSize(cardW - 40, 90);
+
+            const nameLabel = this.createLabel(card, 'Name', '还没遇到 ta', 30, this.COLOR_COLLECTION_SILHOUETTE);
+            nameLabel.isBold = true;
+            nameLabel.node.getComponent(UITransform)!.setContentSize(cardW - 40, 44);
+
+            const descLabel = this.createLabel(card, 'Desc', '继续冒险去发现吧~', 22, this.COLOR_LEVEL_LOCKED_TEXT);
+            descLabel.node.getComponent(UITransform)!.setContentSize(cardW - 60, 32);
+        }
+
+        // 关闭按钮
+        this.createRoundButton(card, 'CloseBtn', '关闭',
+            this.COLOR_BTN_GIVEUP, 200, 56, () => this.hideMonsterDetail(),
+            { ghost: true });
+
+        // 弹入动画
+        card.setScale(0, 0, 1);
+        Tween.stopAllByTarget(card);
+        tween(card)
+            .to(0.25, { scale: new Vec3(1.05, 1.05, 1) }, { easing: 'backOut' })
+            .to(0.1, { scale: new Vec3(1, 1, 1) })
+            .start();
+
+        maskOp.opacity = 0;
+        tween(maskOp).to(0.2, { opacity: 255 }).start();
+
+        // 点击遮罩关闭
+        const maskBtn = maskNode.addComponent(Button);
+        maskBtn.transition = Button.Transition.NONE;
+        maskBtn.node.on(Button.EventType.CLICK, () => this.hideMonsterDetail(), this);
+    }
+
+    /** J1: 隐藏公仔详情卡 */
+    private hideMonsterDetail(): void {
+        if (!this.monsterDetailCard) return;
+        const card = this.monsterDetailCard.getChildByName('DetailCard');
+        const mask = this.monsterDetailCard.getChildByName('DetailMask');
+        const root = this.monsterDetailCard;
+        this.monsterDetailCard = null;
+
+        // 淡出 → 销毁
+        if (card) {
+            const op = card.getComponent(UIOpacity);
+            if (op) {
+                Tween.stopAllByTarget(op);
+                tween(op).to(0.15, { opacity: 0 }).start();
+            }
+        }
+        if (mask) {
+            const op = mask.getComponent(UIOpacity);
+            if (op) {
+                Tween.stopAllByTarget(op);
+                tween(op).to(0.15, { opacity: 0 })
+                    .call(() => { if (root.isValid) root.destroy(); })
+                    .start();
+            } else {
+                if (root.isValid) root.destroy();
+            }
+        } else {
+            if (root.isValid) root.destroy();
+        }
     }
 
     /** 点击关卡按钮 → 进关（D3 接线） */
@@ -2828,17 +4042,139 @@ export class GameManager extends Component {
         label.horizontalAlign = Label.HorizontalAlign.CENTER;
         label.verticalAlign = Label.VerticalAlign.CENTER;
 
-        // Button SCALE 反馈
+        // ★ P1: Button.Transition.NONE（手动 tween 统一控制缩放，避免双控抢改 scale）
         const button = node.addComponent(Button);
-        button.transition = Button.Transition.SCALE;
-        button.duration = 0.1;
-        button.zoomScale = 0.92;
+        button.transition = Button.Transition.NONE;
+
+        // ★ H3: 按钮点击音 + 按下 scale 0.95 微缩反馈
+        button.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            // 微缩反馈（0.08s 回弹，不影响点击命中区）
+            Tween.stopAllByTarget(node);
+            node.setScale(0.95, 0.95, 1);
+            tween(node)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+
         button.node.on(Button.EventType.CLICK, callback, this);
 
         return node;
     }
 
-    private showPanel(panel: Node | null): void {
+    // ══════════════════════════════════════════════════════════════════════════
+    //  暂停弹层 — 交互
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** 点暂停键 → 弹出暂停卡，锁棋盘 */
+    private onPauseClick(): void {
+        if (!this.pausePanel) return;
+        // 确保主卡显示、确认卡隐藏
+        if (this.pauseCard) {
+            this.pauseCard.active = true;
+            this.pauseCard.setScale(1, 1, 1);
+        }
+        if (this.pauseConfirmCard) {
+            this.pauseConfirmCard.active = false;
+            this.pauseConfirmCard.setScale(1, 1, 1);
+        }
+        // 锁棋盘输入
+        this.board?.setBusy(true);
+        // 弹出暂停面板（showPanel 会调 updatePauseBtnVisible 隐藏暂停键）
+        this.showPanel(this.pausePanel);
+        console.log('[GameManager] 暂停');
+    }
+
+    /** 继续 → 关闭暂停弹层，恢复游戏 */
+    private onPauseContinue(): void {
+        this.hidePanel(this.pausePanel);
+        // 解锁棋盘
+        this.board?.setBusy(false);
+        // hidePanel 延迟回调会调 updatePauseBtnVisible 恢复暂停键
+        console.log('[GameManager] 继续游戏');
+    }
+
+    /** 重玩本关 → 弹出二次确认 */
+    private onPauseRestartClick(): void {
+        // 主卡淡出
+        if (this.pauseCard) {
+            Tween.stopAllByTarget(this.pauseCard);
+            tween(this.pauseCard)
+                .to(0.15, { scale: new Vec3(0.85, 0.85, 1) })
+                .call(() => { if (this.pauseCard) this.pauseCard.active = false; })
+                .start();
+        }
+        // 确认卡弹入
+        if (this.pauseConfirmCard) {
+            this.pauseConfirmCard.active = true;
+            this.pauseConfirmCard.setScale(0, 0, 1);
+            Tween.stopAllByTarget(this.pauseConfirmCard);
+            tween(this.pauseConfirmCard)
+                .to(0.25, { scale: new Vec3(1.05, 1.05, 1) }, { easing: 'backOut' })
+                .to(0.1, { scale: new Vec3(1, 1, 1) })
+                .start();
+        }
+        console.log('[GameManager] 暂停 → 重玩确认');
+    }
+
+    /** 取消重玩 → 回到暂停主卡 */
+    private onPauseRestartCancel(): void {
+        // 确认卡淡出
+        if (this.pauseConfirmCard) {
+            Tween.stopAllByTarget(this.pauseConfirmCard);
+            tween(this.pauseConfirmCard)
+                .to(0.15, { scale: new Vec3(0.85, 0.85, 1) })
+                .call(() => { if (this.pauseConfirmCard) this.pauseConfirmCard.active = false; })
+                .start();
+        }
+        // 主卡弹回
+        if (this.pauseCard) {
+            this.pauseCard.active = true;
+            this.pauseCard.setScale(0, 0, 1);
+            Tween.stopAllByTarget(this.pauseCard);
+            tween(this.pauseCard)
+                .to(0.25, { scale: new Vec3(1.05, 1.05, 1) }, { easing: 'backOut' })
+                .to(0.1, { scale: new Vec3(1, 1, 1) })
+                .start();
+        }
+        console.log('[GameManager] 取消重玩');
+    }
+
+    /** 确认重玩 → 关闭暂停弹层，重开本关 */
+    private onPauseRestartConfirm(): void {
+        this.hidePanel(this.pausePanel);
+        // startLevel 会重置一切（不触发过关写盘/发币）
+        this.startLevel(this.currentLevel);
+        console.log('[GameManager] 确认重玩本关');
+    }
+
+    /** 返回关卡选择 → 不写通关/不发币/不改存档 */
+    private onPauseLevelSelect(): void {
+        this.hidePanel(this.pausePanel);
+        this._inLevel = false;
+        this.showLevelSelectPanel();
+        console.log('[GameManager] 暂停 → 返回关卡选择（不记通关/不发币）');
+    }
+
+    /** 暂停键可见性：仅在关卡中且无弹层时显示 */
+    private updatePauseBtnVisible(): void {
+        if (!this.pauseBtn) return;
+        const anyPanelOpen =
+            (this.resultPanel?.active ?? false) ||
+            (this.stepsPanel?.active ?? false) ||
+            (this.pausePanel?.active ?? false) ||
+            (this.levelSelectPanel?.active ?? false) ||
+            (this.gachaPanel?.active ?? false) ||
+            (this.collectionPanel?.active ?? false) ||
+            (this.homePanel?.active ?? false) ||
+            (this.chapterCard?.active ?? false) ||
+            (this.settingsPanel?.active ?? false) ||
+            (this.dressupPanel?.active ?? false) ||
+            (this.dailySignPanel?.active ?? false);
+        this.pauseBtn.active = this._inLevel && !anyPanelOpen;
+    }
+
+    private showPanel(panel: Node | null, silent: boolean = false): void {
         if (!panel) return;
 
         // 取消待隐藏
@@ -2893,6 +4229,14 @@ export class GameManager extends Component {
                 .to(0.12, { scale: new Vec3(1, 1, 1) })
                 .start();
         }
+
+        // ★ P2: 页面开合音 — silent 时跳过（结算/失败已播 playWin/playLose）
+        if (!silent) {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+        }
+
+        // 暂停键可见性更新（任何弹层打开时隐藏）
+        this.updatePauseBtnVisible();
     }
 
     private hidePanel(panel: Node | null): void {
@@ -2948,6 +4292,8 @@ export class GameManager extends Component {
             if (card) {
                 card.setScale(1, 1, 1);
             }
+            // 暂停键可见性更新（弹层关闭后恢复）
+            this.updatePauseBtnVisible();
         }, 0.17);
     }
 
@@ -3029,6 +4375,107 @@ export class GameManager extends Component {
         this.chapterCard.active = false;
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    //  章节主题色
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * 按章节切换游戏背景色调（0.3s 淡变过渡）
+     * - chapter 1: 暖粉奶油  2: 薄荷奶绿  3: 暮光薰衣草
+     * - NaN/越界 → 回退第1章主题色
+     * - 颜色解析失败 → 回退当前基底色，绝不黑屏
+     */
+    private applyChapterTheme(chapter: number): void {
+        if (!this.gameBgG || !this.gameBgNode || !this.gameBgOp) return;
+
+        // 防护：NaN/越界回退第1章
+        const ch = this.isValidNum(chapter) && chapter >= 1 && chapter <= GameManager.CHAPTER_BG_THEMES.length
+            ? Math.floor(chapter) : 1;
+        const theme = GameManager.CHAPTER_BG_THEMES[ch - 1];
+
+        // 解析颜色（失败回退第1章基底色，绝不黑屏）
+        const fallbackTop = new Color(0xFD, 0xF2, 0xF8);
+        const fallbackBot = new Color(0xF5, 0xE8, 0xF0);
+        const topColor = this.parseHexColor(theme.top, fallbackTop);
+        const botColor = this.parseHexColor(theme.bottom, fallbackBot);
+        const midColor = new Color(
+            Math.round((topColor.r + botColor.r) / 2),
+            Math.round((topColor.g + botColor.g) / 2),
+            Math.round((topColor.b + botColor.b) / 2),
+            255,
+        );
+
+        // 0.3s 淡变过渡：淡出 0.15s → 重绘 → 淡入 0.15s
+        Tween.stopAllByTarget(this.gameBgOp);
+        tween(this.gameBgOp)
+            .to(0.15, { opacity: 0 })
+            .call(() => {
+                try {
+                    this.drawChapterBackground(topColor, midColor, botColor);
+                } catch (e) {
+                    console.warn('[GameManager] 章节背景重绘失败，保持当前背景', e);
+                }
+            })
+            .to(0.15, { opacity: 255 })
+            .start();
+
+        console.log(`[GameManager] 章节主题色切换 → 第${ch}章 (${theme.top}→${theme.bottom})`);
+    }
+
+    /** 用 Graphics 绘制 3 段竖向渐变 + 暗角 + 柔点装饰 */
+    private drawChapterBackground(top: Color, mid: Color, bot: Color): void {
+        const bgG = this.gameBgG;
+        if (!bgG) return;
+        const bgW = this.safeNum(this.canvasW, 720);
+        const bgH = this.safeNum(this.canvasH, 1280);
+        const segH = bgH / 3;
+
+        bgG.clear();
+
+        // 3 段竖向渐变：顶 → 中 → 底
+        bgG.fillColor = top;
+        bgG.rect(-bgW / 2, bgH / 6, bgW, segH);
+        bgG.fill();
+        bgG.fillColor = mid;
+        bgG.rect(-bgW / 2, -bgH / 6, bgW, segH);
+        bgG.fill();
+        bgG.fillColor = bot;
+        bgG.rect(-bgW / 2, -bgH / 2, bgW, segH);
+        bgG.fill();
+
+        // 暗角 vignette：四边叠深色边框，把视线漏斗到棋盘
+        const vCol = new Color(60, 40, 60, 40);
+        bgG.fillColor = vCol.clone();
+        bgG.rect(-bgW / 2, bgH / 2 - 70, bgW, 70);   // 顶部
+        bgG.fill();
+        bgG.rect(-bgW / 2, -bgH / 2, bgW, 70);       // 底部
+        bgG.fill();
+        bgG.rect(-bgW / 2, -bgH / 2, 50, bgH);       // 左侧
+        bgG.fill();
+        bgG.rect(bgW / 2 - 50, -bgH / 2, 50, bgH);   // 右侧
+        bgG.fill();
+
+        // 装饰柔点：大而柔、低透明度，不抢方块
+        bgG.fillColor = new Color(0xD4, 0xC0, 0xD5, 30);
+        bgG.ellipse(-bgW * 0.3, bgH * 0.2, 120, 120);
+        bgG.fill();
+        bgG.fillColor = new Color(0xE0, 0xCC, 0xE0, 25);
+        bgG.ellipse(bgW * 0.25, -bgH * 0.15, 100, 100);
+        bgG.fill();
+    }
+
+    /** 解析 #RRGGBB 十六进制颜色字符串，失败返回 fallback */
+    private parseHexColor(hex: string, fallback: Color): Color {
+        try {
+            const m = hex.match(/^#?([0-9a-fA-F]{6})$/);
+            if (!m) return fallback.clone();
+            const v = parseInt(m[1], 16);
+            return new Color((v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF, 255);
+        } catch (e) {
+            return fallback.clone();
+        }
+    }
+
     /** 弹出章节过场卡：backOut 弹入 → 停留 1.2s → 淡出 → 回 IDLE */
     private showChapterCard(chapter: number, isBoss: boolean): void {
         if (!this.chapterCard) return;
@@ -3084,6 +4531,7 @@ export class GameManager extends Component {
         }, 1.5);
 
         console.log(`[GameManager] 章节过场卡: 第${chapter}章 ${isBoss ? '(Boss)' : ''}`);
+        this.updatePauseBtnVisible();
     }
 
     /** 隐藏章节过场卡 → 回 IDLE */
@@ -3113,6 +4561,7 @@ export class GameManager extends Component {
         this.scheduleOnce(() => {
             if (this.chapterCard) this.chapterCard.active = false;
             this.board?.setBusy(false);
+            this.updatePauseBtnVisible();
         }, 0.32);
     }
 
@@ -3171,5 +4620,1156 @@ export class GameManager extends Component {
         // 额外庆祝音效（复用 win）
         AudioManager.inst?.playWin();
         console.log('[GameManager] ★ Boss 章末庆祝！');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  装扮页（Q1）
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private createDressupPanel(): void {
+        this.dressupPanel = new Node('DressupPanel');
+        this.dressupPanel.parent = this.node.parent!;
+        const panelUT = this.dressupPanel.addComponent(UITransform);
+        const pw = this.safeNum(this.canvasW, 720);
+        const ph = this.safeNum(this.canvasH, 1280);
+        panelUT.setContentSize(pw, ph);
+        this.addWidget(this.dressupPanel, { top: 0, bottom: 0, left: 0, right: 0 });
+
+        // Mask
+        const maskNode = new Node('Mask');
+        maskNode.parent = this.dressupPanel;
+        const maskUT = maskNode.addComponent(UITransform);
+        maskUT.setContentSize(pw, ph);
+        const maskG = maskNode.addComponent(Graphics);
+        maskG.fillColor = new Color(0, 0, 0, 160);
+        maskG.rect(-pw / 2, -ph / 2, pw, ph);
+        maskG.fill();
+        maskNode.addComponent(BlockInputEvents);
+        maskNode.addComponent(UIOpacity);
+        this.addWidget(maskNode, { top: 0, bottom: 0, left: 0, right: 0 });
+
+        // Card
+        const cardW = 640, cardH = 680;
+        const shadowNode = new Node('CardShadow');
+        shadowNode.parent = this.dressupPanel;
+        const shadowUT = shadowNode.addComponent(UITransform);
+        const sPad = 14;
+        shadowUT.setContentSize(cardW + sPad * 2, cardH + sPad * 2);
+        const shadowG = shadowNode.addComponent(Graphics);
+        shadowG.fillColor = new Color(0, 0, 0, 50);
+        shadowG.roundRect(-(cardW + sPad * 2) / 2, -(cardH + sPad * 2) / 2, cardW + sPad * 2, cardH + sPad * 2, 28 + sPad);
+        shadowG.fill();
+        shadowNode.addComponent(UIOpacity);
+        this.addWidget(shadowNode, { hCenter: 0, vCenter: 0 });
+
+        const card = new Node('Card');
+        card.parent = this.dressupPanel;
+        const cardUT = card.addComponent(UITransform);
+        cardUT.setContentSize(cardW, cardH);
+        this.addWidget(card, { hCenter: 0, vCenter: 0 });
+        const cardG = card.addComponent(Graphics);
+        cardG.fillColor = this.COLOR_CARD.clone();
+        cardG.strokeColor = this.COLOR_CARD_BORDER.clone();
+        cardG.lineWidth = 2;
+        cardG.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 28);
+        cardG.fill();
+        cardG.stroke();
+
+        // ── 手动定位（与图鉴页一致） ──
+        const padding = 32;
+        const spacing = 12;
+        const titleH = 50;
+        const previewH = 160;
+        const groupTitleH = 30;
+        const cellH = 90;
+        const backH = 64;
+        const backBottomMargin = 32;
+        let cursorY = this.safeNum(cardH / 2 - padding, 308);
+
+        // Title
+        const titleLabel = this.createLabel(card, 'Title', '👗 装扮', 44, this.COLOR_TITLE_WIN);
+        titleLabel.isBold = true;
+        const titleW = this.safeNum(cardW - 80, 560);
+        titleLabel.node.getComponent(UITransform)!.setContentSize(titleW, titleH);
+        titleLabel.overflow = Label.Overflow.SHRINK;
+        titleLabel.enableWrapText = false;
+        cursorY = this.safeNum(cursorY - titleH / 2, 0);
+        titleLabel.node.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - titleH / 2 - spacing, 0);
+
+        // ── 展示台预览 ──
+        const previewNode = new Node('Preview');
+        previewNode.parent = card;
+        previewNode.addComponent(UITransform).setContentSize(cardW - 60, previewH);
+        cursorY = this.safeNum(cursorY - previewH / 2, 0);
+        previewNode.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - previewH / 2 - spacing, 0);
+
+        // 预览圆背景（主题色）
+        const previewBgNode = new Node('PreviewBg');
+        previewBgNode.parent = previewNode;
+        previewBgNode.addComponent(UITransform).setContentSize(140, 140);
+        previewBgNode.setPosition(0, 0, 0);
+        this.dressupPreviewBg = previewBgNode.addComponent(Graphics);
+
+        // 预览怪物 emoji
+        const previewEmojiNode = new Node('PreviewEmoji');
+        previewEmojiNode.parent = previewNode;
+        previewEmojiNode.addComponent(UITransform).setContentSize(140, 140);
+        previewEmojiNode.setPosition(0, 0, 0);
+        const previewEmojiLabel = previewEmojiNode.addComponent(Label);
+        previewEmojiLabel.string = '🐰';
+        previewEmojiLabel.fontSize = 72;
+        previewEmojiLabel.lineHeight = 76;
+        previewEmojiLabel.color = Color.WHITE.clone();
+        previewEmojiLabel.useSystemFont = true;
+        previewEmojiLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        previewEmojiLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        previewEmojiLabel.overflow = Label.Overflow.NONE;
+        this.dressupPreviewEmoji = previewEmojiLabel;
+
+        // 预览配饰 emoji（叠在右上角）
+        const previewAccNode = new Node('PreviewAcc');
+        previewAccNode.parent = previewNode;
+        previewAccNode.addComponent(UITransform).setContentSize(60, 60);
+        previewAccNode.setPosition(48, 48, 0);
+        const previewAccLabel = previewAccNode.addComponent(Label);
+        previewAccLabel.string = '';
+        previewAccLabel.fontSize = 40;
+        previewAccLabel.lineHeight = 44;
+        previewAccLabel.color = Color.WHITE.clone();
+        previewAccLabel.useSystemFont = true;
+        previewAccLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        previewAccLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        previewAccLabel.overflow = Label.Overflow.NONE;
+        this.dressupPreviewAcc = previewAccLabel;
+
+        // ── 主题区 ──
+        const themeTitle = this.createLabel(card, 'ThemeTitle', '🎨 主题', 30, this.COLOR_HUD_TEXT);
+        themeTitle.isBold = true;
+        themeTitle.node.getComponent(UITransform)!.setContentSize(cardW - 80, groupTitleH);
+        themeTitle.overflow = Label.Overflow.SHRINK;
+        cursorY = this.safeNum(cursorY - groupTitleH / 2, 0);
+        themeTitle.node.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - groupTitleH / 2 - spacing, 0);
+
+        // 主题行
+        const cellW = 132;
+        const cellGap = 8;
+        const themeRowW = this.safeNum(4 * cellW + 3 * cellGap, 552);
+        const themeRow = new Node('ThemeRow');
+        themeRow.parent = card;
+        themeRow.addComponent(UITransform).setContentSize(themeRowW, cellH);
+        cursorY = this.safeNum(cursorY - cellH / 2, 0);
+        themeRow.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - cellH / 2 - spacing, 0);
+
+        const themeRowLayout = themeRow.addComponent(Layout);
+        themeRowLayout.type = Layout.Type.HORIZONTAL;
+        themeRowLayout.spacingX = cellGap;
+        themeRowLayout.horizontalDirection = Layout.HorizontalDirection.LEFT_TO_RIGHT;
+        themeRowLayout.verticalDirection = Layout.VerticalDirection.CENTER;
+        themeRowLayout.resizeMode = Layout.ResizeMode.NONE;
+
+        for (let i = 0; i < 4; i++) {
+            this.createDressupThemeCell(themeRow, i, cellW, cellH);
+        }
+
+        // ── 配饰区 ──
+        const accTitle = this.createLabel(card, 'AccTitle', '✨ 配饰', 30, this.COLOR_HUD_TEXT);
+        accTitle.isBold = true;
+        accTitle.node.getComponent(UITransform)!.setContentSize(cardW - 80, groupTitleH);
+        accTitle.overflow = Label.Overflow.SHRINK;
+        cursorY = this.safeNum(cursorY - groupTitleH / 2, 0);
+        accTitle.node.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - groupTitleH / 2 - spacing, 0);
+
+        // 配饰行（4 个：无 + 3 个配饰）
+        const accRow = new Node('AccRow');
+        accRow.parent = card;
+        accRow.addComponent(UITransform).setContentSize(themeRowW, cellH);
+        cursorY = this.safeNum(cursorY - cellH / 2, 0);
+        accRow.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - cellH / 2 - spacing, 0);
+
+        const accRowLayout = accRow.addComponent(Layout);
+        accRowLayout.type = Layout.Type.HORIZONTAL;
+        accRowLayout.spacingX = cellGap;
+        accRowLayout.horizontalDirection = Layout.HorizontalDirection.LEFT_TO_RIGHT;
+        accRowLayout.verticalDirection = Layout.VerticalDirection.CENTER;
+        accRowLayout.resizeMode = Layout.ResizeMode.NONE;
+
+        this.createDressupAccessoryCell(accRow, -1, cellW, cellH);
+        for (let i = 0; i < 3; i++) {
+            this.createDressupAccessoryCell(accRow, i, cellW, cellH);
+        }
+
+        // ── 返回按钮 ──
+        const backBtn = this.createRoundButton(card, 'BackBtn', '返回',
+            this.COLOR_BTN_GIVEUP, 440, backH, () => this.onDressupBack(),
+            { ghost: true });
+
+        card.updateWorldTransform();
+        const cardBox = card.getComponent(UITransform)!.getBoundingBoxToWorld();
+        const actualCardH = this.safeNum(cardBox.height, cardH);
+        const cardLocalBottomY = this.safeNum(-actualCardH / 2, -340);
+        const backBtnY = this.safeNum(cardLocalBottomY + backBottomMargin + backH / 2, -276);
+        backBtn.setPosition(0, backBtnY, 0);
+
+        this.dressupPanel.active = false;
+    }
+
+    /** Q1: 创建主题格子 */
+    private createDressupThemeCell(parent: Node, themeId: number, w: number, h: number): void {
+        const node = new Node(`Theme${themeId}`);
+        node.parent = parent;
+        node.addComponent(UITransform).setContentSize(w, h);
+
+        // 背景
+        const bgNode = new Node('Bg');
+        bgNode.parent = node;
+        bgNode.addComponent(UITransform).setContentSize(w, h);
+        const bg = bgNode.addComponent(Graphics);
+        bg.fillColor = new Color(0xF0, 0xF0, 0xF0, 180);
+        bg.roundRect(-w / 2, -h / 2, w, h, 12);
+        bg.fill();
+
+        // 主题色圆点
+        const colorNode = new Node('ColorDot');
+        colorNode.parent = node;
+        colorNode.addComponent(UITransform).setContentSize(36, 36);
+        colorNode.setPosition(0, h / 2 - 28, 0);
+        const colorG = colorNode.addComponent(Graphics);
+        colorG.fillColor = THEME_DATA[themeId].bg.clone();
+        colorG.circle(0, 0, 16);
+        colorG.fill();
+        colorG.strokeColor = new Color(0, 0, 0, 30);
+        colorG.lineWidth = 2;
+        colorG.stroke();
+
+        // 名称
+        const nameNode = new Node('Name');
+        nameNode.parent = node;
+        nameNode.addComponent(UITransform).setContentSize(w, 22);
+        nameNode.setPosition(0, -4, 0);
+        const nameLabel = nameNode.addComponent(Label);
+        nameLabel.string = THEME_DATA[themeId].name;
+        nameLabel.fontSize = 18;
+        nameLabel.lineHeight = 22;
+        nameLabel.color = this.COLOR_TEXT_MAIN.clone();
+        nameLabel.useSystemFont = true;
+        nameLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        nameLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        nameLabel.overflow = Label.Overflow.SHRINK;
+
+        // 状态
+        const statusNode = new Node('Status');
+        statusNode.parent = node;
+        statusNode.addComponent(UITransform).setContentSize(w, 20);
+        statusNode.setPosition(0, -28, 0);
+        const statusLabel = statusNode.addComponent(Label);
+        statusLabel.string = '';
+        statusLabel.fontSize = 14;
+        statusLabel.lineHeight = 18;
+        statusLabel.color = this.COLOR_BTN_PRIMARY.clone();
+        statusLabel.useSystemFont = true;
+        statusLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        statusLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        statusLabel.overflow = Label.Overflow.SHRINK;
+
+        // 点击按钮
+        const btn = node.addComponent(Button);
+        btn.transition = Button.Transition.NONE;
+        btn.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            this.onDressupThemeSelect(themeId);
+        }, this);
+
+        this.dressupThemeCells.push({ id: themeId, node, statusLabel });
+    }
+
+    /** Q1: 创建配饰格子（id=-1 表示「无配饰」） */
+    private createDressupAccessoryCell(parent: Node, accId: number, w: number, h: number): void {
+        const node = new Node(`Acc${accId}`);
+        node.parent = parent;
+        node.addComponent(UITransform).setContentSize(w, h);
+
+        // 背景
+        const bgNode = new Node('Bg');
+        bgNode.parent = node;
+        bgNode.addComponent(UITransform).setContentSize(w, h);
+        const bg = bgNode.addComponent(Graphics);
+        bg.fillColor = new Color(0xF0, 0xF0, 0xF0, 180);
+        bg.roundRect(-w / 2, -h / 2, w, h, 12);
+        bg.fill();
+
+        // Emoji
+        const emojiNode = new Node('Emoji');
+        emojiNode.parent = node;
+        emojiNode.addComponent(UITransform).setContentSize(w, 40);
+        emojiNode.setPosition(0, h / 2 - 30, 0);
+        const emojiLabel = emojiNode.addComponent(Label);
+        emojiLabel.string = accId === -1 ? '🚫' : (ACCESSORY_DATA[accId]?.emoji ?? '?');
+        emojiLabel.fontSize = 32;
+        emojiLabel.lineHeight = 36;
+        emojiLabel.color = this.COLOR_TEXT_MAIN.clone();
+        emojiLabel.useSystemFont = true;
+        emojiLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        emojiLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        emojiLabel.overflow = Label.Overflow.NONE;
+
+        // 名称
+        const nameNode = new Node('Name');
+        nameNode.parent = node;
+        nameNode.addComponent(UITransform).setContentSize(w, 22);
+        nameNode.setPosition(0, -4, 0);
+        const nameLabel = nameNode.addComponent(Label);
+        nameLabel.string = accId === -1 ? '无配饰' : (ACCESSORY_DATA[accId]?.name ?? '?');
+        nameLabel.fontSize = 18;
+        nameLabel.lineHeight = 22;
+        nameLabel.color = this.COLOR_TEXT_MAIN.clone();
+        nameLabel.useSystemFont = true;
+        nameLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        nameLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        nameLabel.overflow = Label.Overflow.SHRINK;
+
+        // 状态
+        const statusNode = new Node('Status');
+        statusNode.parent = node;
+        statusNode.addComponent(UITransform).setContentSize(w, 20);
+        statusNode.setPosition(0, -28, 0);
+        const statusLabel = statusNode.addComponent(Label);
+        statusLabel.string = '';
+        statusLabel.fontSize = 14;
+        statusLabel.lineHeight = 18;
+        statusLabel.color = this.COLOR_BTN_PRIMARY.clone();
+        statusLabel.useSystemFont = true;
+        statusLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        statusLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        statusLabel.overflow = Label.Overflow.SHRINK;
+
+        // 点击按钮
+        const btn = node.addComponent(Button);
+        btn.transition = Button.Transition.NONE;
+        btn.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            this.onDressupAccessorySelect(accId);
+        }, this);
+
+        this.dressupAccessoryCells.push({ id: accId, node, statusLabel });
+    }
+
+    /** Q1: 获取预览用怪物 emoji（第一个已拥有的公仔，否则 🐰） */
+    private getPreviewMonsterEmoji(): string {
+        for (let i = 0; i < 6; i++) {
+            const rec = SaveManager.inst.getMonster(i);
+            if (this.safeNum(rec.count, 0) > 0) return COLOR_EMOJI_MAP[i] ?? '🐰';
+        }
+        return '🐰';
+    }
+
+    /** Q1: 绘制展示台预览圆背景 */
+    private drawDressupPreview(): void {
+        if (!this.dressupPreviewBg) return;
+        const themeId = SaveManager.inst.getEquippedTheme();
+        const g = this.dressupPreviewBg;
+        g.clear();
+        g.fillColor = THEME_DATA[themeId]?.bg.clone() ?? new Color(0xFD, 0xF2, 0xF8);
+        g.strokeColor = new Color(0, 0, 0, 30);
+        g.lineWidth = 3;
+        g.circle(0, 0, 60);
+        g.fill();
+        g.stroke();
+    }
+
+    /** Q1: 刷新装扮页（预览 + 格子状态） */
+    private refreshDressupPanel(): void {
+        const equippedTheme = SaveManager.inst.getEquippedTheme();
+        const equippedAcc = SaveManager.inst.getEquippedAccessory();
+        const ownedThemes = SaveManager.inst.getOwnedThemes();
+        const ownedAccessories = SaveManager.inst.getOwnedAccessories();
+
+        // 展示台预览
+        this.drawDressupPreview();
+        if (this.dressupPreviewEmoji) {
+            this.dressupPreviewEmoji.string = this.getPreviewMonsterEmoji();
+        }
+        if (this.dressupPreviewAcc) {
+            this.dressupPreviewAcc.string = (equippedAcc >= 0) ? (ACCESSORY_DATA[equippedAcc]?.emoji ?? '') : '';
+        }
+
+        // 主题格子状态
+        for (const cell of this.dressupThemeCells) {
+            if (cell.id === equippedTheme) {
+                cell.statusLabel.string = '✓ 已装备';
+                cell.statusLabel.color = this.COLOR_CHAPTER_GOLD.clone();
+            } else if (ownedThemes.includes(cell.id)) {
+                cell.statusLabel.string = '点击装备';
+                cell.statusLabel.color = this.COLOR_BTN_PRIMARY.clone();
+            } else {
+                cell.statusLabel.string = '📺 看广告';
+                cell.statusLabel.color = this.COLOR_BTN_AD.clone();
+            }
+        }
+
+        // 配饰格子状态
+        for (const cell of this.dressupAccessoryCells) {
+            if (cell.id === equippedAcc) {
+                cell.statusLabel.string = '✓ 已装备';
+                cell.statusLabel.color = this.COLOR_CHAPTER_GOLD.clone();
+            } else if (cell.id === -1 || ownedAccessories.includes(cell.id)) {
+                cell.statusLabel.string = '点击装备';
+                cell.statusLabel.color = this.COLOR_BTN_PRIMARY.clone();
+            } else {
+                cell.statusLabel.string = '📺 看广告';
+                cell.statusLabel.color = this.COLOR_BTN_AD.clone();
+            }
+        }
+    }
+
+    /** Q1: 显示装扮页 */
+    private showDressupPanel(): void {
+        if (!this.dressupPanel) return;
+        this.refreshDressupPanel();
+        this.showPanel(this.dressupPanel);
+        this.gameClubEntry?.hide();
+    }
+
+    /** Q1: 装扮页返回 */
+    private onDressupBack(): void {
+        this.hidePanel(this.dressupPanel);
+        this.showLevelSelectPanel();
+    }
+
+    /** Q1+Q2: 点击主题格子 — 已拥有则装备，未拥有则看广告解锁 */
+    private onDressupThemeSelect(themeId: number): void {
+        const ownedThemes = SaveManager.inst.getOwnedThemes();
+        if (ownedThemes.includes(themeId)) {
+            SaveManager.inst.setEquippedTheme(themeId);
+            this.refreshDressupPanel();
+            console.log(`[Dressup] 装备主题: ${THEME_DATA[themeId]?.name ?? '?'}`);
+        } else {
+            AdManager.getInstance().showRewardedAd(
+                () => {
+                    SaveManager.inst.ownTheme(themeId);
+                    SaveManager.inst.setEquippedTheme(themeId);
+                    this.refreshDressupPanel();
+                    console.log(`[Dressup] 广告解锁并装备主题: ${THEME_DATA[themeId]?.name ?? '?'}`);
+                },
+                () => {
+                    console.log('[Dressup] 广告未看完，主题未解锁');
+                },
+            );
+        }
+    }
+
+    /** Q1+Q2: 点击配饰格子 — id=-1 卸下，已拥有则装备，未拥有则看广告解锁 */
+    private onDressupAccessorySelect(accId: number): void {
+        if (accId === -1) {
+            SaveManager.inst.setEquippedAccessory(-1);
+            this.refreshDressupPanel();
+            console.log('[Dressup] 卸下配饰');
+            return;
+        }
+
+        const ownedAccessories = SaveManager.inst.getOwnedAccessories();
+        if (ownedAccessories.includes(accId)) {
+            SaveManager.inst.setEquippedAccessory(accId);
+            this.refreshDressupPanel();
+            console.log(`[Dressup] 装备配饰: ${ACCESSORY_DATA[accId]?.name ?? '?'}`);
+        } else {
+            AdManager.getInstance().showRewardedAd(
+                () => {
+                    SaveManager.inst.ownAccessory(accId);
+                    SaveManager.inst.setEquippedAccessory(accId);
+                    this.refreshDressupPanel();
+                    console.log(`[Dressup] 广告解锁并装备配饰: ${ACCESSORY_DATA[accId]?.name ?? '?'}`);
+                },
+                () => {
+                    console.log('[Dressup] 广告未看完，配饰未解锁');
+                },
+            );
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  设置面板（R2）
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private createSettingsPanel(): void {
+        this.settingsPanel = new Node('SettingsPanel');
+        this.settingsPanel.parent = this.node.parent!;
+        const panelUT = this.settingsPanel.addComponent(UITransform);
+        const pw = this.safeNum(this.canvasW, 720);
+        const ph = this.safeNum(this.canvasH, 1280);
+        panelUT.setContentSize(pw, ph);
+        this.addWidget(this.settingsPanel, { top: 0, bottom: 0, left: 0, right: 0 });
+
+        // Mask
+        const maskNode = new Node('Mask');
+        maskNode.parent = this.settingsPanel;
+        const maskUT = maskNode.addComponent(UITransform);
+        maskUT.setContentSize(pw, ph);
+        const maskG = maskNode.addComponent(Graphics);
+        maskG.fillColor = new Color(0, 0, 0, 160);
+        maskG.rect(-pw / 2, -ph / 2, pw, ph);
+        maskG.fill();
+        maskNode.addComponent(BlockInputEvents);
+        maskNode.addComponent(UIOpacity);
+        this.addWidget(maskNode, { top: 0, bottom: 0, left: 0, right: 0 });
+
+        // Card
+        const cardW = 560, cardH = 380;
+        const shadowNode = new Node('CardShadow');
+        shadowNode.parent = this.settingsPanel;
+        const shadowUT = shadowNode.addComponent(UITransform);
+        const sPad = 14;
+        shadowUT.setContentSize(cardW + sPad * 2, cardH + sPad * 2);
+        const shadowG = shadowNode.addComponent(Graphics);
+        shadowG.fillColor = new Color(0, 0, 0, 50);
+        shadowG.roundRect(-(cardW + sPad * 2) / 2, -(cardH + sPad * 2) / 2, cardW + sPad * 2, cardH + sPad * 2, 28 + sPad);
+        shadowG.fill();
+        shadowNode.addComponent(UIOpacity);
+        this.addWidget(shadowNode, { hCenter: 0, vCenter: 0 });
+
+        const card = new Node('Card');
+        card.parent = this.settingsPanel;
+        const cardUT = card.addComponent(UITransform);
+        cardUT.setContentSize(cardW, cardH);
+        this.addWidget(card, { hCenter: 0, vCenter: 0 });
+        const cardG = card.addComponent(Graphics);
+        cardG.fillColor = this.COLOR_CARD.clone();
+        cardG.strokeColor = this.COLOR_CARD_BORDER.clone();
+        cardG.lineWidth = 2;
+        cardG.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 28);
+        cardG.fill();
+        cardG.stroke();
+
+        // ── 手动定位（不用 Layout）──
+        const padding = 32;
+        const spacing = 20;
+        const titleH = 50;
+        const rowH = 60;
+        const closeBtnSize = 48;
+        let cursorY = this.safeNum(cardH / 2 - padding, 158);
+
+        // Title
+        const titleLabel = this.createLabel(card, 'Title', '⚙️ 设置', 40, this.COLOR_TITLE_WIN);
+        titleLabel.isBold = true;
+        const titleW = this.safeNum(cardW - 80, 480);
+        titleLabel.node.getComponent(UITransform)!.setContentSize(titleW, titleH);
+        titleLabel.overflow = Label.Overflow.SHRINK;
+        titleLabel.enableWrapText = false;
+        cursorY = this.safeNum(cursorY - titleH / 2, 0);
+        titleLabel.node.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - titleH / 2 - spacing, 0);
+
+        // ── 音效开关行 ──
+        const soundRow = new Node('SoundRow');
+        soundRow.parent = card;
+        soundRow.addComponent(UITransform).setContentSize(this.safeNum(cardW - 64, 496), rowH);
+        cursorY = this.safeNum(cursorY - rowH / 2, 0);
+        soundRow.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - rowH / 2 - spacing, 0);
+
+        const soundLabel = this.createLabel(soundRow, 'SoundLabel', '🔊 音效', 30, this.COLOR_HUD_TEXT);
+        soundLabel.isBold = true;
+        soundLabel.node.getComponent(UITransform)!.setContentSize(200, rowH);
+        soundLabel.overflow = Label.Overflow.SHRINK;
+        soundLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+        soundLabel.node.setPosition(this.safeNum(-this.safeNum(cardW - 64, 496) / 2 + 100, 0, 0), 0, 0);
+
+        // 音效胶囊开关
+        this.settingsSoundCapsule = this.createToggleCapsule(soundRow, 'SoundCapsule',
+            this.safeNum(this.safeNum(cardW - 64, 496) / 2 - 50, 198), 0, () => this.onToggleSound());
+        this.settingsSoundLabel = this.settingsSoundCapsule.getChildByName('StateLabel')?.getComponent(Label) ?? null;
+
+        // ── 震动开关行 ──
+        const vibrateRow = new Node('VibrateRow');
+        vibrateRow.parent = card;
+        vibrateRow.addComponent(UITransform).setContentSize(this.safeNum(cardW - 64, 496), rowH);
+        cursorY = this.safeNum(cursorY - rowH / 2, 0);
+        vibrateRow.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - rowH / 2 - spacing, 0);
+
+        const vibrateLabel = this.createLabel(vibrateRow, 'VibrateLabel', '📳 震动', 30, this.COLOR_HUD_TEXT);
+        vibrateLabel.isBold = true;
+        vibrateLabel.node.getComponent(UITransform)!.setContentSize(200, rowH);
+        vibrateLabel.overflow = Label.Overflow.SHRINK;
+        vibrateLabel.horizontalAlign = Label.HorizontalAlign.LEFT;
+        vibrateLabel.node.setPosition(this.safeNum(-this.safeNum(cardW - 64, 496) / 2 + 100, 0, 0), 0, 0);
+
+        // 震动胶囊开关
+        this.settingsVibrateCapsule = this.createToggleCapsule(vibrateRow, 'VibrateCapsule',
+            this.safeNum(this.safeNum(cardW - 64, 496) / 2 - 50, 198), 0, () => this.onToggleVibrate());
+        this.settingsVibrateLabel = this.settingsVibrateCapsule.getChildByName('StateLabel')?.getComponent(Label) ?? null;
+
+        // ── ✕ 关闭按钮（右上角）──
+        const closeBtn = new Node('CloseBtn');
+        closeBtn.parent = card;
+        const closeUT = closeBtn.addComponent(UITransform);
+        closeUT.setContentSize(closeBtnSize, closeBtnSize);
+        closeUT.setAnchorPoint(0.5, 0.5);
+        closeBtn.setPosition(this.safeNum(cardW / 2 - closeBtnSize / 2 - 12, 224), this.safeNum(cardH / 2 - closeBtnSize / 2 - 12, 142), 0);
+
+        const closeG = closeBtn.addComponent(Graphics);
+        closeG.fillColor = new Color(0xE0, 0xE0, 0xE0, 200);
+        closeG.circle(0, 0, closeBtnSize / 2);
+        closeG.fill();
+
+        const closeLabelNode = new Node('CloseLabel');
+        closeLabelNode.parent = closeBtn;
+        closeLabelNode.addComponent(UITransform).setContentSize(closeBtnSize, closeBtnSize);
+        const closeLabel = closeLabelNode.addComponent(Label);
+        closeLabel.string = '✕';
+        closeLabel.fontSize = 24;
+        closeLabel.lineHeight = 28;
+        closeLabel.color = this.COLOR_HUD_TEXT.clone();
+        closeLabel.useSystemFont = true;
+        closeLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        closeLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        const closeButton = closeBtn.addComponent(Button);
+        closeButton.transition = Button.Transition.NONE;
+        closeButton.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            Tween.stopAllByTarget(closeBtn);
+            closeBtn.setScale(0.9, 0.9, 1);
+            tween(closeBtn)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+        closeButton.node.on(Button.EventType.CLICK, () => this.onSettingsClose(), this);
+
+        this.settingsPanel.active = false;
+    }
+
+    /** R2: 创建胶囊开关（绿=开/灰=关），返回 capsule 节点 */
+    private createToggleCapsule(parent: Node, name: string, x: number, y: number, onToggle: () => void): Node {
+        const capsuleW = 100;
+        const capsuleH = 44;
+
+        const node = new Node(name);
+        node.parent = parent;
+        const ut = node.addComponent(UITransform);
+        ut.setContentSize(capsuleW, capsuleH);
+        ut.setAnchorPoint(0.5, 0.5);
+        node.setPosition(x, y, 0);
+
+        const bg = node.addComponent(Graphics);
+        // 默认画绿色（开）
+        bg.fillColor = new Color(0x7B, 0xC6, 0x7B);
+        bg.roundRect(-capsuleW / 2, -capsuleH / 2, capsuleW, capsuleH, capsuleH / 2);
+        bg.fill();
+
+        // 圆点（滑块）
+        const dotNode = new Node('Dot');
+        dotNode.parent = node;
+        dotNode.addComponent(UITransform).setContentSize(capsuleH - 8, capsuleH - 8);
+        // 默认在右侧（开）
+        dotNode.setPosition(capsuleW / 2 - capsuleH / 2, 0, 0);
+        const dotG = dotNode.addComponent(Graphics);
+        dotG.fillColor = Color.WHITE.clone();
+        dotG.circle(0, 0, (capsuleH - 8) / 2);
+        dotG.fill();
+
+        // 状态文字（ON/OFF）
+        const stateNode = new Node('StateLabel');
+        stateNode.parent = node;
+        stateNode.addComponent(UITransform).setContentSize(capsuleW, capsuleH);
+        const stateLabel = stateNode.addComponent(Label);
+        stateLabel.string = 'ON';
+        stateLabel.fontSize = 16;
+        stateLabel.lineHeight = 20;
+        stateLabel.color = Color.WHITE.clone();
+        stateLabel.useSystemFont = true;
+        stateLabel.isBold = true;
+        stateLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        stateLabel.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 点击按钮
+        const btn = node.addComponent(Button);
+        btn.transition = Button.Transition.NONE;
+        btn.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            Tween.stopAllByTarget(node);
+            node.setScale(0.92, 0.92, 1);
+            tween(node)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+        btn.node.on(Button.EventType.CLICK, onToggle, this);
+
+        return node;
+    }
+
+    /** R2: 刷新胶囊开关外观 */
+    private refreshToggleCapsule(capsule: Node, stateLabel: Label, enabled: boolean): void {
+        if (!capsule) return;
+        const capsuleW = 100;
+        const capsuleH = 44;
+
+        // 重绘背景
+        const bg = capsule.getComponent(Graphics);
+        if (bg) {
+            bg.clear();
+            bg.fillColor = enabled ? new Color(0x7B, 0xC6, 0x7B) : new Color(0xC8, 0xC8, 0xC8);
+            bg.roundRect(-capsuleW / 2, -capsuleH / 2, capsuleW, capsuleH, capsuleH / 2);
+            bg.fill();
+        }
+
+        // 移动滑块
+        const dot = capsule.getChildByName('Dot');
+        if (dot) {
+            Tween.stopAllByTarget(dot);
+            const targetX = enabled ? (capsuleW / 2 - capsuleH / 2) : -(capsuleW / 2 - capsuleH / 2);
+            tween(dot)
+                .to(0.15, { position: new Vec3(targetX, 0, 0) }, { easing: 'quadOut' })
+                .start();
+        }
+
+        // 更新文字
+        if (stateLabel) {
+            stateLabel.string = enabled ? 'ON' : 'OFF';
+        }
+    }
+
+    /** R2: 显示设置面板，按存档初始化胶囊 */
+    private showSettingsPanel(): void {
+        if (!this.settingsPanel) return;
+        // 按存档初始化胶囊
+        const soundOn = SaveManager.inst.getSoundEnabled();
+        const vibrateOn = SaveManager.inst.getVibrateEnabled();
+        this.refreshToggleCapsule(this.settingsSoundCapsule!, this.settingsSoundLabel!, soundOn);
+        this.refreshToggleCapsule(this.settingsVibrateCapsule!, this.settingsVibrateLabel!, vibrateOn);
+        this.showPanel(this.settingsPanel);
+        this.gameClubEntry?.hide();
+    }
+
+    /** R2: 关闭设置面板 */
+    private onSettingsClose(): void {
+        this.hidePanel(this.settingsPanel);
+        this.showLevelSelectPanel();
+    }
+
+    /** R2: 切换音效开关 */
+    private onToggleSound(): void {
+        const current = SaveManager.inst.getSoundEnabled();
+        const newVal = !current;
+        try { AudioManager.inst?.setEnabled(newVal); } catch (e) { /* ignore */ }
+        SaveManager.inst.setSoundEnabled(newVal);
+        this.refreshToggleCapsule(this.settingsSoundCapsule!, this.settingsSoundLabel!, newVal);
+        console.log(`[Settings] 音效 → ${newVal ? 'ON' : 'OFF'}`);
+    }
+
+    /** R2: 切换震动开关 */
+    private onToggleVibrate(): void {
+        const current = SaveManager.inst.getVibrateEnabled();
+        const newVal = !current;
+        try { VibrateManager.inst?.setVibrateEnabled(newVal); } catch (e) { /* ignore */ }
+        SaveManager.inst.setVibrateEnabled(newVal);
+        this.refreshToggleCapsule(this.settingsVibrateCapsule!, this.settingsVibrateLabel!, newVal);
+        console.log(`[Settings] 震动 → ${newVal ? 'ON' : 'OFF'}`);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  每日签到（R3）
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** R3: 每日签到奖励表（7天） */
+    private static readonly SIGN_REWARDS: { coins: number; extra: string }[] = [
+        { coins: 20, extra: '' },
+        { coins: 30, extra: '' },
+        { coins: 40, extra: '' },
+        { coins: 50, extra: '' },
+        { coins: 60, extra: '' },
+        { coins: 80, extra: '' },
+        { coins: 100, extra: '+🎁免费抽' },
+    ];
+
+    /** R3: 获取今日日期字符串 YYYY-MM-DD */
+    private getTodayStr(): string {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    /** R3: 计算两个日期字符串相差的天数（同日=0，昨天=1，前天=2...） */
+    private daysBetween(dateStr1: string, dateStr2: string): number {
+        if (!dateStr1 || !dateStr2) return -1;
+        try {
+            const d1 = new Date(dateStr1 + 'T00:00:00');
+            const d2 = new Date(dateStr2 + 'T00:00:00');
+            if (isNaN(d1.getTime()) || isNaN(d2.getTime())) return -1;
+            const diff = Math.round((d2.getTime() - d1.getTime()) / (24 * 60 * 60 * 1000));
+            return diff;
+        } catch (e) {
+            return -1;
+        }
+    }
+
+    /** R3: 计算今日应签到的 streak（未领取状态） */
+    private calcTodayStreak(): number {
+        const signData = SaveManager.inst.getSignData();
+        const today = this.getTodayStr();
+
+        if (!signData.lastDate || signData.lastDate === '') {
+            // 首次签到
+            return 1;
+        }
+
+        if (signData.lastDate === today) {
+            // 今天已签
+            return signData.streak;
+        }
+
+        const diff = this.daysBetween(signData.lastDate, today);
+        if (diff === 1) {
+            // 连签
+            const next = signData.streak + 1;
+            return next > 7 ? 1 : next; // 超过7回到1
+        } else {
+            // 断签重置
+            return 1;
+        }
+    }
+
+    /** R3: 今日是否已签到 */
+    private isSignedToday(): boolean {
+        const signData = SaveManager.inst.getSignData();
+        return signData.lastDate === this.getTodayStr();
+    }
+
+    private createDailySignPanel(): void {
+        this.dailySignPanel = new Node('DailySignPanel');
+        this.dailySignPanel.parent = this.node.parent!;
+        const panelUT = this.dailySignPanel.addComponent(UITransform);
+        const pw = this.safeNum(this.canvasW, 720);
+        const ph = this.safeNum(this.canvasH, 1280);
+        panelUT.setContentSize(pw, ph);
+        this.addWidget(this.dailySignPanel, { top: 0, bottom: 0, left: 0, right: 0 });
+
+        // Mask
+        const maskNode = new Node('Mask');
+        maskNode.parent = this.dailySignPanel;
+        const maskUT = maskNode.addComponent(UITransform);
+        maskUT.setContentSize(pw, ph);
+        const maskG = maskNode.addComponent(Graphics);
+        maskG.fillColor = new Color(0, 0, 0, 160);
+        maskG.rect(-pw / 2, -ph / 2, pw, ph);
+        maskG.fill();
+        maskNode.addComponent(BlockInputEvents);
+        maskNode.addComponent(UIOpacity);
+        this.addWidget(maskNode, { top: 0, bottom: 0, left: 0, right: 0 });
+
+        // Card
+        const cardW = 640, cardH = 580;
+        const shadowNode = new Node('CardShadow');
+        shadowNode.parent = this.dailySignPanel;
+        const shadowUT = shadowNode.addComponent(UITransform);
+        const sPad = 14;
+        shadowUT.setContentSize(cardW + sPad * 2, cardH + sPad * 2);
+        const shadowG = shadowNode.addComponent(Graphics);
+        shadowG.fillColor = new Color(0, 0, 0, 50);
+        shadowG.roundRect(-(cardW + sPad * 2) / 2, -(cardH + sPad * 2) / 2, cardW + sPad * 2, cardH + sPad * 2, 28 + sPad);
+        shadowG.fill();
+        shadowNode.addComponent(UIOpacity);
+        this.addWidget(shadowNode, { hCenter: 0, vCenter: 0 });
+
+        const card = new Node('Card');
+        card.parent = this.dailySignPanel;
+        const cardUT = card.addComponent(UITransform);
+        cardUT.setContentSize(cardW, cardH);
+        this.addWidget(card, { hCenter: 0, vCenter: 0 });
+        const cardG = card.addComponent(Graphics);
+        cardG.fillColor = this.COLOR_CARD.clone();
+        cardG.strokeColor = this.COLOR_CARD_BORDER.clone();
+        cardG.lineWidth = 2;
+        cardG.roundRect(-cardW / 2, -cardH / 2, cardW, cardH, 28);
+        cardG.fill();
+        cardG.stroke();
+
+        // ── 手动定位 ──
+        const padding = 32;
+        const spacing = 14;
+        const titleH = 50;
+        const cellW = 80;
+        const cellH = 110;
+        const cellGap = 6;
+        let cursorY = this.safeNum(cardH / 2 - padding, 258);
+
+        // Title
+        const titleLabel = this.createLabel(card, 'Title', '📅 每日签到', 40, this.COLOR_TITLE_WIN);
+        titleLabel.isBold = true;
+        const titleW = this.safeNum(cardW - 80, 560);
+        titleLabel.node.getComponent(UITransform)!.setContentSize(titleW, titleH);
+        titleLabel.overflow = Label.Overflow.SHRINK;
+        titleLabel.enableWrapText = false;
+        cursorY = this.safeNum(cursorY - titleH / 2, 0);
+        titleLabel.node.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - titleH / 2 - spacing, 0);
+
+        // 提示文案
+        const hintLabel = this.createLabel(card, 'Hint', '连续签到奖励递增，断签重置哦~', 22, this.COLOR_TEXT_MAIN);
+        hintLabel.node.getComponent(UITransform)!.setContentSize(this.safeNum(cardW - 80, 560), 28);
+        hintLabel.overflow = Label.Overflow.SHRINK;
+        cursorY = this.safeNum(cursorY - 14, 0);
+        hintLabel.node.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - 14 - spacing, 0);
+
+        // ── 7 格日历（两排：上3下4） ──
+        const rowW = this.safeNum(4 * cellW + 3 * cellGap, 338);
+        const topRow = new Node('TopRow');
+        topRow.parent = card;
+        topRow.addComponent(UITransform).setContentSize(this.safeNum(3 * cellW + 2 * cellGap, 252), cellH);
+        cursorY = this.safeNum(cursorY - cellH / 2, 0);
+        topRow.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - cellH / 2 - spacing, 0);
+
+        const topRowLayout = topRow.addComponent(Layout);
+        topRowLayout.type = Layout.Type.HORIZONTAL;
+        topRowLayout.spacingX = cellGap;
+        topRowLayout.horizontalDirection = Layout.HorizontalDirection.CENTER;
+        topRowLayout.verticalDirection = Layout.VerticalDirection.CENTER;
+        topRowLayout.resizeMode = Layout.ResizeMode.NONE;
+
+        const bottomRow = new Node('BottomRow');
+        bottomRow.parent = card;
+        bottomRow.addComponent(UITransform).setContentSize(rowW, cellH);
+        cursorY = this.safeNum(cursorY - cellH / 2, 0);
+        bottomRow.setPosition(0, cursorY, 0);
+        cursorY = this.safeNum(cursorY - cellH / 2 - spacing, 0);
+
+        const bottomRowLayout = bottomRow.addComponent(Layout);
+        bottomRowLayout.type = Layout.Type.HORIZONTAL;
+        bottomRowLayout.spacingX = cellGap;
+        bottomRowLayout.horizontalDirection = Layout.HorizontalDirection.CENTER;
+        bottomRowLayout.verticalDirection = Layout.VerticalDirection.CENTER;
+        bottomRowLayout.resizeMode = Layout.ResizeMode.NONE;
+
+        for (let i = 0; i < 7; i++) {
+            const parent = i < 3 ? topRow : bottomRow;
+            this.createSignCell(parent, i, cellW, cellH);
+        }
+
+        // ── 领取按钮 ──
+        this.dailySignClaimBtn = this.createRoundButton(card, 'ClaimBtn', '',
+            this.COLOR_BTN_AD, 440, 64, () => this.onSignClaim());
+        this.dailySignClaimLabel = this.dailySignClaimBtn.getChildByName('Label')?.getComponent(Label) ?? null;
+        const claimBtnY = this.safeNum(-cardH / 2 + 32 + 32, -226);
+        this.dailySignClaimBtn.setPosition(0, claimBtnY, 0);
+
+        // ── 关闭按钮 ──
+        const backBtn = this.createRoundButton(card, 'BackBtn', '关闭',
+            this.COLOR_BTN_GIVEUP, 440, 56, () => this.onDailySignClose(),
+            { ghost: true });
+        const backBtnY = this.safeNum(claimBtnY - 32 - 28, -286);
+        backBtn.setPosition(0, backBtnY, 0);
+
+        this.dailySignPanel.active = false;
+    }
+
+    /** R3: 创建单个签到格子 */
+    private createSignCell(parent: Node, dayIdx: number, w: number, h: number): void {
+        const node = new Node(`Day${dayIdx + 1}`);
+        node.parent = parent;
+        node.addComponent(UITransform).setContentSize(w, h);
+
+        const bgNode = new Node('Bg');
+        bgNode.parent = node;
+        bgNode.addComponent(UITransform).setContentSize(w, h);
+        const bg = bgNode.addComponent(Graphics);
+        bg.fillColor = new Color(0xF0, 0xF0, 0xF0, 180);
+        bg.roundRect(-w / 2, -h / 2, w, h, 10);
+        bg.fill();
+
+        // 天数标签
+        const dayNode = new Node('DayLabel');
+        dayNode.parent = node;
+        dayNode.addComponent(UITransform).setContentSize(w, 22);
+        dayNode.setPosition(0, h / 2 - 16, 0);
+        const dayLabel = dayNode.addComponent(Label);
+        dayLabel.string = `第${dayIdx + 1}天`;
+        dayLabel.fontSize = 16;
+        dayLabel.lineHeight = 20;
+        dayLabel.color = this.COLOR_HUD_TEXT.clone();
+        dayLabel.useSystemFont = true;
+        dayLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        dayLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        dayLabel.overflow = Label.Overflow.SHRINK;
+
+        // 奖励标签
+        const rewardNode = new Node('RewardLabel');
+        rewardNode.parent = node;
+        rewardNode.addComponent(UITransform).setContentSize(w, 40);
+        rewardNode.setPosition(0, 0, 0);
+        const rewardLabel = rewardNode.addComponent(Label);
+        const reward = GameManager.SIGN_REWARDS[dayIdx];
+        rewardLabel.string = `${reward.coins}🎲`;
+        rewardLabel.fontSize = 22;
+        rewardLabel.lineHeight = 26;
+        rewardLabel.color = this.COLOR_CHAPTER_GOLD.clone();
+        rewardLabel.useSystemFont = true;
+        rewardLabel.isBold = true;
+        rewardLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        rewardLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        rewardLabel.overflow = Label.Overflow.SHRINK;
+
+        // 状态标签
+        const statusNode = new Node('StatusLabel');
+        statusNode.parent = node;
+        statusNode.addComponent(UITransform).setContentSize(w, 20);
+        statusNode.setPosition(0, -h / 2 + 14, 0);
+        const statusLabel = statusNode.addComponent(Label);
+        statusLabel.string = '';
+        statusLabel.fontSize = 14;
+        statusLabel.lineHeight = 18;
+        statusLabel.color = this.COLOR_TEXT_MAIN.clone();
+        statusLabel.useSystemFont = true;
+        statusLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+        statusLabel.verticalAlign = Label.VerticalAlign.CENTER;
+        statusLabel.overflow = Label.Overflow.SHRINK;
+
+        // 第7天额外奖励
+        if (reward.extra) {
+            const extraNode = new Node('ExtraLabel');
+            extraNode.parent = node;
+            extraNode.addComponent(UITransform).setContentSize(w, 18);
+            extraNode.setPosition(0, -h / 2 + 32, 0);
+            const extraLabel = extraNode.addComponent(Label);
+            extraLabel.string = reward.extra;
+            extraLabel.fontSize = 12;
+            extraLabel.lineHeight = 16;
+            extraLabel.color = this.COLOR_BTN_AD.clone();
+            extraLabel.useSystemFont = true;
+            extraLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            extraLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            extraLabel.overflow = Label.Overflow.SHRINK;
+        }
+
+        this.dailySignCells.push({ node, bg, dayLabel, rewardLabel, statusLabel });
+    }
+
+    /** R3: 刷新签到格子三态 + 领取按钮 */
+    private refreshDailySignPanel(): void {
+        const signData = SaveManager.inst.getSignData();
+        const today = this.getTodayStr();
+        const signedToday = signData.lastDate === today;
+        const todayStreak = this.calcTodayStreak();
+
+        for (let i = 0; i < 7; i++) {
+            const cell = this.dailySignCells[i];
+            if (!cell) continue;
+            const dayNum = i + 1; // 第1~7天
+
+            if (signedToday) {
+                // 今天已签
+                if (dayNum <= signData.streak) {
+                    // 已领
+                    cell.bg.clear();
+                    cell.bg.fillColor = new Color(0xE0, 0xE0, 0xE0, 150);
+                    cell.bg.roundRect(-40, -55, 80, 110, 10);
+                    cell.bg.fill();
+                    cell.statusLabel.string = '✓';
+                    cell.statusLabel.color = this.COLOR_BTN_PRIMARY.clone();
+                    cell.rewardLabel.color = new Color(0x99, 0x99, 0x99);
+                } else {
+                    // 未来
+                    cell.bg.clear();
+                    cell.bg.fillColor = new Color(0xF0, 0xF0, 0xF0, 100);
+                    cell.bg.roundRect(-40, -55, 80, 110, 10);
+                    cell.bg.fill();
+                    cell.statusLabel.string = '';
+                    cell.rewardLabel.color = new Color(0x99, 0x99, 0x99);
+                }
+            } else {
+                // 今天未签
+                if (dayNum < todayStreak) {
+                    // 已领
+                    cell.bg.clear();
+                    cell.bg.fillColor = new Color(0xE0, 0xE0, 0xE0, 150);
+                    cell.bg.roundRect(-40, -55, 80, 110, 10);
+                    cell.bg.fill();
+                    cell.statusLabel.string = '✓';
+                    cell.statusLabel.color = this.COLOR_BTN_PRIMARY.clone();
+                    cell.rewardLabel.color = new Color(0x99, 0x99, 0x99);
+                } else if (dayNum === todayStreak) {
+                    // 今日可领
+                    cell.bg.clear();
+                    cell.bg.fillColor = this.COLOR_CHAPTER_GOLD.clone();
+                    cell.bg.roundRect(-40, -55, 80, 110, 10);
+                    cell.bg.fill();
+                    cell.statusLabel.string = '今日';
+                    cell.statusLabel.color = Color.WHITE.clone();
+                    cell.rewardLabel.color = Color.WHITE.clone();
+                    cell.dayLabel.color = Color.WHITE.clone();
+                } else {
+                    // 未来
+                    cell.bg.clear();
+                    cell.bg.fillColor = new Color(0xF0, 0xF0, 0xF0, 100);
+                    cell.bg.roundRect(-40, -55, 80, 110, 10);
+                    cell.bg.fill();
+                    cell.statusLabel.string = '';
+                    cell.rewardLabel.color = new Color(0x99, 0x99, 0x99);
+                }
+            }
+        }
+
+        // 刷新领取按钮
+        if (this.dailySignClaimBtn && this.dailySignClaimLabel) {
+            const btn = this.dailySignClaimBtn.getComponent(Button);
+            if (signedToday) {
+                this.dailySignClaimLabel.string = '今日已签 ✓';
+                if (btn) btn.interactable = false;
+            } else {
+                const reward = GameManager.SIGN_REWARDS[todayStreak - 1];
+                this.dailySignClaimLabel.string = `领取 ${reward.coins}🎲${reward.extra ? ' ' + reward.extra : ''}`;
+                if (btn) btn.interactable = true;
+            }
+        }
+    }
+
+    /** R3: 显示签到面板 */
+    private showDailySignPanel(): void {
+        if (!this.dailySignPanel) return;
+        this.refreshDailySignPanel();
+        this.showPanel(this.dailySignPanel);
+        this.gameClubEntry?.hide();
+    }
+
+    /** R3: 关闭签到面板 */
+    private onDailySignClose(): void {
+        this.hidePanel(this.dailySignPanel);
+        this.showLevelSelectPanel();
+    }
+
+    /** R3: 领取签到奖励 */
+    private onSignClaim(): void {
+        if (this.isSignedToday()) return; // 同天不可重领
+
+        const todayStreak = this.calcTodayStreak();
+        const signData = SaveManager.inst.getSignData();
+        const reward = GameManager.SIGN_REWARDS[todayStreak - 1];
+        const today = this.getTodayStr();
+
+        // 发金币
+        const coins = this.safeNum(reward.coins, 20);
+        SaveManager.inst.addCoins(coins);
+
+        // 第7天额外发等值金币占位（100币 = 1次抽卡券等值）
+        if (todayStreak === 7 && reward.extra) {
+            SaveManager.inst.addCoins(100); // 占位：等值1次免费单抽
+        }
+
+        // 写签到数据
+        const newTotal = this.safeNum(signData.total, 0) + 1;
+        SaveManager.inst.writeSignData(todayStreak, today, newTotal);
+
+        console.log(`[Sign] 签到成功: 第${todayStreak}天, +${coins}🎲, total=${newTotal}`);
+
+        // 刷新面板
+        this.refreshDailySignPanel();
     }
 }
