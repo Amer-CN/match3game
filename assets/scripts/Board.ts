@@ -1077,8 +1077,8 @@ this.callbacks.onSpecialDetonated?.();
 // 激活 juice：放大爆裂 + 粒子 + 震动 + 音效
 // T5: 彩球组合传入真实目标格 + isFullBoardClear
 const specialVisualTargets = (isColor(sa) || isColor(sb)) ? cells : undefined;
-this.playSpecialBurst(a.row, a.col, sa, specialVisualTargets, isFullBoardClear);
-this.playSpecialBurst(b.row, b.col, sb, specialVisualTargets, isFullBoardClear);
+this.playSpecialBurst(a.row, a.col, sa, specialVisualTargets, isFullBoardClear, true);
+this.playSpecialBurst(b.row, b.col, sb, specialVisualTargets, isFullBoardClear, false);
 // 移除视觉层（tile 即将被 destroyCellSet 销毁，提前清视觉避免残留闪烁）
 const tileA = this.tiles[a.row]?.[a.col];
 const tileB = this.tiles[b.row]?.[b.col];
@@ -2344,6 +2344,7 @@ return { cells, waveSeeds, isFullBoardClear: false };
         special: SpecialType,
         visualTargets?: Set<string>,
         isFullBoardClear: boolean = false,
+        isPrimaryFullClear: boolean = true,
     ): void {
         if (special === SpecialType.NONE) return;
         const pos = this.tileToLocalPosition(row, col);
@@ -2356,6 +2357,9 @@ return { cells, waveSeeds, isFullBoardClear: false };
         const isLine = special === SpecialType.LINE_H || special === SpecialType.LINE_V;
         const overlayScale = isColorBomb ? 0.9 : 0.85;
         const overlaySize = safeTs * overlayScale;
+        // T5.1: 区分主爆点与副爆点
+        const isSecondaryFullClear = isFullBoardClear && !isPrimaryFullClear;
+        const playFullGlobal = isFullBoardClear && isPrimaryFullClear;
 
         // 1. fxOverlay 闪光放大（特效层临时 Sprite，0.2s 放大+消失）
         const frame = this.getSpecialFrame(special);
@@ -2388,7 +2392,12 @@ return { cells, waveSeeds, isFullBoardClear: false };
 
         // T3: 冲击波环（线消/炸弹用单环，彩球用多重冲击波）
         if (isColorBomb) {
-            this.spawnColorBombShockwaves(pos, safeTs, effectsLayer, isFullBoardClear);
+            if (isSecondaryFullClear) {
+                // T5.1: 副爆点只使用普通单环
+                this.spawnShockwaveRing(pos, special, safeTs, effectsLayer);
+            } else {
+                this.spawnColorBombShockwaves(pos, safeTs, effectsLayer, playFullGlobal);
+            }
         } else {
             this.spawnShockwaveRing(pos, special, safeTs, effectsLayer);
         }
@@ -2400,22 +2409,23 @@ return { cells, waveSeeds, isFullBoardClear: false };
             this.spawnLineBeam(row, col, false, effectsLayer);
         }
 
-        // T3: 彩球连线
-        if (isColorBomb) {
-            this.spawnColorBombRays(pos, effectsLayer, visualTargets, isFullBoardClear);
+        // T3: 彩球连线（T5.1: 只由主爆点生成全盘连线）
+        if (isColorBomb && !isSecondaryFullClear) {
+            this.spawnColorBombRays(row, col, pos, effectsLayer, visualTargets, isFullBoardClear);
         }
 
         // 2. T3/T5 增强粒子爆发
         // T5: 彩球加量——普通 24颗/0.85s，全屏 33颗两批/1.1s
-        const particleCount = isFullBoardClear ? 33 : isColorBomb ? 24 : isBomb ? 14 : 12;
+        // T5.1: 副爆点只生成局部 14颗粒子
+        const particleCount = isSecondaryFullClear ? 14 : isFullBoardClear ? 33 : isColorBomb ? 24 : isBomb ? 14 : 12;
         const particleColors: Color[] = isColorBomb
             ? Board.COLORS.map(c => c.clone())
             : isBomb
                 ? [new Color(0xFF, 0xA5, 0x00), new Color(0xFF, 0xD7, 0x00), new Color(0xFF, 0x8C, 0x00)]
                 : [new Color(255, 255, 255)];
-        const particleDist = isColorBomb ? 95 : 60;
-        const particleLife = isColorBomb ? 0.85 : 0.45;
-        const batchDelay = (isColorBomb && isFullBoardClear) ? 0.2 : 0;
+        const particleDist = isColorBomb ? (isSecondaryFullClear ? 60 : 95) : 60;
+        const particleLife = isColorBomb ? (isSecondaryFullClear ? 0.45 : 0.85) : 0.45;
+        const batchDelay = (playFullGlobal) ? 0.2 : 0;
         for (let i = 0; i < particleCount; i++) {
             const p = new Node('particle');
             p.parent = effectsLayer;
@@ -2436,15 +2446,16 @@ return { cells, waveSeeds, isFullBoardClear: false };
             const dy = Math.sin(angle) * dist;
             const pOp = p.addComponent(UIOpacity);
             pOp.opacity = 255;
-            // T5: 全屏清除分两批，第二批延迟 0.2s
-            const thisDelay = (isFullBoardClear && i >= Math.floor(particleCount / 2)) ? batchDelay : 0;
+            // T5: 全屏清除分两批，第二批延迟 0.2s（T5.1: 仅主爆点分批）
+            const thisDelay = (playFullGlobal && i >= Math.floor(particleCount / 2)) ? batchDelay : 0;
             tween(p)
                 .delay(thisDelay)
                 .to(particleLife, { position: new Vec3(pos.x + dx, pos.y + dy, 0) }, { easing: 'quadOut' })
                 .start();
+            // T5.1: 修复粒子提前销毁——延迟 0.6×life + 缩小 0.4×life = 总 life
             tween(p)
-                .delay(thisDelay + particleLife * 0.4)
-                .to(particleLife * 0.3, { scale: new Vec3(0, 0, 1) })
+                .delay(thisDelay + particleLife * 0.6)
+                .to(particleLife * 0.4, { scale: new Vec3(0, 0, 1) })
                 .call(() => { if (p.isValid) p.destroy(); })
                 .start();
             tween(pOp)
@@ -2453,34 +2464,35 @@ return { cells, waveSeeds, isFullBoardClear: false };
                 .start();
         }
 
-        // T1: 冲击闪光
+        // T1: 冲击闪光（T5.1: 副爆点不执行全屏闪光）
         if (isLine) this.impactFlash('line');
         else if (isBomb) this.impactFlash('bomb');
-        else if (isColorBomb) this.impactFlash('color', isFullBoardClear);
+        else if (isColorBomb && !isSecondaryFullClear) this.impactFlash('color', playFullGlobal);
 
-        // T5: 全屏清除稀有提示
-        if (isFullBoardClear) {
+        // T5: 全屏清除稀有提示（T5.1: 只由主爆点创建一次）
+        if (playFullGlobal) {
             this.spawnFullClearLabel();
         }
 
-        // T1: 强震屏（按类型分级）
-        if (isColorBomb) this.shakeBoard(20);
+        // T1: 强震屏（按类型分级）（T5.1: 副爆点不重复全局强震）
+        if (isColorBomb && !isSecondaryFullClear) this.shakeBoard(20);
         else if (isBomb) this.shakeBoard(14);
         else if (isLine) this.shakeBoard(8);
 
         // T1: 顿帧时长存入 _pendingHitstop（取最大值，async 链中 await）
-        if (isColorBomb) this._pendingHitstop = Math.max(this._pendingHitstop, 150);
+        if (isColorBomb && !isSecondaryFullClear) this._pendingHitstop = Math.max(this._pendingHitstop, 150);
         else if (isBomb) this._pendingHitstop = Math.max(this._pendingHitstop, 110);
         else if (isLine) this._pendingHitstop = Math.max(this._pendingHitstop, 60);
 
-        // T2: 震动力度分层（线消/炸弹→heavy、彩球→long）
-        if (isColorBomb) VibrateManager.inst?.long();
+        // T2: 震动力度分层（线消/炸弹→heavy、彩球→long）（T5.1: 副爆点不重复 long 震动）
+        if (isColorBomb && !isSecondaryFullClear) VibrateManager.inst?.long();
         else if (isBomb || isLine) VibrateManager.inst?.heavy();
 
         // 4. 音效（T2: AudioManager 内部已做差异化降级+音量加成）
+        // T5.1: 彩球+彩球副爆点不重复播放音效
         if (isLine) AudioManager.inst?.playSpecialLine();
         else if (isBomb) AudioManager.inst?.playSpecialBomb();
-        else if (isColorBomb) AudioManager.inst?.playSpecialColorBomb();
+        else if (isColorBomb && !isSecondaryFullClear) AudioManager.inst?.playSpecialColorBomb();
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -2745,13 +2757,15 @@ return { cells, waveSeeds, isFullBoardClear: false };
         } catch (e) { /* ignore */ }
     }
 
-    /** T5: 彩球专属多重冲击波 — 3 层环逐层扩散，粉/金/淡紫 */
-    private spawnColorBombShockwaves(pos: Vec3, ts: number, layer: Node, isFullBoardClear: boolean): void {
+    /** T5: 彩球专属多重冲击波 — 3 层环逐层扩散，粉/金/淡紫
+     *  T5.1: playFullGlobal 控制全屏主爆点时第三环半径略增 */
+    private spawnColorBombShockwaves(pos: Vec3, ts: number, layer: Node, playFullGlobal: boolean): void {
         try {
+            const ring3MaxR = playFullGlobal ? ts * 2.8 : ts * 2.4;
             const rings = [
                 { delay: 0,    duration: 0.65, maxR: ts * 1.6, color: new Color(0xFF, 0xB3, 0xCC, 180), lw: 5 },
                 { delay: 0.16, duration: 0.70, maxR: ts * 2.0, color: new Color(0xFF, 0xD7, 0x00, 150), lw: 4 },
-                { delay: 0.32, duration: 0.75, maxR: ts * 2.4, color: new Color(0xB5, 0x83, 0xE0, 130), lw: 4 },
+                { delay: 0.32, duration: 0.75, maxR: ring3MaxR, color: new Color(0xB5, 0x83, 0xE0, 130), lw: 4 },
             ];
             for (const ring of rings) {
                 const safeMaxR = (isFinite(ring.maxR) && ring.maxR > 0) ? ring.maxR : ts * 1.6;
@@ -2832,7 +2846,7 @@ return { cells, waveSeeds, isFullBoardClear: false };
             ut.setContentSize(400, 100);
 
             const label = labelNode.addComponent(Label);
-            label.string = '\u{1F308} \u5168\u5C4F\u6E05\u9664\uFF01';
+            label.string = '🌈 全屏清除！';
             label.fontSize = 48;
             label.lineHeight = Math.round(48 * 1.15);
             label.isBold = true;
@@ -2916,6 +2930,8 @@ return { cells, waveSeeds, isFullBoardClear: false };
 
     /** T3/T5: 彩球连线 — 从中心向目标格画渐隐光线，按距离分批出现 */
     private spawnColorBombRays(
+        originRow: number,
+        originCol: number,
         pos: Vec3,
         layer: Node,
         targetCells?: Set<string>,
@@ -2933,8 +2949,7 @@ return { cells, waveSeeds, isFullBoardClear: false };
                     if (!isFinite(r) || !isFinite(c)) continue;
                     if (r < 0 || r >= ROWS || c < 0 || c >= COLS) continue;
                     // 过滤彩球中心自身
-                    const cellPos = this.tileToLocalPosition(r, c);
-                    if (Math.abs(cellPos.x - pos.x) < 1 && Math.abs(cellPos.y - pos.y) < 1) continue;
+                    if (r === originRow && c === originCol) continue;
                     targets.push({ r, c });
                 }
             } else {
@@ -2943,6 +2958,7 @@ return { cells, waveSeeds, isFullBoardClear: false };
                 for (let r = 0; r < ROWS; r++) {
                     for (let c = 0; c < COLS; c++) {
                         if (this.grid[r] && this.grid[r][c] === targetColor) {
+                            if (r === originRow && c === originCol) continue;
                             targets.push({ r, c });
                         }
                     }
@@ -2951,13 +2967,13 @@ return { cells, waveSeeds, isFullBoardClear: false };
 
             if (targets.length === 0) return;
 
-            // T5: 按 Manhattan distance 排序
-            const centerRow = Math.round((ROWS - 1) / 2);
-            const centerCol = Math.round((COLS - 1) / 2);
+            // T5.1: 按真实彩球原点的 Manhattan distance 排序
             targets.sort((a, b) => {
-                const da = Math.abs(a.r - centerRow) + Math.abs(a.c - centerCol);
-                const db = Math.abs(b.r - centerRow) + Math.abs(b.c - centerCol);
-                return da - db;
+                const da = Math.abs(a.r - originRow) + Math.abs(a.c - originCol);
+                const db = Math.abs(b.r - originRow) + Math.abs(b.c - originCol);
+                if (da !== db) return da - db;
+                if (a.r !== b.r) return a.r - b.r;
+                return a.c - b.c;
             });
 
             // T5: 分批出现——每层延迟约 50ms
