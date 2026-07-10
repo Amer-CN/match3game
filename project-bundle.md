@@ -2612,7 +2612,7 @@ export class GameManager extends Component {
         ut.setContentSize(pw, 80);
 
         const label = tutorialNode.addComponent(Label);
-        label.string = '🧊 消除冰格旁的方块可击碎冰层！双层冰需要消除两次';
+        label.string = '🧊 消除冰层覆盖的萌宠即可破冰，双层冰需要命中两次！';
         label.fontSize = 24;
         label.lineHeight = 28;
         label.color = new Color(0x33, 0x66, 0xAA);
@@ -7835,7 +7835,7 @@ export class Board extends Component {
         // 头像未加载完时暂存请求
         if (!this.framesReady) {
             this.pendingColorCount = colorCount;
-            this.pendingIceConfig = iceConfig.length > 0 ? iceConfig : null;
+            this.pendingIceConfig = iceConfig.length > 0 ? iceConfig.map(item => ({ ...item })) : null;
             return;
         }
 
@@ -7883,20 +7883,30 @@ export class Board extends Component {
 
     /** U1: 规范化冰层配置 — 去重、越界裁剪、layers 范围限制 */
     private normalizeIceConfig(raw: IceCellConfig[]): IceCellConfig[] {
-        if (!raw || raw.length === 0) return [];
-        const seen = new Set<string>();
-        const result: IceCellConfig[] = [];
+        if (!Array.isArray(raw) || raw.length === 0) return [];
+        const merged = new Map<string, IceCellConfig>();
         for (const item of raw) {
+            if (!item || typeof item !== 'object') continue;
+            // row/col 必须是有限数字
+            if (typeof item.row !== 'number' || !isFinite(item.row)) continue;
+            if (typeof item.col !== 'number' || !isFinite(item.col)) continue;
             const r = Math.floor(item.row);
             const c = Math.floor(item.col);
             if (r < 0 || r >= Board.ROWS || c < 0 || c >= Board.COLS) continue;
-            const layers = Math.max(1, Math.min(2, Math.floor(item.layers)));
+            // layers 非有限数字时回退 1
+            let layers: number;
+            if (typeof item.layers === 'number' && isFinite(item.layers)) {
+                layers = Math.max(1, Math.min(2, Math.floor(item.layers)));
+            } else {
+                layers = 1;
+            }
             const key = `${r},${c}`;
-            if (seen.has(key)) continue;
-            seen.add(key);
-            result.push({ row: r, col: c, layers });
+            const old = merged.get(key);
+            if (!old || layers > old.layers) {
+                merged.set(key, { row: r, col: c, layers });
+            }
         }
-        return result;
+        return Array.from(merged.values());
     }
 
     /** U1: 清理所有冰层视觉节点 */
@@ -10326,11 +10336,14 @@ return { cells, waveSeeds, isFullBoardClear: false };
             const node = this.iceNodes[row]?.[col] ?? null;
             if (node && node.isValid) {
                 this.scheduleOnce(() => {
-                    if (node && node.isValid) {
+                    if (node.isValid) {
                         Tween.stopAllByTarget(node);
                         node.destroy();
                     }
-                    if (this.iceNodes[row]) this.iceNodes[row][col] = null;
+                    // 只有矩阵里仍然是当时那个旧节点时才清引用
+                    if (this.iceNodes[row]?.[col] === node) {
+                        this.iceNodes[row][col] = null;
+                    }
                 }, 0.35);
             }
         } else {
