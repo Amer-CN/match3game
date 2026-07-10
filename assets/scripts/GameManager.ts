@@ -138,8 +138,8 @@ export class GameManager extends Component {
         { level: 11, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 2600, moves: 24, colors: 6 },
         { level: 12, chapter: 3, isBoss: false, goalType: 'collect', goalColor: ['mon_purple', 'orange'], goalCount: [25, 25], moves: 20, colors: 6 },
         { level: 13, chapter: 3, isBoss: false, goalType: 'special', specialCount: 5, moves: 20, colors: 6 },
-        { level: 14, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 3800, moves: 18, colors: 6 },
-        { level: 15, chapter: 3, isBoss: true,  goalType: 'score',   targetScore: 4800, moves: 18, colors: 6 },
+        { level: 14, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 3200, moves: 22, colors: 6 },
+        { level: 15, chapter: 3, isBoss: true,  goalType: 'score',   targetScore: 4000, moves: 22, colors: 6 },
         // —— 第 4 章：新篇 · 冰层障碍（6 色）——
         // U1: L16 冰层入门 — 清除 8 格单层冰
         { level: 16, chapter: 4, isBoss: false, goalType: 'ice', iceTarget: 8, moves: 24, colors: 6,
@@ -399,6 +399,14 @@ export class GameManager extends Component {
     private hammerSelecting = false;
     private boosterBusy = false;
     private hammerHintLabel: Label | null = null;
+
+    // ── X0: 广告续步限次 ─────────────────────────
+    private continueAdUsed = false;
+    private continueAdPending = false;
+    private stepsAdBtn: Node | null = null;
+    private stepsAdLabel: Label | null = null;
+    /** X0: 关卡挑战 token — 每次 startLevel 递增，防止旧广告回调污染新关卡 */
+    private levelRunToken = 0;
 
     // ── 游戏背景层（章节主题色） ─────────────────
     private gameBgNode: Node | null = null;
@@ -964,6 +972,11 @@ export class GameManager extends Component {
         this.hammerSelecting = false;
         this.boosterBusy = false;
         this.board?.cancelHammerMode();
+
+        // X0: 重置广告续步状态 + 关卡 token
+        this.continueAdUsed = false;
+        this.continueAdPending = false;
+        this.levelRunToken++;
 
         this.hidePanel(this.resultPanel);
         this.hidePanel(this.stepsPanel);
@@ -1645,6 +1658,8 @@ export class GameManager extends Component {
     private showStepsPanel(): void {
         // 确保与暂停弹层互斥
         this.hidePanel(this.pausePanel);
+        // X0: 刷新广告按钮状态（已用/加载中/可用）
+        this.updateStepsAdState();
         this.showPanel(this.stepsPanel, true);
         // 步数耗尽弹层 → 显示游戏圈按钮
         this.gameClubEntry?.show();
@@ -1653,21 +1668,91 @@ export class GameManager extends Component {
         console.log('[GameManager] 步数耗尽弹层');
     }
 
+    /** X0: 刷新步数耗尽弹层的广告按钮状态 */
+    private updateStepsAdState(): void {
+        if (!this.stepsAdBtn || !this.stepsAdBtn.isValid) return;
+        const button = this.stepsAdBtn.getComponent(Button);
+        if (!button) return;
+
+        if (this.continueAdUsed) {
+            button.interactable = false;
+            if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
+                this.stepsAdLabel.string = '本局续步机会已使用';
+            }
+        } else if (this.continueAdPending) {
+            button.interactable = false;
+            if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
+                this.stepsAdLabel.string = '广告加载中…';
+            }
+        } else {
+            button.interactable = true;
+            if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
+                this.stepsAdLabel.string = '▶  看广告 +5 步';
+            }
+        }
+    }
+
     private onStepsAdClick(): void {
+        // X0: 入口保护 — 已用 / 进行中 / 弹层未开
+        if (this.continueAdUsed) {
+            console.log('[GameManager] 本局续步广告已使用，拒绝重复请求');
+            this.updateStepsAdState();
+            return;
+        }
+        if (this.continueAdPending) {
+            console.log('[GameManager] 续步广告请求进行中，忽略重复点击');
+            return;
+        }
+        if (!this.stepsPanel?.active) {
+            console.log('[GameManager] 步数弹层未开启，拒绝续步广告');
+            return;
+        }
+
+        this.continueAdPending = true;
+        this.updateStepsAdState();
+
+        const token = this.levelRunToken;
+
         AdManager.getInstance().showRewardedAd(
             () => {
+                // X0: 旧关卡回调 → 丢弃
+                if (token !== this.levelRunToken) {
+                    console.log('[GameManager] 忽略旧关卡续步广告回调');
+                    return;
+                }
+                // X0: 防重复发奖
+                if (this.continueAdUsed) {
+                    this.continueAdPending = false;
+                    this.updateStepsAdState();
+                    console.warn('[GameManager] 续步广告重复成功回调，已阻止重复发奖');
+                    return;
+                }
+                this.continueAdUsed = true;
+                this.continueAdPending = false;
+
                 // ✓ 发奖：+5 步、关闭弹层、继续本关
                 this.currentSteps += 5;
                 this.updateHUD();
+                this.updateStepsAdState();
+
                 this.hidePanel(this.stepsPanel);
                 this.board?.setBusy(false);
                 // 回到游戏 → 隐藏游戏圈按钮
                 this.gameClubEntry?.hide();
-                console.log(`[GameManager] 广告奖励 — +5 步！当前步数: ${this.currentSteps}`);
+
+                console.log(
+                    `[GameManager] 本局唯一续步广告发奖：+5 步，当前步数=${this.currentSteps}`,
+                );
             },
             () => {
-                // ✗ 未看完：弹层保持，用户可再试或放弃
-                console.log('[GameManager] 广告未看完，步数弹层保持');
+                // X0: 旧关卡回调 → 丢弃
+                if (token !== this.levelRunToken) {
+                    console.log('[GameManager] 忽略旧关卡续步广告失败回调');
+                    return;
+                }
+                this.continueAdPending = false;
+                this.updateStepsAdState();
+                console.log('[GameManager] 广告未完成，本局续步机会未消耗');
             },
         );
     }
@@ -2174,8 +2259,10 @@ export class GameManager extends Component {
         msgLabel.enableWrapText = false;
 
         // 广告按钮（暖金高亮实心）
-        this.createRoundButton(card, 'AdBtn', '▶  看广告 +5 步',
+        this.stepsAdBtn = this.createRoundButton(card, 'AdBtn', '▶  看广告 +5 步',
             this.COLOR_BTN_AD, 440, 94, () => this.onStepsAdClick());
+        this.stepsAdLabel =
+            this.stepsAdBtn.getChildByName('Label')?.getComponent(Label) ?? null;
 
         // 放弃按钮（幽灵按钮：透明底 + 描边）
         this.createRoundButton(card, 'GiveUpBtn', '放弃·去结算',
