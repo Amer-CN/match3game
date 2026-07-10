@@ -75,6 +75,13 @@ export interface IceCellConfig {
     layers: number;  // 1=单层冰, 2=双层冰
 }
 
+/** V: 木箱/包装箱障碍配置（单格） */
+export interface CrateCellConfig {
+    row: number;
+    col: number;
+    layers: number; // 1=单层木箱, 2=双层木箱
+}
+
 /** 一组匹配（连续同色） */
 interface MatchGroup {
     cells: Array<{ row: number; col: number }>;
@@ -110,6 +117,10 @@ export interface BoardCallbacks {
     onIceDamaged?: (row: number, col: number, layersRemaining: number) => void;
     /** U1: 冰层完全清除（某一格的冰层归零） */
     onIceCleared?: (row: number, col: number) => void;
+    /** V: 木箱被击破一层（layersRemaining > 0 表示仍有残余） */
+    onCrateDamaged?: (row: number, col: number, layersRemaining: number) => void;
+    /** V: 木箱完全清除（某一格的木箱归零） */
+    onCrateCleared?: (row: number, col: number) => void;
 }
 
 @ccclass('Board')
@@ -201,6 +212,11 @@ export class Board extends Component {
     private iceLayers: number[][] = [];
     /** 冰层视觉节点矩阵（与 iceLayers 对应，null=无节点） */
     private iceNodes: Array<Array<Node | null>> = [];
+    // ── V: 木箱障碍 ──────────────────────────
+    /** 木箱层数据矩阵：0=无木箱, 1=单层, 2=双层 */
+    private crateLayers: number[][] = [];
+    /** 木箱视觉节点矩阵（与 crateLayers 对应，null=无节点） */
+    private crateNodes: Array<Array<Node | null>> = [];
     /** 冰层专用渲染层（在方块之上、特效层之下） */
     private _obstacleLayer: Node | null = null;
     private whiteFrame: SpriteFrame | null = null;
@@ -223,6 +239,8 @@ export class Board extends Component {
     private pendingColorCount: number | null = null;
     /** U1: 加载期间暂存的冰层配置 */
     private pendingIceConfig: IceCellConfig[] | null = null;
+    /** V: 加载期间暂存的木箱配置 */
+    private pendingCrateConfig: CrateCellConfig[] | null = null;
 
     /** 当前关卡使用的颜色种类数 */
     private colorCount: number = 5;
@@ -365,9 +383,11 @@ export class Board extends Component {
         if (this.pendingColorCount !== null) {
             const cc = this.pendingColorCount;
             const ice = this.pendingIceConfig;
+            const crate = this.pendingCrateConfig;
             this.pendingColorCount = null;
             this.pendingIceConfig = null;
-            this.resetBoard(cc, ice ?? []);
+            this.pendingCrateConfig = null;
+            this.resetBoard(cc, ice ?? [], crate ?? []);
         }
     }
 
@@ -381,16 +401,23 @@ export class Board extends Component {
     }
 
     /** 重置棋盘：销毁所有方块，用新的颜色种类数重新生成 */
-    public resetBoard(colorCount: number, iceConfig: IceCellConfig[] = []): void {
+    public resetBoard(colorCount: number, iceConfig: IceCellConfig[] = [], crateConfig: CrateCellConfig[] = []): void {
         // 头像未加载完时暂存请求
         if (!this.framesReady) {
             this.pendingColorCount = colorCount;
             this.pendingIceConfig = iceConfig.length > 0 ? iceConfig.map(item => ({ ...item })) : null;
+            this.pendingCrateConfig = crateConfig.length > 0 ? crateConfig.map(item => ({ ...item })) : null;
             return;
         }
 
         // U1: 规范化冰层配置
         const safeIce = this.normalizeIceConfig(iceConfig);
+        // V: 规范化木箱配置
+        const safeCrate = this.normalizeCrateConfig(crateConfig);
+        // V: 冰层和木箱不能叠在同一格 — crate 优先，同格 ice 忽略
+        const crateMap = new Map<string, number>();
+        for (const cr of safeCrate) crateMap.set(`${cr.row},${cr.col}`, cr.layers);
+        const filteredIce = safeIce.filter(ic => !crateMap.has(`${ic.row},${ic.col}`));
 
         // 停止所有 tween
         for (let r = 0; r < Board.ROWS; r++) {
@@ -405,6 +432,8 @@ export class Board extends Component {
 
         // U1: 清理旧冰层视觉
         this.clearIceVisuals();
+        // V: 清理旧木箱视觉
+        this.clearCrateVisuals();
 
         this.grid = [];
         this.tiles = [];
@@ -423,13 +452,17 @@ export class Board extends Component {
         this.colorCount = Math.min(colorCount, Board.COLORS.length);
 
         // U1: 初始化冰层数据矩阵（在 generateBoard 之前设置，供其读取）
-        this._pendingIceInit = safeIce;
+        this._pendingIceInit = filteredIce;
+        // V: 初始化木箱数据矩阵（在 generateBoard 之前设置，供其读取）
+        this._pendingCrateInit = safeCrate;
 
         this.generateBoard();
     }
 
     /** U1: 暂存的冰层初始化配置（generateBoard 读取后清空） */
     private _pendingIceInit: IceCellConfig[] = [];
+    /** V: 暂存的木箱初始化配置（generateBoard 读取后清空） */
+    private _pendingCrateInit: CrateCellConfig[] = [];
 
     /** U1: 规范化冰层配置 — 去重、越界裁剪、layers 范围限制 */
     private normalizeIceConfig(raw: IceCellConfig[]): IceCellConfig[] {
@@ -457,6 +490,51 @@ export class Board extends Component {
             }
         }
         return Array.from(merged.values());
+    }
+
+    /** V: 规范化木箱配置 — 去重、越界裁剪、layers 范围限制（同冰层逻辑） */
+    private normalizeCrateConfig(raw: CrateCellConfig[]): CrateCellConfig[] {
+        if (!Array.isArray(raw) || raw.length === 0) return [];
+        const merged = new Map<string, CrateCellConfig>();
+        for (const item of raw) {
+            if (!item || typeof item !== 'object') continue;
+            if (typeof item.row !== 'number' || !isFinite(item.row)) continue;
+            if (typeof item.col !== 'number' || !isFinite(item.col)) continue;
+            const r = Math.floor(item.row);
+            const c = Math.floor(item.col);
+            if (r < 0 || r >= Board.ROWS || c < 0 || c >= Board.COLS) continue;
+            let layers: number;
+            if (typeof item.layers === 'number' && isFinite(item.layers)) {
+                layers = Math.max(1, Math.min(2, Math.floor(item.layers)));
+            } else {
+                layers = 1;
+            }
+            const key = `${r},${c}`;
+            const old = merged.get(key);
+            if (!old || layers > old.layers) {
+                merged.set(key, { row: r, col: c, layers });
+            }
+        }
+        return Array.from(merged.values());
+    }
+
+    /** V: 清理所有木箱视觉节点 */
+    private clearCrateVisuals(): void {
+        if (this.crateNodes) {
+            for (let r = 0; r < this.crateNodes.length; r++) {
+                if (!this.crateNodes[r]) continue;
+                for (let c = 0; c < this.crateNodes[r].length; c++) {
+                    const node = this.crateNodes[r][c];
+                    if (node && node.isValid) {
+                        Tween.stopAllByTarget(node);
+                        node.destroy();
+                    }
+                    this.crateNodes[r][c] = null;
+                }
+            }
+        }
+        this.crateLayers = [];
+        this.crateNodes = [];
     }
 
     /** U1: 清理所有冰层视觉节点 */
@@ -522,6 +600,34 @@ export class Board extends Component {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
+    //  V: 木箱障碍 — 公开只读接口 + 工具方法
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** V: 获取仍有木箱的格子数量 */
+    public getRemainingCrateCells(): number {
+        let count = 0;
+        for (let r = 0; r < Board.ROWS; r++) {
+            if (!this.crateLayers[r]) continue;
+            for (let c = 0; c < Board.COLS; c++) {
+                if (this.crateLayers[r][c] > 0) count++;
+            }
+        }
+        return count;
+    }
+
+    /** V: 当前格是否有木箱 */
+    private hasCrateAt(row: number, col: number): boolean {
+        return this.crateLayers[row]?.[col] > 0;
+    }
+
+    /** V: 当前格是否是可玩的普通格子（在边界内 + 无木箱 + 有 tile） */
+    private isPlayableCell(row: number, col: number): boolean {
+        return row >= 0 && row < Board.ROWS && col >= 0 && col < Board.COLS
+            && !this.hasCrateAt(row, col)
+            && !!this.tiles[row]?.[col];
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
     //  棋盘生成（保证开局无三连）
     // ══════════════════════════════════════════════════════════════════════════
 
@@ -538,6 +644,14 @@ export class Board extends Component {
             this.createCellSlots();
         }
 
+        // V: 先构建 crate 配置查找表
+        const crateLookup = new Map<string, number>();
+        if (this._pendingCrateInit && this._pendingCrateInit.length > 0) {
+            for (const cr of this._pendingCrateInit) {
+                crateLookup.set(`${cr.row},${cr.col}`, cr.layers);
+            }
+        }
+
         for (let r = 0; r < ROWS; r++) {
             this.grid[r] = [];
             this.tiles[r] = [];
@@ -545,16 +659,34 @@ export class Board extends Component {
             // U1: 初始化冰层数据矩阵
             this.iceLayers[r] = [];
             this.iceNodes[r] = [];
+            // V: 初始化木箱数据矩阵
+            this.crateLayers[r] = [];
+            this.crateNodes[r] = [];
             for (let c = 0; c < COLS; c++) {
-                const colorId = this.pickSafeColor(r, c);
-                const tileNode = this.createTileNode(r, c, colorId);
-                this.grid[r][c] = colorId;
-                this.tiles[r][c] = tileNode;
-                this.tileSpecials[r][c] = SpecialType.NONE;
-                this.tileInfoMap.set(tileNode, { row: r, col: c });
-                // U1: 默认无冰
-                this.iceLayers[r][c] = 0;
-                this.iceNodes[r][c] = null;
+                const crateKey = `${r},${c}`;
+                const crateLayers = crateLookup.get(crateKey) ?? 0;
+                if (crateLayers > 0) {
+                    // V: 木箱格 — 不创建普通 tile
+                    this.grid[r][c] = -1;
+                    this.tiles[r][c] = null;
+                    this.tileSpecials[r][c] = SpecialType.NONE;
+                    this.iceLayers[r][c] = 0;
+                    this.iceNodes[r][c] = null;
+                    this.crateLayers[r][c] = crateLayers;
+                    this.crateNodes[r][c] = null;
+                } else {
+                    const colorId = this.pickSafeColor(r, c);
+                    const tileNode = this.createTileNode(r, c, colorId);
+                    this.grid[r][c] = colorId;
+                    this.tiles[r][c] = tileNode;
+                    this.tileSpecials[r][c] = SpecialType.NONE;
+                    this.tileInfoMap.set(tileNode, { row: r, col: c });
+                    // U1: 默认无冰
+                    this.iceLayers[r][c] = 0;
+                    this.iceNodes[r][c] = null;
+                    this.crateLayers[r][c] = 0;
+                    this.crateNodes[r][c] = null;
+                }
             }
         }
 
@@ -567,6 +699,12 @@ export class Board extends Component {
             console.log(`[Board] 🧊 冰层配置已应用: ${this.getRemainingIceCells()} 格有冰`);
         }
 
+        // V: 消费木箱配置（数据已在上面赋值，这里只清空暂存 + 打日志）
+        if (this._pendingCrateInit && this._pendingCrateInit.length > 0) {
+            this._pendingCrateInit = [];  // 消费完毕
+            console.log(`[Board] 📦 木箱配置已应用: ${this.getRemainingCrateCells()} 格有木箱`);
+        }
+
         // ★ A3: 开局/切关保证 — 无现成三连 && 有可行步（静默，无提示文字）
         this.ensureValidBoard();
 
@@ -575,6 +713,8 @@ export class Board extends Component {
 
         // U1: 创建障碍层 + 刷新冰层视觉
         this.refreshIceVisual();
+        // V: 刷新木箱视觉
+        this.refreshCrateVisual();
 
         // 临时验证日志（测完删除）
         const matchCount = this.findMatches().length;
@@ -586,10 +726,13 @@ export class Board extends Component {
     private pickSafeColor(row: number, col: number): number {
         const forbidden = new Set<number>();
 
-        if (col >= 2 && this.grid[row][col - 1] === this.grid[row][col - 2]) {
+        // V: 木箱格不参与选色（返回 -1 表示无色）
+        if (this.hasCrateAt(row, col)) return -1;
+
+        if (col >= 2 && this.grid[row][col - 1] === this.grid[row][col - 2] && this.grid[row][col - 1] >= 0) {
             forbidden.add(this.grid[row][col - 1]);
         }
-        if (row >= 2 && this.grid[row - 1][col] === this.grid[row - 2][col]) {
+        if (row >= 2 && this.grid[row - 1][col] === this.grid[row - 2][col] && this.grid[row - 1][col] >= 0) {
             forbidden.add(this.grid[row - 1][col]);
         }
 
@@ -797,6 +940,8 @@ export class Board extends Component {
             console.log(`[Board] 输入忽略: onCellClick(${row},${col}) state=${BoardState[this._state]}`);
             return;
         }
+        // V: 木箱格不可点选
+        if (this.hasCrateAt(row, col)) return;
         this.markPlayerActive();
         const tileNode = this.tiles[row]?.[col];
         if (!tileNode) return;
@@ -823,9 +968,13 @@ export class Board extends Component {
             console.log(`[Board] 输入忽略: trySwapByDir(${r},${c},${dr},${dc}) state=${BoardState[this._state]}`);
             return;
         }
+        // V: 木箱格不可滑动交换
+        if (this.hasCrateAt(r, c)) return;
         this.markPlayerActive();
         const nr = r + dr;
         const nc = c + dc;
+        // V: 目标格是木箱时不交换
+        if (this.hasCrateAt(nr, nc)) return;
         if (!this.inBounds(nr, nc)) {
             console.log('SWIPE_OUT_OF_BOUNDS');
             return;
@@ -1257,10 +1406,17 @@ return { cells, waveSeeds, isFullBoardClear: false };
     ): Promise<void> {
         const promises: Promise<void>[] = [];
         let destroyedCount = 0;
+        // V: 收集需要受伤害的木箱格
+        const crateDamageSet = new Set<string>();
 
         for (const key of cells) {
             const [row, col] = key.split(',').map(Number);
             if (!isFinite(row) || !isFinite(col)) continue;
+            // V: crate 格不作为普通 tile 销毁，但记为直接命中
+            if (this.hasCrateAt(row, col)) {
+                crateDamageSet.add(key);
+                continue;
+            }
             const tileNode = this.tiles[row]?.[col];
             // B4 修复: 加 isValid 检查，跳过已销毁/失效节点
             if (!tileNode || !tileNode.isValid) {
@@ -1288,6 +1444,21 @@ return { cells, waveSeeds, isFullBoardClear: false };
             promises.push(
                 this.animateEliminatedTile(tileNode, row, col, eliminatedColor, delaySec, ws),
             );
+        }
+
+        // V: 收集相邻木箱伤害（从被消除的普通棋子格）+ 直接命中伤害
+        const allDestroyedKeys = new Set<string>();
+        for (const key of cells) {
+            const [r, c] = key.split(',').map(Number);
+            if (!isFinite(r) || !isFinite(c)) continue;
+            if (!this.hasCrateAt(r, c)) allDestroyedKeys.add(key);
+        }
+        const fullCrateDamage = this.collectCrateDamageFromDestroyedCells(allDestroyedKeys, crateDamageSet);
+        // V: 每个木箱只受伤 1 次
+        for (const crateKey of fullCrateDamage) {
+            const [cr, cc] = crateKey.split(',').map(Number);
+            if (!isFinite(cr) || !isFinite(cc)) continue;
+            this.damageCrateAt(cr, cc);
         }
 
         // 计分
@@ -1380,6 +1551,8 @@ return { cells, waveSeeds, isFullBoardClear: false };
     }
 
     private async performSwap(a: TileInfo, b: TileInfo): Promise<void> {
+        // V: 兜底保护 — 任一格是 crate 直接 return
+        if (this.hasCrateAt(a.row, a.col) || this.hasCrateAt(b.row, b.col)) return;
         const tileA = this.tiles[a.row]?.[a.col];
         const tileB = this.tiles[b.row]?.[b.col];
         // B4 修复: 加 isValid 检查
@@ -1434,8 +1607,12 @@ return { cells, waveSeeds, isFullBoardClear: false };
         for (let r = 0; r < ROWS; r++) {
             let runStart = 0;
             for (let c = 1; c <= COLS; c++) {
-                if (c === COLS || this.grid[r][c] !== this.grid[r][runStart]) {
-                    if (c - runStart >= 3 && this.grid[r][runStart] >= 0) {
+                // V: 木箱格或 grid<0 必须断开 run
+                const curCrate = c < COLS && this.hasCrateAt(r, c);
+                const startCrate = this.hasCrateAt(r, runStart);
+                const colorBreak = c === COLS || curCrate || startCrate || this.grid[r][c] < 0 || this.grid[r][runStart] < 0 || this.grid[r][c] !== this.grid[r][runStart];
+                if (c === COLS || colorBreak) {
+                    if (c - runStart >= 3 && !startCrate && this.grid[r][runStart] >= 0) {
                         for (let k = runStart; k < c; k++) matched.add(`${r},${k}`);
                     }
                     runStart = c;
@@ -1447,8 +1624,11 @@ return { cells, waveSeeds, isFullBoardClear: false };
         for (let c = 0; c < COLS; c++) {
             let runStart = 0;
             for (let r = 1; r <= ROWS; r++) {
-                if (r === ROWS || this.grid[r][c] !== this.grid[runStart][c]) {
-                    if (r - runStart >= 3 && this.grid[runStart][c] >= 0) {
+                const curCrate = r < ROWS && this.hasCrateAt(r, c);
+                const startCrate = this.hasCrateAt(runStart, c);
+                const colorBreak = r === ROWS || curCrate || startCrate || this.grid[r][c] < 0 || this.grid[runStart][c] < 0 || this.grid[r][c] !== this.grid[runStart][c];
+                if (r === ROWS || colorBreak) {
+                    if (r - runStart >= 3 && !startCrate && this.grid[runStart][c] >= 0) {
                         for (let k = runStart; k < r; k++) matched.add(`${k},${c}`);
                     }
                     runStart = r;
@@ -1479,9 +1659,13 @@ return { cells, waveSeeds, isFullBoardClear: false };
         for (let r = 0; r < ROWS; r++) {
             let runStart = 0;
             for (let c = 1; c <= COLS; c++) {
-                if (c === COLS || this.grid[r][c] !== this.grid[r][runStart]) {
+                // V: 木箱格或 grid<0 断开 run
+                const curCrate = c < COLS && this.hasCrateAt(r, c);
+                const startCrate = this.hasCrateAt(r, runStart);
+                const colorBreak = c === COLS || curCrate || startCrate || this.grid[r][c] < 0 || this.grid[r][runStart] < 0 || this.grid[r][c] !== this.grid[r][runStart];
+                if (c === COLS || colorBreak) {
                     const len = c - runStart;
-                    if (len >= 3 && this.grid[r][runStart] >= 0) {
+                    if (len >= 3 && !startCrate && this.grid[r][runStart] >= 0) {
                         hRuns.push({ r, c0: runStart, c1: c - 1, color: this.grid[r][runStart] });
                     }
                     runStart = c;
@@ -1494,9 +1678,12 @@ return { cells, waveSeeds, isFullBoardClear: false };
         for (let c = 0; c < COLS; c++) {
             let runStart = 0;
             for (let r = 1; r <= ROWS; r++) {
-                if (r === ROWS || this.grid[r][c] !== this.grid[runStart][c]) {
+                const curCrate = r < ROWS && this.hasCrateAt(r, c);
+                const startCrate = this.hasCrateAt(runStart, c);
+                const colorBreak = r === ROWS || curCrate || startCrate || this.grid[r][c] < 0 || this.grid[runStart][c] < 0 || this.grid[r][c] !== this.grid[runStart][c];
+                if (r === ROWS || colorBreak) {
                     const len = r - runStart;
-                    if (len >= 3 && this.grid[runStart][c] >= 0) {
+                    if (len >= 3 && !startCrate && this.grid[runStart][c] >= 0) {
                         vRuns.push({ c, r0: runStart, r1: r - 1, color: this.grid[runStart][c] });
                     }
                     runStart = r;
@@ -1628,9 +1815,18 @@ return { cells, waveSeeds, isFullBoardClear: false };
             for (let c = 0; c < COLS; c++) {
                 // 越界保护
                 if (!this.grid[r] || this.grid[r][c] === undefined) continue;
+                // V: 木箱格不枚举
+                if (this.hasCrateAt(r, c)) continue;
+                // V: grid<0 的格不枚举
+                if (this.grid[r][c] < 0) continue;
 
-                // 试右侧
-                if (c + 1 < COLS && this.grid[r][c + 1] !== undefined) {
+                // 试右侧（正向条件包裹，不可交换时只跳过右模拟，不跳过下检测）
+                if (
+                    c + 1 < COLS &&
+                    this.grid[r][c + 1] !== undefined &&
+                    !this.hasCrateAt(r, c + 1) &&
+                    this.grid[r][c + 1] >= 0
+                ) {
                     const va = this.grid[r][c];
                     const vb = this.grid[r][c + 1];
                     // 模拟交换
@@ -1645,8 +1841,14 @@ return { cells, waveSeeds, isFullBoardClear: false };
                     }
                 }
 
-                // 试下方
-                if (r + 1 < ROWS && this.grid[r + 1] && this.grid[r + 1][c] !== undefined) {
+                // 试下方（正向条件包裹，避免 continue 语义漏检）
+                if (
+                    r + 1 < ROWS &&
+                    this.grid[r + 1] &&
+                    this.grid[r + 1][c] !== undefined &&
+                    !this.hasCrateAt(r + 1, c) &&
+                    this.grid[r + 1][c] >= 0
+                ) {
                     const va = this.grid[r][c];
                     const vb = this.grid[r + 1][c];
                     // 模拟交换
@@ -1723,6 +1925,8 @@ return { cells, waveSeeds, isFullBoardClear: false };
             for (let r = 0; r < ROWS; r++) {
                 for (let c = 0; c < COLS; c++) {
                     if (idx >= pairs.length) break;
+                    // V: crate 格保持空，不填普通 tile
+                    if (this.hasCrateAt(r, c)) continue;
                     const { colorId, node, special } = pairs[idx];
                     this.grid[r][c] = colorId;
                     this.tiles[r][c] = node;
@@ -1796,6 +2000,8 @@ return { cells, waveSeeds, isFullBoardClear: false };
             for (let r = 0; r < ROWS; r++) {
                 for (let c = 0; c < COLS; c++) {
                     if (idx >= pairs.length) break;
+                    // V: crate 格保持空，不填普通 tile
+                    if (this.hasCrateAt(r, c)) continue;
                     const { colorId, node, special } = pairs[idx];
                     this.grid[r][c] = colorId;
                     this.tiles[r][c] = node;
@@ -1858,6 +2064,7 @@ return { cells, waveSeeds, isFullBoardClear: false };
         this.selectedTile = null;
 
         // U1: 冰层数据保持不变（forceRegenerate 只重置方块，不重置障碍）
+        // V: 木箱数据保持不变（forceRegenerate 只重置方块，不重置障碍）
 
         // 直接调 generateBoard（内部用 pickSafeColor 保证无三连）
         for (let r = 0; r < ROWS; r++) {
@@ -1867,20 +2074,35 @@ return { cells, waveSeeds, isFullBoardClear: false };
             // U1: 确保冰层矩阵存在（forceRegenerate 不清冰）
             if (!this.iceLayers[r]) this.iceLayers[r] = [];
             if (!this.iceNodes[r]) this.iceNodes[r] = [];
+            // V: 确保木箱矩阵存在（forceRegenerate 不清木箱）
+            if (!this.crateLayers[r]) this.crateLayers[r] = [];
+            if (!this.crateNodes[r]) this.crateNodes[r] = [];
             for (let c = 0; c < COLS; c++) {
+                if (this.iceLayers[r][c] === undefined) this.iceLayers[r][c] = 0;
+                if (!this.iceNodes[r][c]) this.iceNodes[r][c] = null;
+                if (this.crateLayers[r][c] === undefined) this.crateLayers[r][c] = 0;
+                if (!this.crateNodes[r][c]) this.crateNodes[r][c] = null;
+
+                // V: crate 格保持空，不创建 tile
+                if (this.hasCrateAt(r, c)) {
+                    this.grid[r][c] = -1;
+                    this.tiles[r][c] = null;
+                    this.tileSpecials[r][c] = SpecialType.NONE;
+                    continue;
+                }
+
                 const colorId = this.pickSafeColor(r, c);
                 const tileNode = this.createTileNode(r, c, colorId);
                 this.grid[r][c] = colorId;
                 this.tiles[r][c] = tileNode;
                 this.tileSpecials[r][c] = SpecialType.NONE;
                 this.tileInfoMap.set(tileNode, { row: r, col: c });
-                if (this.iceLayers[r][c] === undefined) this.iceLayers[r][c] = 0;
-                if (!this.iceNodes[r][c]) this.iceNodes[r][c] = null;
             }
         }
         console.log('[Board] 强制重生成完成');
         this.ensureEffectsLayer();  // C2: 确保特效层在方块之上
         this.refreshIceVisual();    // U1: 刷新冰层视觉
+        this.refreshCrateVisual();  // V: 刷新木箱视觉
     }
 
     /** 「重新洗牌」提示文字：弹入 + 上浮 + 淡出 */
@@ -2262,9 +2484,15 @@ return { cells, waveSeeds, isFullBoardClear: false };
         }
 
         // 销毁所有待消格
+        const crateDamageSet = new Set<string>();
         for (const key of destroyedCells) {
             const [row, col] = key.split(',').map(Number);
             if (!isFinite(row) || !isFinite(col)) continue;
+            // V: crate 格不作为普通 tile 销毁，但记为直接命中
+            if (this.hasCrateAt(row, col)) {
+                crateDamageSet.add(key);
+                continue;
+            }
             const tileNode = this.tiles[row]?.[col];
             // B4 修复: 加 isValid 检查，跳过已销毁/失效节点
             if (!tileNode || !tileNode.isValid) {
@@ -2291,6 +2519,20 @@ return { cells, waveSeeds, isFullBoardClear: false };
             promises.push(
                 this.animateEliminatedTile(tileNode, row, col, eliminatedColor, delaySec, ws),
             );
+        }
+
+        // V: 收集相邻木箱伤害 + 直接命中伤害，每个木箱只受伤 1 次
+        const allDestroyedKeys = new Set<string>();
+        for (const key of destroyedCells) {
+            const [r, c] = key.split(',').map(Number);
+            if (!isFinite(r) || !isFinite(c)) continue;
+            if (!this.hasCrateAt(r, c)) allDestroyedKeys.add(key);
+        }
+        const fullCrateDamage = this.collectCrateDamageFromDestroyedCells(allDestroyedKeys, crateDamageSet);
+        for (const crateKey of fullCrateDamage) {
+            const [cr, cc] = crateKey.split(',').map(Number);
+            if (!isFinite(cr) || !isFinite(cc)) continue;
+            this.damageCrateAt(cr, cc);
         }
 
         // 生成特效格（保留节点，改标记 + 加占位视觉）
@@ -2646,69 +2888,91 @@ return { cells, waveSeeds, isFullBoardClear: false };
         let anyFell = false;
 
         for (let c = 0; c < COLS; c++) {
-            const survivors: { colorId: number; node: Node; special: SpecialType }[] = [];
-            for (let r = ROWS - 1; r >= 0; r--) {
-                // B4 修复: 加 isValid 检查，跳过已销毁/失效节点
-                const node = this.tiles[r]?.[c];
-                if (this.grid[r][c] >= 0 && node && node.isValid) {
-                    survivors.push({ colorId: this.grid[r][c], node, special: this.tileSpecials[r][c] });
-                    this.grid[r][c] = -1;
-                    this.tiles[r][c] = null;
-                    this.tileSpecials[r][c] = SpecialType.NONE;
-                } else {
-                    // B4 修复: 清理残留的悬空引用
+            // V: 按列被 crate 分割成多个垂直区段，每个区段独立下落
+            let bottom = ROWS - 1;
+            while (bottom >= 0) {
+                // 跳过 crate 格（确保 crate 格为空）
+                while (bottom >= 0 && this.hasCrateAt(bottom, c)) {
+                    this.grid[bottom][c] = -1;
+                    this.tiles[bottom][c] = null;
+                    this.tileSpecials[bottom][c] = SpecialType.NONE;
+                    bottom--;
+                }
+                if (bottom < 0) break;
+
+                // 找到当前区段的 top（不含 crate 的连续行）
+                let top = bottom;
+                while (top >= 0 && !this.hasCrateAt(top, c)) {
+                    top--;
+                }
+                // top 现在指向 crate 格或 -1，区段范围是 [top+1, bottom]
+                const segTop = top + 1;
+                const segBottom = bottom;
+
+                // 在区段内收集 survivors（从下往上）
+                const survivors: { colorId: number; node: Node; special: SpecialType }[] = [];
+                for (let r = segBottom; r >= segTop; r--) {
+                    const node = this.tiles[r]?.[c];
+                    if (this.grid[r][c] >= 0 && node && node.isValid) {
+                        survivors.push({ colorId: this.grid[r][c], node, special: this.tileSpecials[r][c] });
+                    }
+                    // 清空该格
                     this.grid[r][c] = -1;
                     this.tiles[r][c] = null;
                     this.tileSpecials[r][c] = SpecialType.NONE;
                 }
-            }
 
-            for (let i = 0; i < survivors.length; i++) {
-                const targetRow = ROWS - 1 - i;
-                const { colorId, node, special } = survivors[i];
-                // B4 修复: 二次确认节点有效
-                if (!node || !node.isValid) continue;
-                this.grid[targetRow][c] = colorId;
-                this.tiles[targetRow][c] = node;
-                this.tileSpecials[targetRow][c] = special;
-                this.tileInfoMap.set(node, { row: targetRow, col: c });
-                node.name = `Tile_${targetRow}_${c}`;
-                const gs = node.getComponent(TileGesture);
-                if (gs) { gs.row = targetRow; gs.col = c; }
+                // 从区段底部往上填 survivor
+                for (let i = 0; i < survivors.length; i++) {
+                    const targetRow = segBottom - i;
+                    const { colorId, node, special } = survivors[i];
+                    if (!node || !node.isValid) continue;
+                    this.grid[targetRow][c] = colorId;
+                    this.tiles[targetRow][c] = node;
+                    this.tileSpecials[targetRow][c] = special;
+                    this.tileInfoMap.set(node, { row: targetRow, col: c });
+                    node.name = `Tile_${targetRow}_${c}`;
+                    const gs = node.getComponent(TileGesture);
+                    if (gs) { gs.row = targetRow; gs.col = c; }
 
-                const targetPos = this.tileToLocalPosition(targetRow, c);
-                const currentPos = node.getPosition();
-                const dy = Math.abs(currentPos.y - targetPos.y);
-                if (dy > 0.5) {
-                    anyFell = true;
-                    // C1: 下落时长 = 0.15 × √(格数)，easing: quadIn 带落地感
+                    const targetPos = this.tileToLocalPosition(targetRow, c);
+                    const currentPos = node.getPosition();
+                    const dy = Math.abs(currentPos.y - targetPos.y);
+                    if (dy > 0.5) {
+                        anyFell = true;
+                        const cells = dy / (TILE_SIZE + GAP);
+                        const dur = Math.max(0.05, Board.FALL_BASE_DURATION * Math.sqrt(Math.max(1, cells)));
+                        const colDelay = c * Board.COLUMN_DELAY;
+                        promises.push(this.tweenPromise(node, dur, { position: targetPos }, 'quadIn', colDelay));
+                    }
+                }
+
+                // 区段顶部生成新棋子补满
+                const segLen = segBottom - segTop + 1;
+                const newCount = segLen - survivors.length;
+                for (let i = 0; i < newCount; i++) {
+                    const targetRow = segTop + i;
+                    const colorId = Math.floor(Math.random() * this.colorCount);
+                    const tileNode = this.createTileNode(targetRow, c, colorId);
+
+                    // 从区段顶部上方生成
+                    const startRow = segTop - (newCount - i);
+                    tileNode.setPosition(this.tileToLocalPosition(startRow, c));
+
+                    this.grid[targetRow][c] = colorId;
+                    this.tiles[targetRow][c] = tileNode;
+                    this.tileSpecials[targetRow][c] = SpecialType.NONE;
+                    this.tileInfoMap.set(tileNode, { row: targetRow, col: c });
+
+                    const targetPos = this.tileToLocalPosition(targetRow, c);
+                    const dy = Math.abs(tileNode.getPosition().y - targetPos.y);
                     const cells = dy / (TILE_SIZE + GAP);
                     const dur = Math.max(0.05, Board.FALL_BASE_DURATION * Math.sqrt(Math.max(1, cells)));
                     const colDelay = c * Board.COLUMN_DELAY;
-                    promises.push(this.tweenPromise(node, dur, { position: targetPos }, 'quadIn', colDelay));
+                    promises.push(this.tweenPromise(tileNode, dur, { position: targetPos }, 'quadIn', colDelay));
                 }
-            }
 
-            const newCount = ROWS - survivors.length;
-            for (let i = 0; i < newCount; i++) {
-                const targetRow = i;
-                const colorId = Math.floor(Math.random() * this.colorCount);
-                const tileNode = this.createTileNode(targetRow, c, colorId);
-
-                const startRow = targetRow - newCount;
-                tileNode.setPosition(this.tileToLocalPosition(startRow, c));
-
-                this.grid[targetRow][c] = colorId;
-                this.tiles[targetRow][c] = tileNode;
-                this.tileSpecials[targetRow][c] = SpecialType.NONE;
-                this.tileInfoMap.set(tileNode, { row: targetRow, col: c });
-
-                const targetPos = this.tileToLocalPosition(targetRow, c);
-                const dy = Math.abs(tileNode.getPosition().y - targetPos.y);
-                const cells = dy / (TILE_SIZE + GAP);
-                const dur = Math.max(0.05, Board.FALL_BASE_DURATION * Math.sqrt(Math.max(1, cells)));
-                const colDelay = c * Board.COLUMN_DELAY;
-                promises.push(this.tweenPromise(tileNode, dur, { position: targetPos }, 'quadIn', colDelay));
+                bottom = top - 1;  // 继续处理 crate 上方的区段
             }
         }
 
@@ -2983,6 +3247,260 @@ return { cells, waveSeeds, isFullBoardClear: false };
         }
 
         // 延迟清理 shard 容器
+        this.scheduleOnce(() => {
+            if (shardNode && shardNode.isValid) shardNode.destroy();
+        }, 0.5);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  V: 木箱障碍 — 视觉层管理 + 受伤逻辑
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** V: 根据 crateLayers 数据刷新全部木箱视觉节点 */
+    private refreshCrateVisual(): void {
+        if (!this.crateLayers || this.crateLayers.length === 0) return;
+        const layer = this.ensureObstacleLayer();
+
+        for (let r = 0; r < Board.ROWS; r++) {
+            if (!this.crateLayers[r]) continue;
+            for (let c = 0; c < Board.COLS; c++) {
+                const layers = this.crateLayers[r][c];
+                const existing = this.crateNodes[r]?.[c] ?? null;
+
+                if (layers <= 0) {
+                    // 无木箱 → 销毁旧节点
+                    if (existing && existing.isValid) {
+                        Tween.stopAllByTarget(existing);
+                        existing.destroy();
+                    }
+                    if (this.crateNodes[r]) this.crateNodes[r][c] = null;
+                } else {
+                    // 有木箱 → 创建/更新视觉
+                    if (!existing || !existing.isValid) {
+                        const node = this.createCrateNode(r, c, layers);
+                        node.parent = layer;
+                        if (!this.crateNodes[r]) this.crateNodes[r] = [];
+                        this.crateNodes[r][c] = node;
+                    } else {
+                        this.drawCrateNode(existing, layers);
+                    }
+                }
+            }
+        }
+    }
+
+    /** V: 创建木箱视觉节点 */
+    private createCrateNode(row: number, col: number, layers: number): Node {
+        const node = new Node(`Crate_${row}_${col}`);
+        const pos = this.tileToLocalPosition(row, col);
+        node.setPosition(pos);
+
+        const ut = node.addComponent(UITransform);
+        ut.setContentSize(Board.TILE_SIZE, Board.TILE_SIZE);
+
+        this.drawCrateNode(node, layers);
+        return node;
+    }
+
+    /** V: 在节点上绘制木箱图形（layers=1 单层, layers=2 双层） */
+    private drawCrateNode(node: Node, layers: number): void {
+        let g = node.getComponent(Graphics);
+        if (!g) g = node.addComponent(Graphics);
+        g.clear();
+
+        const ts = Board.TILE_SIZE;
+        const half = ts / 2;
+        const radius = 6;
+
+        if (layers >= 2) {
+            // 双层木箱：深棕色 + 加固带
+            g.fillColor = new Color(0x8B, 0x5A, 0x2B, 230);
+            g.roundRect(-half, -half, ts, ts, radius);
+            g.fill();
+            // 描边
+            g.strokeColor = new Color(0x5A, 0x3A, 0x1A, 255);
+            g.lineWidth = 3;
+            g.roundRect(-half, -half, ts, ts, radius);
+            g.stroke();
+            // 内层边框（加固带）
+            g.strokeColor = new Color(0x6B, 0x42, 0x1F, 200);
+            g.lineWidth = 2;
+            g.roundRect(-half + 5, -half + 5, ts - 10, ts - 10, 4);
+            g.stroke();
+            // 十字加固
+            g.strokeColor = new Color(0x5A, 0x3A, 0x1A, 180);
+            g.lineWidth = 2;
+            g.moveTo(-half + 8, 0);
+            g.lineTo(half - 8, 0);
+            g.moveTo(0, -half + 8);
+            g.lineTo(0, half - 8);
+            g.stroke();
+        } else {
+            // 单层木箱：中棕色
+            g.fillColor = new Color(0xA0, 0x6B, 0x35, 220);
+            g.roundRect(-half, -half, ts, ts, radius);
+            g.fill();
+            // 描边
+            g.strokeColor = new Color(0x6B, 0x42, 0x1F, 255);
+            g.lineWidth = 2;
+            g.roundRect(-half, -half, ts, ts, radius);
+            g.stroke();
+            // 木纹斜线
+            g.strokeColor = new Color(0x7A, 0x4F, 0x25, 160);
+            g.lineWidth = 1.5;
+            for (let i = -half + 10; i < half; i += 14) {
+                g.moveTo(i, -half + 4);
+                g.lineTo(i + 8, -half + 12);
+            }
+            g.stroke();
+        }
+    }
+
+    /** V: 对指定格的木箱造成 1 点伤害（唯一入口） */
+    private damageCrateAt(row: number, col: number): void {
+        if (row < 0 || row >= Board.ROWS || col < 0 || col >= Board.COLS) return;
+        if (!this.crateLayers[row]) return;
+        const current = this.crateLayers[row][col];
+        if (current <= 0) return;
+
+        const remaining = current - 1;
+        this.crateLayers[row][col] = remaining;
+
+        // 视觉效果
+        this.playCrateHitEffect(row, col, remaining <= 0);
+
+        if (remaining <= 0) {
+            // 木箱完全清除
+            this.callbacks.onCrateCleared?.(row, col);
+            console.log(`[Board] 📦 木箱清除 (${row},${col})`);
+
+            // 延迟销毁视觉节点（等动画播完）
+            const node = this.crateNodes[row]?.[col] ?? null;
+            if (node && node.isValid) {
+                this.scheduleOnce(() => {
+                    if (node.isValid) {
+                        Tween.stopAllByTarget(node);
+                        node.destroy();
+                    }
+                    if (this.crateNodes[row]?.[col] === node) {
+                        this.crateNodes[row][col] = null;
+                    }
+                }, 0.3);
+            }
+            // 清掉该格 grid/tiles/special 残留
+            this.grid[row][col] = -1;
+            this.tiles[row][col] = null;
+            this.tileSpecials[row][col] = SpecialType.NONE;
+        } else {
+            // 仍有残余木箱 → 更新视觉
+            const node = this.crateNodes[row]?.[col] ?? null;
+            if (node && node.isValid) {
+                this.drawCrateNode(node, remaining);
+            }
+            this.callbacks.onCrateDamaged?.(row, col, remaining);
+            console.log(`[Board] 📦 木箱受损 (${row},${col}) → 剩余 ${remaining} 层`);
+        }
+    }
+
+    /**
+     * V: 从被消除棋子格收集相邻木箱伤害 + 直接命中木箱伤害
+     * @param destroyedCells 被消除的普通棋子格集合
+     * @param directHitCells 特效直接命中的格集合（可能包含 crate 格）
+     * @returns 需要受伤的木箱格集合
+     */
+    private collectCrateDamageFromDestroyedCells(
+        destroyedCells: Set<string>,
+        directHitCells?: Set<string>,
+    ): Set<string> {
+        const damageSet = new Set<string>();
+
+        // A. 相邻伤害：对每个被消除棋子格，检查四邻是否有 crate
+        const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        for (const key of destroyedCells) {
+            const [r, c] = key.split(',').map(Number);
+            if (!isFinite(r) || !isFinite(c)) continue;
+            for (const [dr, dc] of dirs) {
+                const nr = r + dr;
+                const nc = c + dc;
+                if (nr < 0 || nr >= Board.ROWS || nc < 0 || nc >= Board.COLS) continue;
+                if (this.hasCrateAt(nr, nc)) {
+                    damageSet.add(`${nr},${nc}`);
+                }
+            }
+        }
+
+        // B. 直接命中：特效覆盖到 crate 格
+        if (directHitCells) {
+            for (const key of directHitCells) {
+                const [r, c] = key.split(',').map(Number);
+                if (!isFinite(r) || !isFinite(c)) continue;
+                if (this.hasCrateAt(r, c)) {
+                    damageSet.add(`${r},${c}`);
+                }
+            }
+        }
+
+        return damageSet;
+    }
+
+    /** V: 木箱被击中/清除时的视觉特效 */
+    private playCrateHitEffect(row: number, col: number, isCleared: boolean): void {
+        const layer = this.ensureEffectsLayer();
+        const pos = this.tileToLocalPosition(row, col);
+
+        // 木屑粒子
+        const shardNode = new Node('CrateShard');
+        shardNode.parent = layer;
+        shardNode.setPosition(pos);
+
+        const shardCount = isCleared ? 8 : 4;
+        const shardColors = [
+            new Color(0x8B, 0x5A, 0x2B, 220),
+            new Color(0xA0, 0x6B, 0x35, 200),
+            new Color(0x6B, 0x42, 0x1F, 180),
+        ];
+
+        for (let i = 0; i < shardCount; i++) {
+            const angle = (Math.PI * 2 * i) / shardCount + Math.random() * 0.3;
+            const dist = isCleared ? 30 + Math.random() * 20 : 15 + Math.random() * 10;
+            const dx = Math.cos(angle) * dist;
+            const dy = Math.sin(angle) * dist;
+            const size = 4 + Math.random() * 4;
+
+            const shard = new Node(`shard${i}`);
+            shard.parent = shardNode;
+            shard.setPosition(0, 0, 0);
+
+            const ut = shard.addComponent(UITransform);
+            ut.setContentSize(size, size);
+
+            const g = shard.addComponent(Graphics);
+            g.fillColor = shardColors[i % shardColors.length];
+            g.rect(-size / 2, -size / 2, size, size);
+            g.fill();
+
+            const op = shard.addComponent(UIOpacity);
+            op.opacity = 220;
+
+            tween(shard)
+                .to(0.3, { position: new Vec3(dx, dy, 0) }, { easing: 'quadOut' })
+                .start();
+            tween(op)
+                .delay(0.15)
+                .to(0.15, { opacity: 0 })
+                .start();
+        }
+
+        // 木箱节点抖动
+        const crateNode = this.crateNodes[row]?.[col];
+        if (crateNode && crateNode.isValid) {
+            const origScale = crateNode.getScale();
+            tween(crateNode)
+                .to(0.05, { scale: new Vec3(0.9, 0.9, 1) })
+                .to(0.05, { scale: new Vec3(origScale.x, origScale.y, origScale.z) })
+                .start();
+        }
+
         this.scheduleOnce(() => {
             if (shardNode && shardNode.isValid) shardNode.destroy();
         }, 0.5);
