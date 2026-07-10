@@ -4511,7 +4511,9 @@ export class GameManager extends Component {
             this.evaluateLevelAfterBoardStable();
         } else {
             // 失败 — 不扣次数
+            this.hammerSelecting = false;
             this.boosterBusy = false;
+            this.hideHammerHint();
             this.updateBoosterUI();
         }
     }

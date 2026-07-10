@@ -664,11 +664,17 @@ export class Board extends Component {
         if (this._boosterMode !== 'hammer') return;
         if (this._boosterResolving) return;
         if (this._state !== BoardState.IDLE) return;
-        if (!this.inBounds(row, col)) return;
+        // W1.1: 使用纯坐标边界检查（inBounds 要求 tile 存在，木箱格 tiles=null 会误拒）
+        if (!this.isCoordinateInBounds(row, col)) return;
 
         // 2. 判断目标
         const hasCrate = this.hasCrateAt(row, col);
-        const hasTile = this.tiles[row]?.[col] != null && this.grid[row]?.[col] != null && this.grid[row][col] >= 0;
+        const tileNode = this.tiles[row]?.[col] ?? null;
+        const hasTile =
+            !!tileNode &&
+            tileNode.isValid &&
+            this.grid[row]?.[col] != null &&
+            this.grid[row][col] >= 0;
 
         // 3. 无效目标 — 不消耗、不清模式、直接 return
         if (!hasCrate && !hasTile) {
@@ -682,11 +688,17 @@ export class Board extends Component {
         this.deselectTile();
         this.markPlayerActive();
         this.setState(BoardState.CHAINING);
+        // W1.1: 清理上一轮残留的特效激活记录和顿帧，避免锤中特殊棋子被误跳过
+        this._activatedSpecials.clear();
+        this._pendingHitstop = 0;
         const epoch = this._boardEpoch;
 
         let success = false;
+        let started = false;
 
         try {
+            started = true;
+
             if (hasCrate) {
                 // ── A. 目标是木箱 ──
                 console.log(`[Board] 锤子击中木箱 (${row},${col})`);
@@ -750,9 +762,9 @@ export class Board extends Component {
                 if (this._state !== BoardState.LOCKED) {
                     this.setState(BoardState.IDLE);
                 }
-                // 只回调一次
-                if (success) {
-                    this.callbacks.onHammerResolved?.(true);
+                // W1.1: 有效目标一旦进入解析，始终回调一次（成功 true / 异常 false）
+                if (started) {
+                    this.callbacks.onHammerResolved?.(success);
                 }
             }
         }
@@ -1129,6 +1141,16 @@ export class Board extends Component {
     private inBounds(r: number, c: number): boolean {
         return r >= 0 && r < Board.ROWS && c >= 0 && c < Board.COLS
             && !!this.tiles[r] && !!this.tiles[r][c];
+    }
+
+    /** W1.1: 纯坐标边界检查（不要求 tile 存在，用于锤子点木箱格） */
+    private isCoordinateInBounds(row: number, col: number): boolean {
+        return Number.isFinite(row)
+            && Number.isFinite(col)
+            && row >= 0
+            && row < Board.ROWS
+            && col >= 0
+            && col < Board.COLS;
     }
 
     // ── 点击逻辑（供 TileGesture 调用） ──────────────
