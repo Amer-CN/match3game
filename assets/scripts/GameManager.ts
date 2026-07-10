@@ -941,7 +941,7 @@ export class GameManager extends Component {
         ut.setContentSize(pw, 80);
 
         const label = tutorialNode.addComponent(Label);
-        label.string = '🧊 消除冰格旁的方块可击碎冰层！双层冰需要消除两次';
+        label.string = '🧊 消除冰层覆盖的萌宠即可破冰，双层冰需要命中两次！';
         label.fontSize = 24;
         label.lineHeight = 28;
         label.color = new Color(0x33, 0x66, 0xAA);
