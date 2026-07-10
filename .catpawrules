@@ -1,0 +1,22 @@
+# 消消萌盒 — 项目规则
+
+## project-bundle.md 更新规则
+
+每次修改 `assets/scripts/` 下的 `.ts` 文件并提交后，必须重新生成 `project-bundle.md`：
+
+```bash
+npx repomix --include "assets/scripts/*.ts" --output project-bundle.md --style plain --no-file-summary
+```
+
+然后将 `project-bundle.md` 一并提交推送。这个文件用于让外部 AI（如 GPT-5.6）审查代码，必须与最新代码同步。
+
+## 技术栈
+
+- 引擎: Cocos Creator 3.8.8
+- 语言: TypeScript
+- 项目路径: E:\XYX\match3game
+
+## 禁止事项
+
+- 不要修改 `library/`、`temp/`、`settings/` 目录下的内容
+- 不要修改 `extensions/` 下的 MCP 插件代码
