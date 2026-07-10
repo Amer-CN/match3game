@@ -1524,6 +1524,9 @@ declare const wx: any;
 /** 过关目标类型 */
 type GoalType = 'score' | 'collect' | 'special' | 'ice' | 'crate';
 
+/** X1: 难度档位 */
+type DifficultyTier = 'tutorial' | 'normal' | 'hard' | 'boss';
+
 /** 关卡配置 */
 interface LevelConfig {
     level: number;
@@ -1544,6 +1547,10 @@ interface LevelConfig {
     crate?: CrateCellConfig[];
     /** V: 木箱清除目标数（goalType=crate 时需清除的木箱格数） */
     crateTarget?: number;
+    /** X1: 难度档位（教学/普通/困难/Boss） */
+    difficulty: DifficultyTier;
+    /** X1: 设计意图（开发阶段说明该关主要让玩家做什么） */
+    designIntent: string;
 }
 
 /** 颜色键 → colorId 映射 */
@@ -1605,26 +1612,42 @@ export class GameManager extends Component {
     // ── 关卡配置 ──────────────────────────────
     private readonly levelConfigs: LevelConfig[] = [
         // —— 第 1 章：入门（5 色）——
-        { level: 1,  chapter: 1, isBoss: false, goalType: 'score',   targetScore: 600,  moves: 25, colors: 5 },
-        { level: 2,  chapter: 1, isBoss: false, goalType: 'score',   targetScore: 1000, moves: 22, colors: 5 },
-        { level: 3,  chapter: 1, isBoss: false, goalType: 'collect', goalColor: 'pink', goalCount: 15, moves: 22, colors: 5 },
-        { level: 4,  chapter: 1, isBoss: false, goalType: 'score',   targetScore: 1500, moves: 20, colors: 5 },
-        { level: 5,  chapter: 1, isBoss: true,  goalType: 'score',   targetScore: 2200, moves: 18, colors: 5 },
+        { level: 1,  chapter: 1, isBoss: false, goalType: 'score',   targetScore: 600,  moves: 25, colors: 5,
+          difficulty: 'tutorial', designIntent: '完成第一次普通三消，建立"交换—消除—得分"认知' },
+        { level: 2,  chapter: 1, isBoss: false, goalType: 'score',   targetScore: 900,  moves: 22, colors: 5,
+          difficulty: 'normal',   designIntent: '在宽松步数内练习连续有效交换' },
+        { level: 3,  chapter: 1, isBoss: false, goalType: 'collect', goalColor: 'pink', goalCount: 12, moves: 22, colors: 5,
+          difficulty: 'normal',   designIntent: '第一次学习指定颜色收集目标' },
+        { level: 4,  chapter: 1, isBoss: false, goalType: 'score',   targetScore: 1400, moves: 22, colors: 5,
+          difficulty: 'hard',     designIntent: '引导玩家通过四连和自然连锁提高单步收益' },
+        { level: 5,  chapter: 1, isBoss: true,  goalType: 'score',   targetScore: 2000, moves: 22, colors: 5,
+          difficulty: 'boss',     designIntent: '第一章综合考试，要求稳定制造高价值消除但不依赖道具' },
         // —— 第 2 章：进阶（6 色）——
-        { level: 6,  chapter: 2, isBoss: false, goalType: 'score',   targetScore: 1600, moves: 24, colors: 6 },
-        { level: 7,  chapter: 2, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green'], goalCount: [20, 20], moves: 22, colors: 6 },
-        { level: 8,  chapter: 2, isBoss: false, goalType: 'score',   targetScore: 2800, moves: 20, colors: 6 },
-        { level: 9,  chapter: 2, isBoss: false, goalType: 'special', specialCount: 3, moves: 20, colors: 6 },
-        { level: 10, chapter: 2, isBoss: true,  goalType: 'score',   targetScore: 3600, moves: 18, colors: 6 },
+        { level: 6,  chapter: 2, isBoss: false, goalType: 'score',   targetScore: 1400, moves: 26, colors: 6,
+          difficulty: 'tutorial', designIntent: '用宽松条件适应六种颜色带来的匹配率下降' },
+        { level: 7,  chapter: 2, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green'], goalCount: [12, 12], moves: 26, colors: 6,
+          difficulty: 'normal',   designIntent: '在六色棋盘中练习双颜色收集' },
+        { level: 8,  chapter: 2, isBoss: false, goalType: 'score',   targetScore: 2200, moves: 24, colors: 6,
+          difficulty: 'hard',     designIntent: '要求玩家开始主动追求四连、五连和连锁得分' },
+        { level: 9,  chapter: 2, isBoss: false, goalType: 'special', specialCount: 3, moves: 24, colors: 6,
+          difficulty: 'normal',   designIntent: '明确教学特殊棋子的制造和引爆' },
+        { level: 10, chapter: 2, isBoss: true,  goalType: 'score',   targetScore: 2800, moves: 24, colors: 6,
+          difficulty: 'boss',     designIntent: '第二章综合考试，通过特殊棋子提升分数效率' },
         // —— 第 3 章：挑战（6 色）——
-        { level: 11, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 2600, moves: 24, colors: 6 },
-        { level: 12, chapter: 3, isBoss: false, goalType: 'collect', goalColor: ['mon_purple', 'orange'], goalCount: [25, 25], moves: 20, colors: 6 },
-        { level: 13, chapter: 3, isBoss: false, goalType: 'special', specialCount: 5, moves: 20, colors: 6 },
-        { level: 14, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 3200, moves: 22, colors: 6 },
-        { level: 15, chapter: 3, isBoss: true,  goalType: 'score',   targetScore: 4000, moves: 22, colors: 6 },
+        { level: 11, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 2200, moves: 26, colors: 6,
+          difficulty: 'normal',   designIntent: '章节喘息关，稳定得分并复习六色棋盘' },
+        { level: 12, chapter: 3, isBoss: false, goalType: 'collect', goalColor: ['mon_purple', 'orange'], goalCount: [16, 16], moves: 26, colors: 6,
+          difficulty: 'normal',   designIntent: '双颜色收集，要求兼顾目标但保留足够容错' },
+        { level: 13, chapter: 3, isBoss: false, goalType: 'special', specialCount: 4, moves: 24, colors: 6,
+          difficulty: 'hard',     designIntent: '要求主动制造和引爆特殊棋子，为后续高分关做准备' },
+        { level: 14, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 3000, moves: 24, colors: 6,
+          difficulty: 'hard',     designIntent: '使用特殊棋子和连锁完成高分目标，但不需要广告续步' },
+        { level: 15, chapter: 3, isBoss: true,  goalType: 'score',   targetScore: 3600, moves: 24, colors: 6,
+          difficulty: 'boss',     designIntent: '第三章综合考试，考察特殊棋子、组合与连锁效率' },
         // —— 第 4 章：新篇 · 冰层障碍（6 色）——
         // U1: L16 冰层入门 — 清除 8 格单层冰
-        { level: 16, chapter: 4, isBoss: false, goalType: 'ice', iceTarget: 8, moves: 24, colors: 6,
+        { level: 16, chapter: 4, isBoss: false, goalType: 'ice', iceTarget: 8, moves: 28, colors: 6,
+          difficulty: 'tutorial', designIntent: '明确学习消除冰层覆盖格的棋子，单层冰一次清除',
           ice: [
               {row:1,col:1,layers:1},{row:1,col:6,layers:1},
               {row:3,col:3,layers:1},{row:3,col:4,layers:1},
@@ -1633,7 +1656,8 @@ export class GameManager extends Component {
           ],
         },
         // U1: L17 收集 + 冰层障碍
-        { level: 17, chapter: 4, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green', 'yellow'], goalCount: [18, 18, 18], moves: 26, colors: 6,
+        { level: 17, chapter: 4, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green', 'yellow'], goalCount: [12, 12, 12], moves: 28, colors: 6,
+          difficulty: 'normal',   designIntent: '在颜色收集过程中顺带处理冰层，不要求清完所有冰',
           ice: [
               {row:0,col:2,layers:1},{row:0,col:5,layers:1},
               {row:2,col:0,layers:1},{row:2,col:7,layers:1},
@@ -1643,7 +1667,8 @@ export class GameManager extends Component {
           ],
         },
         // U1: L18 特效引爆 + 混合冰层（单层+双层）
-        { level: 18, chapter: 4, isBoss: false, goalType: 'special', specialCount: 6, moves: 22, colors: 6,
+        { level: 18, chapter: 4, isBoss: false, goalType: 'special', specialCount: 4, moves: 26, colors: 6,
+          difficulty: 'normal',   designIntent: '学习利用特殊棋子批量命中单层和双层冰',
           ice: [
               {row:1,col:1,layers:2},{row:1,col:6,layers:2},
               {row:3,col:2,layers:1},{row:3,col:5,layers:1},
@@ -1652,7 +1677,8 @@ export class GameManager extends Component {
           ],
         },
         // U1: L19 高分 + 重冰（全双层）
-        { level: 19, chapter: 4, isBoss: false, goalType: 'score', targetScore: 4200, moves: 22, colors: 6,
+        { level: 19, chapter: 4, isBoss: false, goalType: 'score', targetScore: 3000, moves: 26, colors: 6,
+          difficulty: 'hard',     designIntent: '在双层冰干扰下制造连锁和特殊棋子获得高分',
           ice: [
               {row:0,col:1,layers:2},{row:0,col:3,layers:2},{row:0,col:5,layers:2},{row:0,col:7,layers:2},
               {row:2,col:0,layers:2},{row:2,col:2,layers:2},{row:2,col:5,layers:2},{row:2,col:7,layers:2},
@@ -1660,7 +1686,8 @@ export class GameManager extends Component {
           ],
         },
         // U1: L20 Boss — 清除 14 格混合冰层
-        { level: 20, chapter: 4, isBoss: true, goalType: 'ice', iceTarget: 14, moves: 20, colors: 6,
+        { level: 20, chapter: 4, isBoss: true, goalType: 'ice', iceTarget: 14, moves: 28, colors: 6,
+          difficulty: 'boss',     designIntent: '清除全部混合冰层，优先规划双层冰和特效覆盖范围',
           ice: [
               {row:0,col:0,layers:2},{row:0,col:3,layers:2},{row:0,col:7,layers:2},
               {row:2,col:1,layers:1},{row:2,col:4,layers:2},{row:2,col:6,layers:1},
@@ -1671,7 +1698,8 @@ export class GameManager extends Component {
         },
         // —— 第 5 章：木箱障碍（6 色）——
         // V: L21 木箱入门 — 清除 6 个单层木箱
-        { level: 21, chapter: 5, isBoss: false, goalType: 'crate', crateTarget: 6, moves: 24, colors: 6,
+        { level: 21, chapter: 5, isBoss: false, goalType: 'crate', crateTarget: 6, moves: 28, colors: 6,
+          difficulty: 'tutorial', designIntent: '学习通过相邻消除拆箱，并观察木箱对重力的阻断',
           crate: [
               {row:2,col:2,layers:1},{row:2,col:5,layers:1},
               {row:3,col:3,layers:1},{row:3,col:4,layers:1},
@@ -1679,7 +1707,8 @@ export class GameManager extends Component {
           ],
         },
         // V: L22 收集 + 木箱
-        { level: 22, chapter: 5, isBoss: false, goalType: 'collect', goalColor: ['pink', 'blue'], goalCount: [20, 20], moves: 25, colors: 6,
+        { level: 22, chapter: 5, isBoss: false, goalType: 'collect', goalColor: ['pink', 'blue'], goalCount: [14, 14], moves: 28, colors: 6,
+          difficulty: 'normal',   designIntent: '在木箱切割的棋盘中完成双颜色收集',
           crate: [
               {row:1,col:1,layers:1},{row:1,col:6,layers:1},
               {row:3,col:0,layers:1},{row:3,col:3,layers:1},
@@ -1688,7 +1717,8 @@ export class GameManager extends Component {
           ],
         },
         // V: L23 特效 + 木箱（含 2 个双层）
-        { level: 23, chapter: 5, isBoss: false, goalType: 'special', specialCount: 7, moves: 23, colors: 6,
+        { level: 23, chapter: 5, isBoss: false, goalType: 'special', specialCount: 4, moves: 27, colors: 6,
+          difficulty: 'hard',     designIntent: '在受限空间中制造特殊棋子并利用特效命中木箱',
           crate: [
               {row:1,col:2,layers:1},{row:1,col:5,layers:2},
               {row:4,col:1,layers:1},{row:4,col:6,layers:1},
@@ -1696,7 +1726,8 @@ export class GameManager extends Component {
           ],
         },
         // V: L24 分数 + 木箱阵（含 4 个双层）
-        { level: 24, chapter: 5, isBoss: false, goalType: 'score', targetScore: 4800, moves: 22, colors: 6,
+        { level: 24, chapter: 5, isBoss: false, goalType: 'score', targetScore: 3000, moves: 26, colors: 6,
+          difficulty: 'hard',     designIntent: '在木箱分段重力条件下通过特效和连锁完成高分',
           crate: [
               {row:0,col:2,layers:1},{row:0,col:5,layers:2},
               {row:2,col:0,layers:1},{row:2,col:3,layers:2},
@@ -1706,7 +1737,8 @@ export class GameManager extends Component {
           ],
         },
         // V: L25 Boss — 拆箱（12 个木箱，含 5 个双层）
-        { level: 25, chapter: 5, isBoss: true, goalType: 'crate', crateTarget: 12, moves: 22, colors: 6,
+        { level: 25, chapter: 5, isBoss: true, goalType: 'crate', crateTarget: 12, moves: 30, colors: 6,
+          difficulty: 'boss',     designIntent: '清除全部混合木箱，综合考察相邻消除、特效和分段重力',
           crate: [
               {row:0,col:1,layers:1},{row:0,col:4,layers:2},{row:0,col:6,layers:1},
               {row:2,col:2,layers:2},{row:2,col:5,layers:1},
@@ -1889,6 +1921,14 @@ export class GameManager extends Component {
     private stepsAdLabel: Label | null = null;
     /** X0: 关卡挑战 token — 每次 startLevel 递增，防止旧广告回调污染新关卡 */
     private levelRunToken = 0;
+
+    // ── X1: 本地难度诊断 ─────────────────────────
+    private levelAttemptCounts: Record<number, number> = {};
+    private validMovesUsedThisRun = 0;
+    private hammerUsedThisRun = false;
+    private shuffleUsedThisRun = false;
+    private addStepsUsedThisRun = false;
+    private difficultyResultLogged = false;
 
     // ── 游戏背景层（章节主题色） ─────────────────
     private gameBgNode: Node | null = null;
@@ -2460,6 +2500,15 @@ export class GameManager extends Component {
         this.continueAdPending = false;
         this.levelRunToken++;
 
+        // X1: 重置难度诊断字段
+        this.levelAttemptCounts[config.level] =
+            (this.levelAttemptCounts[config.level] ?? 0) + 1;
+        this.validMovesUsedThisRun = 0;
+        this.hammerUsedThisRun = false;
+        this.shuffleUsedThisRun = false;
+        this.addStepsUsedThisRun = false;
+        this.difficultyResultLogged = false;
+
         this.hidePanel(this.resultPanel);
         this.hidePanel(this.stepsPanel);
         this.hidePanel(this.pausePanel);
@@ -2484,7 +2533,13 @@ export class GameManager extends Component {
         // 开始录屏（抖音环境才生效，非抖音降级跳过）
         RecorderManager.getInstance().start(300);
 
-        console.log(`[GameManager] ── L${config.level} (第${config.chapter}章${config.isBoss ? '·Boss' : ''}) 开始 | 目标=${config.goalType} | ${config.moves} 步 | ${config.colors} 色 ──`);
+        console.log(
+            `[GameManager] ── L${config.level} ` +
+            `difficulty=${config.difficulty} ` +
+            `目标=${config.goalType} ` +
+            `${config.moves}步 ${config.colors}色 ` +
+            `意图=${config.designIntent} ──`,
+        );
 
         // ★ 章节主题色：按 config.chapter 切换背景（首次或切章时淡变，同章不重复）
         const newChapter = this.safeNum(config.chapter, 1);
@@ -2594,6 +2649,7 @@ export class GameManager extends Component {
 
     private onValidSwap(): void {
         this.currentSteps = Math.max(0, this.currentSteps - 1);
+        this.validMovesUsedThisRun++;
         this.updateHUD();
         console.log(`[GameManager] 有效交换，剩余步数: ${this.currentSteps}`);
     }
@@ -2877,6 +2933,7 @@ export class GameManager extends Component {
         }
 
         if (isWin) {
+            this.logDifficultyResult(true);
             AudioManager.inst?.playWin();
             VibrateManager.inst?.long();
             // Boss 关额外震动
@@ -2942,6 +2999,7 @@ export class GameManager extends Component {
                 }
             }
         } else {
+            this.logDifficultyResult(false);
             AudioManager.inst?.playLose();
             VibrateManager.inst?.long();
             // 失败不发币，隐藏提示
@@ -2957,6 +3015,36 @@ export class GameManager extends Component {
         // A: 动态布局结算卡片（通过 monsterLabel.active 判断是否有公仔解锁）
         this.layoutResultPanel(isWin, this.resultMonsterLabel?.node.active ?? false);
         console.log(`[GameManager] 结算: ${isWin ? '过关' : '失败'} | 得分 ${this.currentScore}`);
+    }
+
+    /** X1: 输出结构化难度诊断日志（防重复，同一局只输出一次） */
+    private logDifficultyResult(isWin: boolean): void {
+        if (this.difficultyResultLogged) return;
+        this.difficultyResultLogged = true;
+
+        const config = this.levelConfigs[this.currentLevel];
+
+        console.log(
+            '[DifficultyRun]',
+            JSON.stringify({
+                level: config.level,
+                chapter: config.chapter,
+                difficulty: config.difficulty,
+                designIntent: config.designIntent,
+                result: isWin ? 'win' : 'fail',
+                attempt: this.levelAttemptCounts[config.level] ?? 1,
+                baseMoves: config.moves,
+                validMovesUsed: this.validMovesUsedThisRun,
+                stepsRemaining: this.currentSteps,
+                score: this.currentScore,
+                goalType: config.goalType,
+                goalText: this.getGoalHudText(config),
+                hammerUsed: this.hammerUsedThisRun,
+                shuffleUsed: this.shuffleUsedThisRun,
+                addStepsUsed: this.addStepsUsedThisRun,
+                continueAdUsed: this.continueAdUsed,
+            }),
+        );
     }
 
     /** 结算面板得分文本（按目标类型） */
@@ -6035,6 +6123,7 @@ export class GameManager extends Component {
             const ok = await this.board?.useShuffleBooster();
             if (ok) {
                 this.shuffleCount = Math.max(0, this.shuffleCount - 1);
+                this.shuffleUsedThisRun = true;
             }
         } catch (e) {
             console.error('[GameManager] 洗牌道具异常:', e);
@@ -6055,6 +6144,7 @@ export class GameManager extends Component {
 
         this.currentSteps += 3;
         this.addStepsCount = Math.max(0, this.addStepsCount - 1);
+        this.addStepsUsedThisRun = true;
         this.updateHUD();
         this.updateBoosterUI();
 
@@ -6074,6 +6164,7 @@ export class GameManager extends Component {
             this.hammerCount = Math.max(0, this.hammerCount - 1);
             this.hammerSelecting = false;
             this.boosterBusy = false;
+            this.hammerUsedThisRun = true;
             this.hideHammerHint();
             this.updateBoosterUI();
             // 统一目标判定
