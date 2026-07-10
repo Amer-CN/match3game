@@ -23,7 +23,7 @@ import {
     UIOpacity,
     resources,
 } from 'cc';
-import { Board, BoardCallbacks, IceCellConfig } from './Board';
+import { Board, BoardCallbacks, IceCellConfig, CrateCellConfig } from './Board';
 import { AudioManager } from './AudioManager';
 import { VibrateManager } from './VibrateManager';
 import { AdManager } from './AdManager';
@@ -40,7 +40,7 @@ const { ccclass } = _decorator;
 declare const wx: any;
 
 /** 过关目标类型 */
-type GoalType = 'score' | 'collect' | 'special' | 'ice';
+type GoalType = 'score' | 'collect' | 'special' | 'ice' | 'crate';
 
 /** 关卡配置 */
 interface LevelConfig {
@@ -58,6 +58,10 @@ interface LevelConfig {
     ice?: IceCellConfig[];
     /** U1: 冰层清除目标数（goalType=ice 时需清除的冰格数） */
     iceTarget?: number;
+    /** V: 木箱配置 */
+    crate?: CrateCellConfig[];
+    /** V: 木箱清除目标数（goalType=crate 时需清除的木箱格数） */
+    crateTarget?: number;
 }
 
 /** 颜色键 → colorId 映射 */
@@ -183,6 +187,52 @@ export class GameManager extends Component {
               {row:7,col:2,layers:1},{row:7,col:5,layers:1},
           ],
         },
+        // —— 第 5 章：木箱障碍（6 色）——
+        // V: L21 木箱入门 — 清除 6 个单层木箱
+        { level: 21, chapter: 5, isBoss: false, goalType: 'crate', crateTarget: 6, moves: 24, colors: 6,
+          crate: [
+              {row:2,col:2,layers:1},{row:2,col:5,layers:1},
+              {row:3,col:3,layers:1},{row:3,col:4,layers:1},
+              {row:5,col:2,layers:1},{row:5,col:5,layers:1},
+          ],
+        },
+        // V: L22 收集 + 木箱
+        { level: 22, chapter: 5, isBoss: false, goalType: 'collect', goalColor: ['pink', 'blue'], goalCount: [20, 20], moves: 25, colors: 6,
+          crate: [
+              {row:1,col:1,layers:1},{row:1,col:6,layers:1},
+              {row:3,col:0,layers:1},{row:3,col:3,layers:1},
+              {row:3,col:4,layers:1},{row:3,col:7,layers:1},
+              {row:5,col:1,layers:1},{row:5,col:6,layers:1},
+          ],
+        },
+        // V: L23 特效 + 木箱（含 2 个双层）
+        { level: 23, chapter: 5, isBoss: false, goalType: 'special', specialCount: 7, moves: 23, colors: 6,
+          crate: [
+              {row:1,col:2,layers:1},{row:1,col:5,layers:2},
+              {row:4,col:1,layers:1},{row:4,col:6,layers:1},
+              {row:6,col:2,layers:2},{row:6,col:5,layers:1},
+          ],
+        },
+        // V: L24 分数 + 木箱阵（含 4 个双层）
+        { level: 24, chapter: 5, isBoss: false, goalType: 'score', targetScore: 4800, moves: 22, colors: 6,
+          crate: [
+              {row:0,col:2,layers:1},{row:0,col:5,layers:2},
+              {row:2,col:0,layers:1},{row:2,col:3,layers:2},
+              {row:2,col:4,layers:2},{row:2,col:7,layers:1},
+              {row:4,col:0,layers:1},{row:4,col:3,layers:1},
+              {row:4,col:4,layers:1},{row:4,col:7,layers:2},
+          ],
+        },
+        // V: L25 Boss — 拆箱（12 个木箱，含 5 个双层）
+        { level: 25, chapter: 5, isBoss: true, goalType: 'crate', crateTarget: 12, moves: 22, colors: 6,
+          crate: [
+              {row:0,col:1,layers:1},{row:0,col:4,layers:2},{row:0,col:6,layers:1},
+              {row:2,col:2,layers:2},{row:2,col:5,layers:1},
+              {row:4,col:1,layers:1},{row:4,col:3,layers:2},{row:4,col:6,layers:2},
+              {row:5,col:2,layers:1},{row:5,col:5,layers:1},
+              {row:7,col:1,layers:2},{row:7,col:6,layers:1},
+          ],
+        },
     ];
 
     // ── 运行时状态 ────────────────────────────
@@ -200,6 +250,8 @@ export class GameManager extends Component {
     private detonatedSpecials = 0;
     private clearedIceCells = 0;  // U1: 已清除的冰格数
     private iceTutorialShown = false;  // U1: L16 冰层教学是否已展示
+    private clearedCrateCells = 0;  // V: 已清除的木箱格数
+    private crateTutorialShown = false;  // V: L21 木箱教学是否已展示
 
     // ── 引用 ──────────────────────────────────
     private board: Board | null = null;
@@ -330,6 +382,24 @@ export class GameManager extends Component {
     /** 是否在关卡中（控制暂停键可见性） */
     private _inLevel = false;
 
+    // ── W: 局内道具系统 ─────────────────────────
+    private hammerCount = 1;
+    private shuffleCount = 1;
+    private addStepsCount = 1;
+
+    private boosterBar: Node | null = null;
+    private hammerBtn: Node | null = null;
+    private shuffleBtn: Node | null = null;
+    private addStepsBtn: Node | null = null;
+
+    private hammerLabel: Label | null = null;
+    private shuffleLabel: Label | null = null;
+    private addStepsLabel: Label | null = null;
+
+    private hammerSelecting = false;
+    private boosterBusy = false;
+    private hammerHintLabel: Label | null = null;
+
     // ── 游戏背景层（章节主题色） ─────────────────
     private gameBgNode: Node | null = null;
     private gameBgG: Graphics | null = null;
@@ -341,10 +411,11 @@ export class GameManager extends Component {
         { top: '#EAF5EF', bottom: '#DCEDE4' }, // 第2章「进阶」薄荷奶绿
         { top: '#F0EAF7', bottom: '#E2D8EE' }, // 第3章「终章」暮光薰衣草
         { top: '#FFF4E6', bottom: '#F5E6D3' }, // 第4章「新篇」暖橘奶油
+        { top: '#F5EDE0', bottom: '#EBD9C8' }, // 第5章「拆箱」温暖木色
     ];
 
     /** 章末Boss首次通关赠送的公仔 monId（按章号 1/2/3 → 0兔/3鹿/5狐） */
-    private static readonly CHAPTER_BOSS_MONSTER: number[] = [0, 3, 5, 4];
+    private static readonly CHAPTER_BOSS_MONSTER: number[] = [0, 3, 5, 4, 2];
 
     // ── 录屏 videoPath ─────────────────────────
     private recordedVideoPath: string | null = null;
@@ -425,6 +496,9 @@ export class GameManager extends Component {
                 onSpecialDetonated: () => this.onSpecialDetonated(),
                 onIceCleared: (row: number, col: number) => this.onIceCleared(row, col),
                 onIceDamaged: (row: number, col: number, layersRemaining: number) => this.onIceDamaged(row, col, layersRemaining),
+                onCrateCleared: (row: number, col: number) => this.onCrateCleared(row, col),
+                onCrateDamaged: (row: number, col: number, layersRemaining: number) => this.onCrateDamaged(row, col, layersRemaining),
+                onHammerResolved: (success: boolean) => this.onHammerResolved(success),
             } as BoardCallbacks);
         }
 
@@ -449,6 +523,7 @@ export class GameManager extends Component {
         }
 
         this.layoutBoard();
+        this.layoutBoosterBar();
         // F0: 启动先显示首页（不再直接进关卡选择页）
         this.showHomePanel();
     }
@@ -827,6 +902,7 @@ export class GameManager extends Component {
 
         // 重新布局棋盘
         this.layoutBoard();
+        this.layoutBoosterBar();
 
         // 重新定位游戏圈按钮
         this.gameClubEntry?.reposition(
@@ -879,6 +955,15 @@ export class GameManager extends Component {
         this.collectedCount = {};
         this.detonatedSpecials = 0;
         this.clearedIceCells = 0;  // U1: 清零冰格计数
+        this.clearedCrateCells = 0;  // V: 清零木箱格计数
+
+        // W: 重置局内道具
+        this.hammerCount = 1;
+        this.shuffleCount = 1;
+        this.addStepsCount = 1;
+        this.hammerSelecting = false;
+        this.boosterBusy = false;
+        this.board?.cancelHammerMode();
 
         this.hidePanel(this.resultPanel);
         this.hidePanel(this.stepsPanel);
@@ -888,7 +973,7 @@ export class GameManager extends Component {
         this.gameClubEntry?.hide();
 
         this.board?.setLevel(levelIndex);  // C0: 设置关卡号（L1=0 触发手势引导）
-        this.board?.resetBoard(config.colors, config.ice ?? []);  // U1: 传入冰层配置
+        this.board?.resetBoard(config.colors, config.ice ?? [], config.crate ?? []);  // V: 传入冰层+木箱配置
         // setBusy(false) 移到章节卡逻辑末尾（避免过场卡期间棋盘可交互）
 
         this.updateHUD();
@@ -896,6 +981,9 @@ export class GameManager extends Component {
         // Fix 1.1: 延迟重算布局
         this.scheduleOnce(() => {
             this.layoutBoard();
+            this.layoutBoosterBar();
+            this.updateBoosterUI();
+            this.updateBoosterBarVisible();
         }, 0.1);
 
         // 开始录屏（抖音环境才生效，非抖音降级跳过）
@@ -929,6 +1017,14 @@ export class GameManager extends Component {
                 this.showIceTutorial();
             }, 2.0);
         }
+
+        // V: L21 首次进入时显示木箱教学提示
+        if (levelIndex === 20 && !this.crateTutorialShown) {
+            this.crateTutorialShown = true;
+            this.scheduleOnce(() => {
+                this.showCrateTutorial();
+            }, 2.0);
+        }
     }
 
     /** U1: 显示冰层教学提示（短暂弹层） */
@@ -945,6 +1041,39 @@ export class GameManager extends Component {
         label.fontSize = 24;
         label.lineHeight = 28;
         label.color = new Color(0x33, 0x66, 0xAA);
+        label.useSystemFont = true;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.overflow = Label.Overflow.SHRINK;
+
+        tutorialNode.setPosition(0, this.safeNum(this.canvasH, 1280) * 0.3, 0);
+
+        const op = tutorialNode.addComponent(UIOpacity);
+        op.opacity = 0;
+
+        tween(op)
+            .to(0.3, { opacity: 255 })
+            .delay(3.0)
+            .to(0.5, { opacity: 0 })
+            .call(() => {
+                if (tutorialNode && tutorialNode.isValid) tutorialNode.destroy();
+            })
+            .start();
+    }
+
+    /** V: 显示木箱教学提示（短暂弹层） */
+    private showCrateTutorial(): void {
+        const tutorialNode = new Node('CrateTutorial');
+        tutorialNode.parent = this.node;
+
+        const ut = tutorialNode.addComponent(UITransform);
+        const pw = this.safeNum(this.canvasW, 720);
+        ut.setContentSize(pw, 80);
+
+        const label = tutorialNode.addComponent(Label);
+        label.string = '📦 木箱会挡住萌宠下落，消除旁边的萌宠或用特效命中即可拆箱！';
+        label.fontSize = 24;
+        label.lineHeight = 28;
+        label.color = new Color(0x6B, 0x42, 0x1F);
         label.useSystemFont = true;
         label.horizontalAlign = Label.HorizontalAlign.CENTER;
         label.overflow = Label.Overflow.SHRINK;
@@ -1024,7 +1153,15 @@ export class GameManager extends Component {
     }
 
     private onChainComplete(): void {
+        this.evaluateLevelAfterBoardStable();
+    }
+
+    /** W: 棋盘稳定后的统一目标判定（普通交换连锁结束 & 锤子道具稳定后均调用） */
+    private evaluateLevelAfterBoardStable(): void {
         const config = this.levelConfigs[this.currentLevel];
+
+        // 防重复结算
+        if (this.resultPanel?.active || this.stepsPanel?.active) return;
 
         // ★ 先判过关，后判步数耗尽（避免最后一步刚好达标却误判失败）
         if (this.isGoalReached(config)) {
@@ -1063,6 +1200,8 @@ export class GameManager extends Component {
                 return this.detonatedSpecials >= this.safeNum(cfg.specialCount, Infinity);
             case 'ice':
                 return this.clearedIceCells >= this.safeNum(cfg.iceTarget, Infinity);
+            case 'crate':
+                return this.clearedCrateCells >= this.safeNum(cfg.crateTarget, Infinity);
             default:
                 return false;
         }
@@ -1097,6 +1236,18 @@ export class GameManager extends Component {
         console.log(`[GameManager] 🧊 冰格受损 (${row},${col}) → 剩余 ${layersRemaining} 层`);
     }
 
+    /** V: Board 回调 — 木箱完全清除 */
+    private onCrateCleared(row: number, col: number): void {
+        this.clearedCrateCells++;
+        this.updateHUD();
+        console.log(`[GameManager] 📦 木箱清除 (${row},${col}) → 累计 ${this.clearedCrateCells}`);
+    }
+
+    /** V: Board 回调 — 木箱受损（仍有残余） */
+    private onCrateDamaged(row: number, col: number, layersRemaining: number): void {
+        console.log(`[GameManager] 📦 木箱受损 (${row},${col}) → 剩余 ${layersRemaining} 层`);
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     //  HUD
     // ══════════════════════════════════════════════════════════════════════════
@@ -1127,7 +1278,7 @@ export class GameManager extends Component {
 
     /** 章节副标题 */
     private getChapterSubtitle(chapter: number): string {
-        const subtitles = ['', '初识 · 甜甜的开始', '进阶 · 越消越上头', '终章 · 收集控の狂欢', '新篇 · 冰层大冒险'];
+        const subtitles = ['', '初识 · 甜甜的开始', '进阶 · 越消越上头', '终章 · 收集控の狂欢', '新篇 · 冰层大冒险', '拆箱 · 拆开惊喜'];
         const idx = this.safeNum(chapter, 1);
         return subtitles[idx] ?? `第${idx}章`;
     }
@@ -1159,6 +1310,8 @@ export class GameManager extends Component {
                 return `💥 ${this.detonatedSpecials}/${this.safeNum(cfg.specialCount, 0)}`;
             case 'ice':
                 return `🧊 ${this.clearedIceCells}/${this.safeNum(cfg.iceTarget, 0)}`;
+            case 'crate':
+                return `📦 ${this.clearedCrateCells}/${this.safeNum(cfg.crateTarget, 0)}`;
             default:
                 return `🎯 ${safeScore}`;
         }
@@ -1196,6 +1349,7 @@ export class GameManager extends Component {
                 '第2章 通关！',
                 '第3章 通关！',
                 '🎉 第4章 通关！萌力全开',
+                '🎉 第5章 通关！拆箱大师',
             ];
             const clearText = chapterClearTexts[chapter] ?? `第${chapter}章 完成！`;
             this.resultScore!.string = `${clearText}\n` + this.getResultScoreText(config);
@@ -1332,6 +1486,8 @@ export class GameManager extends Component {
                 return `引爆: ${this.detonatedSpecials}/${this.safeNum(cfg.specialCount, 0)}  |  得分 ${score}`;
             case 'ice':
                 return `🧊 碎冰: ${this.clearedIceCells}/${this.safeNum(cfg.iceTarget, 0)}  |  得分 ${score}`;
+            case 'crate':
+                return `📦 拆箱: ${this.clearedCrateCells}/${this.safeNum(cfg.crateTarget, 0)}  |  得分 ${score}`;
             default:
                 return `本关得分: ${score}`;
         }
@@ -1572,6 +1728,7 @@ export class GameManager extends Component {
         // ── 3. HUD / 弹层 ──
         this.createHUD();
         this.createPauseButton();
+        this.createBoosterBar();
         this.createResultPanel();
         this.createStepsPanel();
         this.createLevelSelectPanel();
@@ -2201,9 +2358,9 @@ export class GameManager extends Component {
         maskNode.addComponent(UIOpacity);
         this.addWidget(maskNode, { top: 0, bottom: 0, left: 0, right: 0 });
 
-        // Card 尺寸（N: 加高 900→1080 以容纳第4章 4 组关卡按钮）
+        // Card 尺寸（V: 加高 1080→1280 以容纳第5章 5 组关卡按钮）
         const cardW = this.safeNum(640, 640);
-        const cardH = this.safeNum(1080, 1080);
+        const cardH = this.safeNum(1280, 1280);
 
         // Shadow
         const shadowNode = new Node('CardShadow');
@@ -2276,18 +2433,19 @@ export class GameManager extends Component {
         this.levelSelectCollectionBadge.node.setPosition(this.safeNum(badgeW / 4, 145), 0, 0);
 
         // 4 章分组
-        const chapterNames = ['', '第 1 章 · 入门', '第 2 章 · 进阶', '第 3 章 · 挑战', '第 4 章 · 新篇'];
+        const chapterNames = ['', '第 1 章 · 入门', '第 2 章 · 进阶', '第 3 章 · 挑战', '第 4 章 · 新篇', '第 5 章 · 拆箱'];
         // ★ I1: 复用 G1 章节主题色常量，每章分组标题条用该章色调底衬
         const chapterAccentColors = [
             this.parseHexColor(GameManager.CHAPTER_BG_THEMES[0].bottom, new Color(0xF5, 0xE8, 0xF0)), // 暖粉
             this.parseHexColor(GameManager.CHAPTER_BG_THEMES[1].bottom, new Color(0xDC, 0xED, 0xE4)), // 薄荷
             this.parseHexColor(GameManager.CHAPTER_BG_THEMES[2].bottom, new Color(0xE2, 0xD8, 0xEE)), // 薰衣草
             this.parseHexColor(GameManager.CHAPTER_BG_THEMES[3].bottom, new Color(0xF5, 0xE6, 0xD3)), // 暖橘
+            this.parseHexColor(GameManager.CHAPTER_BG_THEMES[4].bottom, new Color(0xEB, 0xD9, 0xC8)), // 温暖木色
         ];
         const btnSize = 100;
         const gap = 15;
 
-        for (let ch = 1; ch <= 4; ch++) {
+        for (let ch = 1; ch <= 5; ch++) {
             // ★ I1: 章节标题条底衬（该章主题色）
             const chTitleBar = new Node(`Ch${ch}TitleBar`);
             chTitleBar.parent = card;
@@ -4063,7 +4221,300 @@ export class GameManager extends Component {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
-    //  暂停弹层 — 交互
+    //  W · 局内道具栏
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** W: 创建道具栏（三按钮横排） */
+    private createBoosterBar(): void {
+        const canvas = this.node.parent!;
+        const bar = new Node('BoosterBar');
+        bar.parent = canvas;
+        const barUT = bar.addComponent(UITransform);
+        barUT.setContentSize(540, 56);
+        bar.setPosition(0, -560, 0);
+        bar.active = false;
+        this.boosterBar = bar;
+
+        // 三个按钮
+        this.hammerBtn = this.createBoosterButton(bar, 'HammerBtn', '🔨 ×1', 0, () => this.onHammerBoosterClick());
+        this.shuffleBtn = this.createBoosterButton(bar, 'ShuffleBtn', '🔀 ×1', -185, () => this.onShuffleBoosterClick());
+        this.addStepsBtn = this.createBoosterButton(bar, 'AddStepsBtn', '👣+3 ×1', 185, () => this.onAddStepsBoosterClick());
+
+        // 缓存 Label
+        this.hammerLabel = this.hammerBtn.getChildByName('Label')?.getComponent(Label) ?? null;
+        this.shuffleLabel = this.shuffleBtn.getChildByName('Label')?.getComponent(Label) ?? null;
+        this.addStepsLabel = this.addStepsBtn.getChildByName('Label')?.getComponent(Label) ?? null;
+    }
+
+    /** W: 创建单个道具按钮（比 createRoundButton 更紧凑） */
+    private createBoosterButton(parent: Node, name: string, text: string, offsetX: number, callback: () => void): Node {
+        const w = 165;
+        const h = 50;
+        const node = new Node(name);
+        node.parent = parent;
+        const ut = node.addComponent(UITransform);
+        ut.setContentSize(w, h);
+        node.setPosition(offsetX, 0, 0);
+
+        // Graphics 画圆角底 + 描边
+        const g = node.addComponent(Graphics);
+        g.fillColor = new Color(255, 255, 255, 220);
+        g.strokeColor = new Color(0x9B, 0x59, 0xD9, 255);  // 紫色描边
+        g.lineWidth = 2;
+        g.roundRect(-w / 2, -h / 2, w, h, 24);
+        g.fill();
+        g.stroke();
+
+        // Label
+        const labelNode = new Node('Label');
+        labelNode.parent = node;
+        const labelUT = labelNode.addComponent(UITransform);
+        labelUT.setContentSize(w, h);
+        const label = labelNode.addComponent(Label);
+        label.string = text;
+        label.fontSize = 22;
+        label.lineHeight = 26;
+        label.color = new Color(0x6A, 0x3D, 0xA8, 255);  // 紫色文字
+        label.useSystemFont = true;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+        label.overflow = Label.Overflow.SHRINK;
+
+        // Button（手动 tween 缩放反馈）
+        const button = node.addComponent(Button);
+        button.transition = Button.Transition.NONE;
+        button.node.on(Button.EventType.CLICK, () => {
+            try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+            Tween.stopAllByTarget(node);
+            node.setScale(0.95, 0.95, 1);
+            tween(node)
+                .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }, this);
+        button.node.on(Button.EventType.CLICK, callback, this);
+
+        return node;
+    }
+
+    /** W: 刷新道具栏 UI（次数、按钮状态、高亮） */
+    private updateBoosterUI(): void {
+        if (!this.boosterBar) return;
+
+        const setBtn = (btn: Node | null, label: Label | null, count: number, baseText: string, highlight: boolean) => {
+            if (!btn) return;
+            const btnComp = btn.getComponent(Button);
+            const g = btn.getComponent(Graphics);
+            if (!btnComp || !g) return;
+
+            const used = count <= 0;
+            btnComp.interactable = !used && !this.boosterBusy;
+
+            // 重绘底色
+            const w = 165, h = 50;
+            g.clear();
+            if (used) {
+                g.fillColor = new Color(200, 200, 200, 100);
+                g.strokeColor = new Color(150, 150, 150, 120);
+            } else if (highlight) {
+                g.fillColor = new Color(0xFF, 0xF0, 0xA0, 240);  // 高亮黄底
+                g.strokeColor = new Color(0xE8, 0x8B, 0x1A, 255); // 橙色描边
+            } else {
+                g.fillColor = new Color(255, 255, 255, 220);
+                g.strokeColor = new Color(0x9B, 0x59, 0xD9, 255);
+            }
+            g.lineWidth = highlight ? 3 : 2;
+            g.roundRect(-w / 2, -h / 2, w, h, 24);
+            g.fill();
+            g.stroke();
+
+            // 更新文字
+            if (label) {
+                if (highlight) {
+                    label.string = '🔨 选目标';
+                } else {
+                    label.string = baseText + ` ×${count}`;
+                }
+                label.color = used
+                    ? new Color(150, 150, 150, 150)
+                    : (highlight ? new Color(0xC0, 0x60, 0x00, 255) : new Color(0x6A, 0x3D, 0xA8, 255));
+            }
+        };
+
+        setBtn(this.hammerBtn, this.hammerLabel, this.hammerCount, '🔨', this.hammerSelecting);
+        setBtn(this.shuffleBtn, this.shuffleLabel, this.shuffleCount, '🔀', false);
+        setBtn(this.addStepsBtn, this.addStepsLabel, this.addStepsCount, '👣+3', false);
+    }
+
+    // ── W: 道具栏位置（在 layoutBoard 后调用） ──────
+    private layoutBoosterBar(): void {
+        if (!this.boosterBar) return;
+        const boardNode = this.node.parent?.getChildByName('Board');
+        if (!boardNode) return;
+
+        // 棋盘底边的世界坐标 → Canvas 局部坐标
+        const { ROWS, TILE_SIZE, GAP } = Board;
+        const halfBoard = (ROWS * TILE_SIZE + (ROWS - 1) * GAP) / 2;
+        const boardBottomLocal = boardNode.position.y - halfBoard;
+
+        // 道具栏放在棋盘下方 45~55px
+        const barY = boardBottomLocal - 50;
+
+        // 确保不超出底部安全区
+        const canvasH = this.safeNum(this.canvasH, 1280);
+        const minBottom = -(canvasH / 2) + 50;
+        const finalY = Math.max(barY, minBottom);
+
+        this.boosterBar.setPosition(0, finalY, 0);
+    }
+
+    // ── W: 道具栏可见性 ──────────────────────────
+    private updateBoosterBarVisible(): void {
+        if (!this.boosterBar) return;
+        const anyPanelOpen =
+            (this.resultPanel?.active ?? false) ||
+            (this.stepsPanel?.active ?? false) ||
+            (this.pausePanel?.active ?? false) ||
+            (this.levelSelectPanel?.active ?? false) ||
+            (this.gachaPanel?.active ?? false) ||
+            (this.collectionPanel?.active ?? false) ||
+            (this.homePanel?.active ?? false) ||
+            (this.chapterCard?.active ?? false) ||
+            (this.settingsPanel?.active ?? false) ||
+            (this.dressupPanel?.active ?? false) ||
+            (this.dailySignPanel?.active ?? false);
+        this.boosterBar.active = this._inLevel && !anyPanelOpen;
+    }
+
+    // ── W: 锤子提示文字 ──────────────────────────
+    private showHammerHint(): void {
+        if (this.hammerHintLabel) return;  // 已存在
+        const canvas = this.node.parent!;
+        const node = new Node('HammerHint');
+        node.parent = canvas;
+        const ut = node.addComponent(UITransform);
+        ut.setContentSize(500, 36);
+        // 放在棋盘上方
+        const boardNode = canvas.getChildByName('Board');
+        const { ROWS, TILE_SIZE, GAP } = Board;
+        const halfBoard = (ROWS * TILE_SIZE + (ROWS - 1) * GAP) / 2;
+        const hintY = boardNode ? boardNode.position.y + halfBoard + 30 : 200;
+        node.setPosition(0, hintY, 0);
+
+        const label = node.addComponent(Label);
+        label.string = '🔨 点击一个萌宠、冰层或木箱';
+        label.fontSize = 24;
+        label.lineHeight = 28;
+        label.color = new Color(0x6A, 0x3D, 0xA8, 255);
+        label.useSystemFont = true;
+        label.horizontalAlign = Label.HorizontalAlign.CENTER;
+        label.verticalAlign = Label.VerticalAlign.CENTER;
+
+        // 淡入
+        const op = node.addComponent(UIOpacity);
+        op.opacity = 0;
+        tween(op).to(0.2, { opacity: 255 }).start();
+
+        this.hammerHintLabel = label;
+    }
+
+    private hideHammerHint(): void {
+        if (!this.hammerHintLabel) return;
+        const node = this.hammerHintLabel.node;
+        if (node && node.isValid) {
+            node.destroy();
+        }
+        this.hammerHintLabel = null;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  W · 道具按钮点击处理
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** W: 小锤子按钮 */
+    private onHammerBoosterClick(): void {
+        if (this.hammerCount <= 0) return;
+        if (this.boosterBusy) return;
+
+        // 如果正在选目标，再次点击 = 取消
+        if (this.hammerSelecting) {
+            this.board?.cancelHammerMode();
+            this.hammerSelecting = false;
+            this.hideHammerHint();
+            this.updateBoosterUI();
+            return;
+        }
+
+        // 进入锤子选择模式
+        const ok = this.board?.beginHammerMode() ?? false;
+        if (ok) {
+            this.hammerSelecting = true;
+            this.showHammerHint();
+            this.updateBoosterUI();
+        }
+    }
+
+    /** W: 重新洗牌按钮 */
+    private async onShuffleBoosterClick(): Promise<void> {
+        if (this.shuffleCount <= 0) return;
+        if (this.boosterBusy) return;
+        if (this.hammerSelecting) return;
+
+        this.boosterBusy = true;
+        this.updateBoosterUI();
+
+        try {
+            const ok = await this.board?.useShuffleBooster();
+            if (ok) {
+                this.shuffleCount = Math.max(0, this.shuffleCount - 1);
+            }
+        } catch (e) {
+            console.error('[GameManager] 洗牌道具异常:', e);
+        } finally {
+            this.boosterBusy = false;
+            this.updateBoosterUI();
+        }
+    }
+
+    /** W: +3 步按钮 */
+    private onAddStepsBoosterClick(): void {
+        if (this.addStepsCount <= 0) return;
+        if (this.boosterBusy) return;
+        if (this.hammerSelecting) return;
+        if (!this._inLevel) return;
+        // 弹层打开时不可用
+        if (this.resultPanel?.active || this.stepsPanel?.active || this.pausePanel?.active) return;
+
+        this.currentSteps += 3;
+        this.addStepsCount = Math.max(0, this.addStepsCount - 1);
+        this.updateHUD();
+        this.updateBoosterUI();
+
+        // 简单 scale 弹动步数 Label
+        if (this.stepsLabel) {
+            Tween.stopAllByTarget(this.stepsLabel.node);
+            this.stepsLabel.node.setScale(1.3, 1.3, 1);
+            tween(this.stepsLabel.node)
+                .to(0.2, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                .start();
+        }
+    }
+
+    /** W: Board 锤子解析完成回调 */
+    private onHammerResolved(success: boolean): void {
+        if (success) {
+            this.hammerCount = Math.max(0, this.hammerCount - 1);
+            this.hammerSelecting = false;
+            this.boosterBusy = false;
+            this.hideHammerHint();
+            this.updateBoosterUI();
+            // 统一目标判定
+            this.evaluateLevelAfterBoardStable();
+        } else {
+            // 失败 — 不扣次数
+            this.boosterBusy = false;
+            this.updateBoosterUI();
+        }
+    }
     // ══════════════════════════════════════════════════════════════════════════
 
     /** 点暂停键 → 弹出暂停卡，锁棋盘 */
@@ -4172,6 +4623,16 @@ export class GameManager extends Component {
             (this.dressupPanel?.active ?? false) ||
             (this.dailySignPanel?.active ?? false);
         this.pauseBtn.active = this._inLevel && !anyPanelOpen;
+
+        // W: 同步道具栏可见性
+        if (anyPanelOpen && this.hammerSelecting) {
+            // 弹层打开时安全取消锤子选择
+            this.board?.cancelHammerMode();
+            this.hammerSelecting = false;
+            this.hideHammerHint();
+        }
+        this.updateBoosterBarVisible();
+        this.updateBoosterUI();
     }
 
     private showPanel(panel: Node | null, silent: boolean = false): void {

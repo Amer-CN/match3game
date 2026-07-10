@@ -101,6 +101,9 @@ export enum BoardState {
     LOCKED = 3,
 }
 
+/** W: 道具模式 */
+type BoosterMode = 'none' | 'hammer';
+
 /** Board → GameManager 回调接口 */
 export interface BoardCallbacks {
     /** 有效交换（触发了消除）→ GameManager 扣 1 步 */
@@ -121,6 +124,8 @@ export interface BoardCallbacks {
     onCrateDamaged?: (row: number, col: number, layersRemaining: number) => void;
     /** V: 木箱完全清除（某一格的木箱归零） */
     onCrateCleared?: (row: number, col: number) => void;
+    /** W: 锤子道具解析完成（success=是否命中了棋子或木箱） */
+    onHammerResolved?: (success: boolean) => void;
 }
 
 @ccclass('Board')
@@ -266,6 +271,14 @@ export class Board extends Component {
     // ── C3 状态超时计时 ──────────────────────
     private _stateTimer: number = 0;
 
+    // ── W: 道具系统 ──────────────────────────
+    /** W: 道具模式 */
+    private _boosterMode: BoosterMode = 'none';
+    /** W: 道具正在解析中（防重入） */
+    private _boosterResolving = false;
+    /** W: 棋盘 epoch — 每次 resetBoard 递增，异步流程据此检测是否已被新关卡取代 */
+    private _boardEpoch = 0;
+
     /** 当前棋盘状态（只读，供外部查询） */
     public get state(): BoardState { return this._state; }
 
@@ -402,6 +415,12 @@ export class Board extends Component {
 
     /** 重置棋盘：销毁所有方块，用新的颜色种类数重新生成 */
     public resetBoard(colorCount: number, iceConfig: IceCellConfig[] = [], crateConfig: CrateCellConfig[] = []): void {
+        // W: 棋盘 epoch 递增 — 使旧异步流程作废
+        this._boardEpoch++;
+        // W: 清理道具状态
+        this.cancelHammerMode();
+        this._boosterResolving = false;
+
         // 头像未加载完时暂存请求
         if (!this.framesReady) {
             this.pendingColorCount = colorCount;
@@ -559,6 +578,184 @@ export class Board extends Component {
     /** 外部锁定/解锁棋盘（弹层时用） */
     public setBusy(busy: boolean): void {
         this.setState(busy ? BoardState.LOCKED : BoardState.IDLE);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  W · 局内道具系统
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** W: 进入锤子选择模式 */
+    public beginHammerMode(): boolean {
+        if (this._state !== BoardState.IDLE) return false;
+        if (this._boosterResolving) return false;
+        // 取消选中
+        this.deselectTile();
+        // 停止空闲提示和手势引导
+        this.markPlayerActive();
+        this._boosterMode = 'hammer';
+        console.log('[Board] 进入锤子选择模式');
+        return true;
+    }
+
+    /** W: 取消锤子选择模式 */
+    public cancelHammerMode(): void {
+        if (this._boosterMode === 'hammer') {
+            console.log('[Board] 取消锤子选择模式');
+        }
+        this._boosterMode = 'none';
+        // 安全取消选中
+        if (this.selectedTile) {
+            this.deselectTile();
+        }
+    }
+
+    /** W: 获取当前道具模式（供外部查询） */
+    public get boosterMode(): BoosterMode { return this._boosterMode; }
+
+    /** W: 洗牌道具 — 不扣步、不触发消除回调 */
+    public async useShuffleBooster(): Promise<boolean> {
+        // 如果正在使用锤子，先取消
+        if (this._boosterMode === 'hammer') {
+            this.cancelHammerMode();
+        }
+        if (this._state !== BoardState.IDLE) return false;
+        if (this._boosterResolving) return false;
+
+        this._boosterResolving = true;
+        const epoch = this._boardEpoch;
+
+        try {
+            this.deselectTile();
+            this.markPlayerActive();
+            this.setState(BoardState.CHAINING);
+
+            await this.shuffleBoardWithHint();
+
+            // epoch 检查：如果期间切关了，不操作新棋盘
+            if (epoch !== this._boardEpoch) return false;
+
+            // 确认：无现成匹配 + 有可行步
+            if (this.findMatchGroups().length > 0) {
+                console.warn('[Board] 洗牌后仍有匹配，判定失败');
+                return false;
+            }
+            if (!this.hasAnyValidMove()) {
+                console.warn('[Board] 洗牌后无可行步，判定失败');
+                return false;
+            }
+
+            console.log('[Board] 洗牌道具成功');
+            return true;
+        } catch (e) {
+            console.error('[Board] 洗牌道具异常:', e);
+            return false;
+        } finally {
+            this._boosterResolving = false;
+            this._boosterMode = 'none';
+            if (this._state !== BoardState.LOCKED && epoch === this._boardEpoch) {
+                this.setState(BoardState.IDLE);
+            }
+        }
+    }
+
+    /** W: 锤子核心流程 — 点击目标格后执行伤害/消除/重力/连锁 */
+    private async resolveHammerAt(row: number, col: number): Promise<void> {
+        // 1. 防重入
+        if (this._boosterMode !== 'hammer') return;
+        if (this._boosterResolving) return;
+        if (this._state !== BoardState.IDLE) return;
+        if (!this.inBounds(row, col)) return;
+
+        // 2. 判断目标
+        const hasCrate = this.hasCrateAt(row, col);
+        const hasTile = this.tiles[row]?.[col] != null && this.grid[row]?.[col] != null && this.grid[row][col] >= 0;
+
+        // 3. 无效目标 — 不消耗、不清模式、直接 return
+        if (!hasCrate && !hasTile) {
+            console.log('[Board] 锤子点击无效目标，保持选择状态');
+            return;
+        }
+
+        // 4. 有效目标 — 开始解析
+        this._boosterResolving = true;
+        this._boosterMode = 'none';
+        this.deselectTile();
+        this.markPlayerActive();
+        this.setState(BoardState.CHAINING);
+        const epoch = this._boardEpoch;
+
+        let success = false;
+
+        try {
+            if (hasCrate) {
+                // ── A. 目标是木箱 ──
+                console.log(`[Board] 锤子击中木箱 (${row},${col})`);
+                this.damageCrateAt(row, col);
+
+                const crateCleared = !this.hasCrateAt(row, col);
+
+                if (crateCleared) {
+                    // 木箱清除后执行重力和连锁
+                    if (epoch !== this._boardEpoch) return;
+                    await this.applyGravity();
+                    if (epoch !== this._boardEpoch) return;
+                    await this.processChain();
+                    if (epoch !== this._boardEpoch) return;
+
+                    // 死局检测
+                    if (!this.hasAnyValidMove()) {
+                        console.log('[Board] 锤子后死局，自动洗牌');
+                        await this.shuffleBoardWithHint();
+                    }
+                }
+                // 木箱未清除时不执行重力/连锁
+                success = true;
+            } else {
+                // ── B. 目标是普通棋子 ──
+                console.log(`[Board] 锤子击中棋子 (${row},${col})`);
+                const cells = new Set<string>([`${row},${col}`]);
+
+                // 展开特效（如果是特殊棋子则引爆）
+                const splash = this.expandSpecialSplash(cells);
+                const delayMap = splash.delayMap;
+                const waveStyleMap = splash.waveStyleMap;
+
+                // 销毁
+                if (epoch !== this._boardEpoch) return;
+                await this.destroyCellSet(cells, delayMap, waveStyleMap);
+
+                if (epoch !== this._boardEpoch) return;
+                await this.applyGravity();
+                if (epoch !== this._boardEpoch) return;
+                await this.processChain();
+
+                if (epoch !== this._boardEpoch) return;
+
+                // 死局检测
+                if (!this.hasAnyValidMove()) {
+                    console.log('[Board] 锤子后死局，自动洗牌');
+                    await this.shuffleBoardWithHint();
+                }
+
+                success = true;
+            }
+        } catch (e) {
+            console.error('[Board] 锤子解析异常:', e);
+        } finally {
+            this._boosterResolving = false;
+            this._boosterMode = 'none';
+
+            // epoch 检查
+            if (epoch === this._boardEpoch) {
+                if (this._state !== BoardState.LOCKED) {
+                    this.setState(BoardState.IDLE);
+                }
+                // 只回调一次
+                if (success) {
+                    this.callbacks.onHammerResolved?.(true);
+                }
+            }
+        }
     }
 
     /** 分数翻倍（看广告占位） */
@@ -936,6 +1133,12 @@ export class Board extends Component {
 
     // ── 点击逻辑（供 TileGesture 调用） ──────────────
     public onCellClick(row: number, col: number): void {
+        // W: 锤子道具模式 — 直接处理，不走普通选中/交换逻辑
+        if (this._boosterMode === 'hammer') {
+            void this.resolveHammerAt(row, col);
+            return;
+        }
+
         if (!this.inputEnabled) {
             console.log(`[Board] 输入忽略: onCellClick(${row},${col}) state=${BoardState[this._state]}`);
             return;
@@ -964,6 +1167,9 @@ export class Board extends Component {
 
     // ── 滑动交换入口（供 TileGesture 调用） ────
     public trySwapByDir(r: number, c: number, dr: number, dc: number): void {
+        // W: 锤子模式禁止滑动交换
+        if (this._boosterMode === 'hammer') return;
+
         if (this._state !== BoardState.IDLE) {
             console.log(`[Board] 输入忽略: trySwapByDir(${r},${c},${dr},${dc}) state=${BoardState[this._state]}`);
             return;
@@ -3297,6 +3503,13 @@ return { cells, waveSeeds, isFullBoardClear: false };
 
         const ut = node.addComponent(UITransform);
         ut.setContentSize(Board.TILE_SIZE, Board.TILE_SIZE);
+
+        // W: 为木箱节点添加触摸入口 — 仅在锤子模式下生效
+        node.on(Node.EventType.TOUCH_END, () => {
+            if (this._boosterMode === 'hammer') {
+                this.onCellClick(row, col);
+            }
+        });
 
         this.drawCrateNode(node, layers);
         return node;
