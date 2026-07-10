@@ -9387,11 +9387,13 @@ return { cells, waveSeeds, isFullBoardClear: false };
                 // V: grid<0 的格不枚举
                 if (this.grid[r][c] < 0) continue;
 
-                // 试右侧
-                if (c + 1 < COLS && this.grid[r][c + 1] !== undefined) {
-                    // V: 目标格是木箱跳过
-                    if (this.hasCrateAt(r, c + 1)) continue;
-                    if (this.grid[r][c + 1] < 0) continue;
+                // 试右侧（正向条件包裹，不可交换时只跳过右模拟，不跳过下检测）
+                if (
+                    c + 1 < COLS &&
+                    this.grid[r][c + 1] !== undefined &&
+                    !this.hasCrateAt(r, c + 1) &&
+                    this.grid[r][c + 1] >= 0
+                ) {
                     const va = this.grid[r][c];
                     const vb = this.grid[r][c + 1];
                     // 模拟交换
@@ -9406,11 +9408,14 @@ return { cells, waveSeeds, isFullBoardClear: false };
                     }
                 }
 
-                // 试下方
-                if (r + 1 < ROWS && this.grid[r + 1] && this.grid[r + 1][c] !== undefined) {
-                    // V: 目标格是木箱跳过
-                    if (this.hasCrateAt(r + 1, c)) continue;
-                    if (this.grid[r + 1][c] < 0) continue;
+                // 试下方（正向条件包裹，避免 continue 语义漏检）
+                if (
+                    r + 1 < ROWS &&
+                    this.grid[r + 1] &&
+                    this.grid[r + 1][c] !== undefined &&
+                    !this.hasCrateAt(r + 1, c) &&
+                    this.grid[r + 1][c] >= 0
+                ) {
                     const va = this.grid[r][c];
                     const vb = this.grid[r + 1][c];
                     // 模拟交换
