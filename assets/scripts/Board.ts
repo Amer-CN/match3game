@@ -2161,7 +2161,7 @@ return { cells, waveSeeds, isFullBoardClear: false };
     }
 
     /**
-     * X2.2: 目标感知一步启发式 — 枚举所有合法交换，按 goalType 评分选最优。
+     * X2.3: 目标感知一步启发式 — 枚举所有合法交换，按 goalType 评分选最优。
      *
      * 评估内容（只模拟当前棋盘可见状态，不预知补棋）：
      *   - 消除数量
@@ -2216,10 +2216,10 @@ return { cells, waveSeeds, isFullBoardClear: false };
     }
 
     /**
-     * X2.2: 评估单个交换的得分（不修改实际棋盘数据，模拟后还原）。
+     * X2.3: 评估单个交换的得分（不修改实际棋盘数据，模拟后还原）。
      *
      * 安全红线：
-     *   1. 模拟后完整还原 grid（tileSpecials 不修改，无需还原）
+     *   1. 模拟后完整还原 grid + tileSpecials（try/finally 保证异常也能恢复）
      *   2. 不触发任何真实回调（不计分/扣步/目标/动画/伤害冰层木箱）
      *   3. 特殊交换（双特效互换、彩球+普通互换）被视为合法候选并模拟效果
      *   4. 平分候选随机选择（Math.random() * 0.5 扰动打破平局）
@@ -2234,194 +2234,217 @@ return { cells, waveSeeds, isFullBoardClear: false };
         },
     ): number {
         const { ROWS, COLS } = Board;
+
+        // ── 保存原始值 ──
         const va = this.grid[r1][c1];
         const vb = this.grid[r2][c2];
         const sa = this.tileSpecials[r1]?.[c1] ?? SpecialType.NONE;
         const sb = this.tileSpecials[r2]?.[c2] ?? SpecialType.NONE;
 
-        // ── 交换后特效位置（performSwap 会交换 tileSpecials）──
-        // postSa = 交换后 (r1,c1) 的特效 = 原来在 (r2,c2) 的 sb
-        // postSb = 交换后 (r2,c2) 的特效 = 原来在 (r1,c1) 的 sa
-        const postSa = sb;
-        const postSb = sa;
-
-        const isLine = (s: SpecialType) => s === SpecialType.LINE_H || s === SpecialType.LINE_V;
-        const isBomb = (s: SpecialType) => s === SpecialType.BOMB;
-        const isColor = (s: SpecialType) => s === SpecialType.COLOR_BOMB;
-
-        // ── 判断是否为主动特效交换（与 triggerSpecialExchange 逻辑一致）──
-        const bothSpecial = postSa !== SpecialType.NONE && postSb !== SpecialType.NONE;
-        const colorPlusNormal = (isColor(postSa) && postSb === SpecialType.NONE)
-                             || (isColor(postSb) && postSa === SpecialType.NONE);
-        const isSpecialExchange = bothSpecial || colorPlusNormal;
-
-        // 模拟交换 grid（tileSpecials 不交换，因为 findMatchGroups 只读 grid 颜色）
+        // ── 模拟真实 performSwap：grid + tileSpecials 同步交换 ──
         this.grid[r1][c1] = vb;
         this.grid[r2][c2] = va;
+        if (this.tileSpecials[r1]) this.tileSpecials[r1][c1] = sb;
+        if (this.tileSpecials[r2]) this.tileSpecials[r2][c2] = sa;
 
-        let eliminatedCount = 0;
-        let specialCreatedCount = 0;
-        let specialDetonatedCount = 0;
-        let targetColorEliminated = 0;
-        let iceDamageCount = 0;
-        let crateDamageCount = 0;
-        let scoreDelta = 0;
+        try {
+            // ── 读取交换后的特效（与 triggerSpecialExchange 一致）──
+            const specialA = this.tileSpecials[r1]?.[c1] ?? SpecialType.NONE;
+            const specialB = this.tileSpecials[r2]?.[c2] ?? SpecialType.NONE;
 
-        const eliminatedSet = new Set<string>();
-        const addCell = (r: number, c: number) => {
-            if (r >= 0 && r < ROWS && c >= 0 && c < COLS) eliminatedSet.add(`${r},${c}`);
-        };
+            const isLine = (s: SpecialType) => s === SpecialType.LINE_H || s === SpecialType.LINE_V;
+            const isBomb = (s: SpecialType) => s === SpecialType.BOMB;
+            const isColor = (s: SpecialType) => s === SpecialType.COLOR_BOMB;
 
-        if (isSpecialExchange) {
-            // ── 模拟主动特效交换效果（与 triggerSpecialExchange 一致，但不触发回调）──
-            if (postSa !== SpecialType.NONE) specialDetonatedCount++;
-            if (postSb !== SpecialType.NONE) specialDetonatedCount++;
+            // ── 判断是否为主动特效交换 ──
+            const bothSpecial = specialA !== SpecialType.NONE && specialB !== SpecialType.NONE;
+            const colorPlusNormal = (isColor(specialA) && specialB === SpecialType.NONE)
+                                 || (isColor(specialB) && specialA === SpecialType.NONE);
+            const isSpecialExchange = bothSpecial || colorPlusNormal;
 
-            if (bothSpecial) {
-                if (isLine(postSa) && isLine(postSb)) {
-                    // 线+线 = 整行+整列（两个交换点）
-                    for (let cc = 0; cc < COLS; cc++) { addCell(r1, cc); addCell(r2, cc); }
-                    for (let rr = 0; rr < ROWS; rr++) { addCell(rr, c1); addCell(rr, c2); }
-                } else if (isBomb(postSa) && isBomb(postSb)) {
-                    // 炸弹+炸弹 = 两个交换点各 5×5
-                    for (let dr = -2; dr <= 2; dr++)
-                        for (let dc = -2; dc <= 2; dc++) { addCell(r1 + dr, c1 + dc); addCell(r2 + dr, c2 + dc); }
-                } else if ((isBomb(postSa) && isLine(postSb)) || (isLine(postSa) && isBomb(postSb))) {
-                    // 炸弹+线 = 炸弹位置行±1共3行 + 列±1共3列
-                    const br = isBomb(postSa) ? r1 : r2;
-                    const bc = isBomb(postSa) ? c1 : c2;
-                    for (let cc = 0; cc < COLS; cc++)
-                        for (let dr = -1; dr <= 1; dr++) addCell(br + dr, cc);
-                    for (let rr = 0; rr < ROWS; rr++)
-                        for (let dc = -1; dc <= 1; dc++) addCell(rr, bc + dc);
-                } else if ((isColor(postSa) && (isLine(postSb) || isBomb(postSb)))
-                        || ((isLine(postSa) || isBomb(postSa)) && isColor(postSb))) {
-                    // 彩球+线/炸弹 = 场上最多色所有格 + 两个交换点
-                    const targetColor = this.getMostCommonColor();
+            let eliminatedCount = 0;
+            let specialCreatedCount = 0;
+            let specialDetonatedCount = 0;
+            let targetColorEliminated = 0;
+            let iceDamageCount = 0;
+            let crateDamageCount = 0;
+            let scoreDelta = 0;
+
+            const eliminatedSet = new Set<string>();
+            const addCell = (r: number, c: number) => {
+                if (r >= 0 && r < ROWS && c >= 0 && c < COLS) eliminatedSet.add(`${r},${c}`);
+            };
+
+            if (isSpecialExchange) {
+                // ── 模拟主动特效交换效果（与 triggerSpecialExchange 一致，不触发回调）──
+                if (specialA !== SpecialType.NONE) specialDetonatedCount++;
+                if (specialB !== SpecialType.NONE) specialDetonatedCount++;
+
+                if (bothSpecial) {
+                    if (isLine(specialA) && isLine(specialB)) {
+                        // 线+线 = 整行+整列（两个交换点）
+                        for (let cc = 0; cc < COLS; cc++) { addCell(r1, cc); addCell(r2, cc); }
+                        for (let rr = 0; rr < ROWS; rr++) { addCell(rr, c1); addCell(rr, c2); }
+                    } else if (isBomb(specialA) && isBomb(specialB)) {
+                        // 炸弹+炸弹 = 两个交换点各 5×5
+                        for (let dr = -2; dr <= 2; dr++)
+                            for (let dc = -2; dc <= 2; dc++) { addCell(r1 + dr, c1 + dc); addCell(r2 + dr, c2 + dc); }
+                    } else if ((isBomb(specialA) && isLine(specialB)) || (isLine(specialA) && isBomb(specialB))) {
+                        // 炸弹+线 = 炸弹位置行±1共3行 + 列±1共3列
+                        // 交换后 BOMB 在 specialA 位置(r1,c1) 或 specialB 位置(r2,c2)
+                        const br = isBomb(specialA) ? r1 : r2;
+                        const bc = isBomb(specialA) ? c1 : c2;
+                        for (let cc = 0; cc < COLS; cc++)
+                            for (let dr = -1; dr <= 1; dr++) addCell(br + dr, cc);
+                        for (let rr = 0; rr < ROWS; rr++)
+                            for (let dc = -1; dc <= 1; dc++) addCell(rr, bc + dc);
+                    } else if ((isColor(specialA) && (isLine(specialB) || isBomb(specialB)))
+                            || ((isLine(specialA) || isBomb(specialA)) && isColor(specialB))) {
+                        // 彩球+线/炸弹 = 场上最多色所有格 + 两个交换点
+                        const targetColor = this.getMostCommonColor();
+                        for (let r = 0; r < ROWS; r++)
+                            for (let c = 0; c < COLS; c++)
+                                if (this.grid[r] && this.grid[r][c] === targetColor) addCell(r, c);
+                        addCell(r1, c1);
+                        addCell(r2, c2);
+                    } else if (isColor(specialA) && isColor(specialB)) {
+                        // 彩球+彩球 = 全盘清屏
+                        for (let r = 0; r < ROWS; r++)
+                            for (let c = 0; c < COLS; c++) addCell(r, c);
+                    }
+                } else if (colorPlusNormal) {
+                    // 彩球+普通 = 清该色全盘 + 彩球自身
+                    // 交换后彩球在 specialA 位置(r1,c1) 或 specialB 位置(r2,c2)
+                    const bombR = isColor(specialA) ? r1 : r2;
+                    const bombC = isColor(specialA) ? c1 : c2;
+                    const normalR = isColor(specialA) ? r2 : r1;
+                    const normalC = isColor(specialA) ? c2 : c1;
+                    const targetColor = this.grid[normalR]?.[normalC] ?? this.getMostCommonColor();
                     for (let r = 0; r < ROWS; r++)
                         for (let c = 0; c < COLS; c++)
                             if (this.grid[r] && this.grid[r][c] === targetColor) addCell(r, c);
-                    addCell(r1, c1);
-                    addCell(r2, c2);
-                } else if (isColor(postSa) && isColor(postSb)) {
-                    // 彩球+彩球 = 全盘清屏
-                    for (let r = 0; r < ROWS; r++)
-                        for (let c = 0; c < COLS; c++) addCell(r, c);
+                    addCell(bombR, bombC);
                 }
-            } else if (colorPlusNormal) {
-                // 彩球+普通 = 清该色全盘 + 彩球自身
-                const bombR = isColor(postSa) ? r1 : r2;
-                const bombC = isColor(postSa) ? c1 : c2;
-                const normalR = isColor(postSa) ? r2 : r1;
-                const normalC = isColor(postSa) ? c2 : c1;
-                const targetColor = this.grid[normalR]?.[normalC] ?? this.getMostCommonColor();
-                for (let r = 0; r < ROWS; r++)
-                    for (let c = 0; c < COLS; c++)
-                        if (this.grid[r] && this.grid[r][c] === targetColor) addCell(r, c);
-                addCell(bombR, bombC);
-            }
 
-            eliminatedCount = eliminatedSet.size;
-            scoreDelta = eliminatedCount * 30 + specialDetonatedCount * 300;
-        } else {
-            // ── 非特效交换：检查普通匹配 ──
-            // (LINE/BOMB + normal 不触发主动特效交换，走普通匹配流程)
-            const groups = this.findMatchGroups();
-            if (groups.length > 0) {
-                for (const g of groups) {
-                    for (const cell of g.cells) {
-                        eliminatedSet.add(`${cell.row},${cell.col}`);
-                    }
-                    const sp = this.shapeToSpecial(g.shape);
-                    if (sp !== SpecialType.NONE) specialCreatedCount++;
-                }
                 eliminatedCount = eliminatedSet.size;
+                scoreDelta = eliminatedCount * 30 + specialDetonatedCount * 300;
+            } else {
+                // ── 非特效交换：检查普通匹配 ──
+                // LINE/BOMB + normal 不触发主动特效交换，走普通匹配流程
+                const groups = this.findMatchGroups();
+                if (groups.length > 0) {
+                    for (const g of groups) {
+                        for (const cell of g.cells) {
+                            eliminatedSet.add(`${cell.row},${cell.col}`);
+                        }
+                        const sp = this.shapeToSpecial(g.shape);
+                        if (sp !== SpecialType.NONE) specialCreatedCount++;
+                    }
+                    eliminatedCount = eliminatedSet.size;
 
-                // 特效棋子被动引爆：仅在消除组中才计数
-                if (eliminatedSet.has(`${r1},${c1}`) && postSa !== SpecialType.NONE) specialDetonatedCount++;
-                if (eliminatedSet.has(`${r2},${c2}`) && postSb !== SpecialType.NONE) specialDetonatedCount++;
+                    // 特效棋子被动引爆：仅在消除组中才计数
+                    // 交换后 specialA 在 (r1,c1)，specialB 在 (r2,c2)
+                    if (eliminatedSet.has(`${r1},${c1}`) && specialA !== SpecialType.NONE) specialDetonatedCount++;
+                    if (eliminatedSet.has(`${r2},${c2}`) && specialB !== SpecialType.NONE) specialDetonatedCount++;
 
-                scoreDelta = eliminatedCount * 30;
-                if (specialCreatedCount > 0) scoreDelta += specialCreatedCount * 200;
-                if (specialDetonatedCount > 0) scoreDelta += specialDetonatedCount * 300;
-            }
-        }
-
-        // ── 目标颜色消除统计 ──
-        if (params.targetColors && params.targetColors.length > 0 && eliminatedSet.size > 0) {
-            for (const key of eliminatedSet) {
-                const [er, ec] = key.split(',').map(Number);
-                const colorId = this.grid[er]?.[ec] ?? -1;
-                if (params.targetColors.includes(colorId)) {
-                    targetColorEliminated++;
+                    scoreDelta = eliminatedCount * 30;
+                    if (specialCreatedCount > 0) scoreDelta += specialCreatedCount * 200;
+                    if (specialDetonatedCount > 0) scoreDelta += specialDetonatedCount * 300;
                 }
             }
-        }
 
-        // ── 冰层伤害统计（只检查消除格本身，不检查四邻）──
-        for (const key of eliminatedSet) {
-            const [er, ec] = key.split(',').map(Number);
-            if (this.iceLayers[er]?.[ec] > 0) iceDamageCount++;
-        }
+            // ── 目标颜色消除统计 ──
+            if (params.targetColors && params.targetColors.length > 0 && eliminatedSet.size > 0) {
+                for (const key of eliminatedSet) {
+                    const [er, ec] = key.split(',').map(Number);
+                    const colorId = this.grid[er]?.[ec] ?? -1;
+                    if (params.targetColors.includes(colorId)) {
+                        targetColorEliminated++;
+                    }
+                }
+            }
 
-        // ── 木箱伤害统计（消除格四邻有木箱 → 去重计数）──
-        {
-            const crateHitSet = new Set<string>();
+            // ── 冰层伤害统计 ──
+            // 规则：只统计被消除格本身覆盖的冰层，不统计四邻
+            // 特效覆盖到冰层格时也计伤害（冰层格在 eliminatedSet 中即算）
             for (const key of eliminatedSet) {
                 const [er, ec] = key.split(',').map(Number);
-                const neighbors = [[er-1,ec],[er+1,ec],[er,ec-1],[er,ec+1]];
-                for (const [nr, nc] of neighbors) {
-                    if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
-                        if (this.crateLayers[nr]?.[nc] > 0) {
-                            crateHitSet.add(`${nr},${nc}`);
+                if (this.iceLayers[er]?.[ec] > 0) iceDamageCount++;
+            }
+
+            // ── 木箱伤害统计 ──
+            // 规则（与 collectCrateDamageFromDestroyedCells 一致）：
+            //   A. 被消除棋子格的四邻有木箱 → 计伤害
+            //   B. 特效直接覆盖到木箱格 → 计伤害（direct hit）
+            //   C. 使用 Set 去重，每个木箱只计 1 次
+            {
+                const crateHitSet = new Set<string>();
+                const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+                for (const key of eliminatedSet) {
+                    const [er, ec] = key.split(',').map(Number);
+                    if (this.hasCrateAt(er, ec)) {
+                        // B: 直接命中木箱格
+                        crateHitSet.add(key);
+                    } else {
+                        // A: 四邻木箱
+                        for (const [dr, dc] of dirs) {
+                            const nr = er + dr;
+                            const nc = ec + dc;
+                            if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+                                if (this.crateLayers[nr]?.[nc] > 0) {
+                                    crateHitSet.add(`${nr},${nc}`);
+                                }
+                            }
                         }
                     }
                 }
+                crateDamageCount = crateHitSet.size;
             }
-            crateDamageCount = crateHitSet.size;
+
+            // ── 无效交换过滤：无消除且无特效引爆 → 返回 -1 ──
+            if (eliminatedCount === 0 && specialDetonatedCount === 0) return -1;
+
+            // ── 按目标类型计算综合评分 ──
+            let totalScore = 0;
+
+            // 通用基础分
+            totalScore += eliminatedCount * 10;
+            totalScore += specialCreatedCount * 300;
+            totalScore += specialDetonatedCount * 500;
+            totalScore += scoreDelta * 0.1;
+
+            switch (params.goalType) {
+                case 'score':
+                    totalScore += scoreDelta * 2;
+                    totalScore += specialCreatedCount * 500;
+                    totalScore += specialDetonatedCount * 700;
+                    break;
+                case 'collect':
+                    totalScore += targetColorEliminated * 1000;
+                    break;
+                case 'special':
+                    totalScore += specialCreatedCount * 1200;
+                    totalScore += specialDetonatedCount * 1800;
+                    break;
+                case 'ice':
+                    totalScore += iceDamageCount * 1200;
+                    break;
+                case 'crate':
+                    totalScore += crateDamageCount * 1000;
+                    break;
+            }
+
+            // 加微小随机扰动打破平局（结构分为整数，0.5 扰动不会跨区间）
+            totalScore += Math.random() * 0.5;
+
+            return totalScore;
+        } finally {
+            // ── 无论正常返回还是异常，都必须恢复 ──
+            this.grid[r1][c1] = va;
+            this.grid[r2][c2] = vb;
+            if (this.tileSpecials[r1]) this.tileSpecials[r1][c1] = sa;
+            if (this.tileSpecials[r2]) this.tileSpecials[r2][c2] = sb;
         }
-
-        // 还原棋盘
-        this.grid[r1][c1] = va;
-        this.grid[r2][c2] = vb;
-
-        // ── 无效交换过滤：无消除且无特效引爆 → 返回 -1 ──
-        if (eliminatedCount === 0 && specialDetonatedCount === 0) return -1;
-
-        // ── 按目标类型计算综合评分 ──
-        let totalScore = 0;
-
-        // 通用基础分
-        totalScore += eliminatedCount * 10;
-        totalScore += specialCreatedCount * 300;
-        totalScore += specialDetonatedCount * 500;
-        totalScore += scoreDelta * 0.1;
-
-        switch (params.goalType) {
-            case 'score':
-                totalScore += scoreDelta * 2;
-                totalScore += specialCreatedCount * 500;
-                totalScore += specialDetonatedCount * 700;
-                break;
-            case 'collect':
-                totalScore += targetColorEliminated * 1000;
-                break;
-            case 'special':
-                totalScore += specialCreatedCount * 1200;
-                totalScore += specialDetonatedCount * 1800;
-                break;
-            case 'ice':
-                totalScore += iceDamageCount * 1200;
-                break;
-            case 'crate':
-                totalScore += crateDamageCount * 1000;
-                break;
-        }
-
-        // 加微小随机扰动打破平局（结构分为整数，0.5 扰动不会跨区间）
-        totalScore += Math.random() * 0.5;
-
-        return totalScore;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
