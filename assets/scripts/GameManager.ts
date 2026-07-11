@@ -1877,10 +1877,112 @@ export class GameManager extends Component {
                 export: () => this.exportDifficultyTestReport(),
                 summary: () => this.printDifficultySummary(),
                 clear: () => this.clearDifficultyTestData(),
+                // X2: 自动测试机器人
+                autorun: () => this.startAutoTestRun(),
+                stop: () => this.stopAutoTest(),
             };
         } catch (e) {
             console.warn('[DifficultyTest] 安装调试 API 失败:', e);
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  X2: 自动测试机器人 — 自动打完 25 关裸关
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private _autoTestRunning = false;
+
+    /** X2: 启动自动测试，从 L1 开始打完 25 关 */
+    private startAutoTestRun(): void {
+        if (this._autoTestRunning) {
+            console.log('[AutoTest] 已在运行中');
+            return;
+        }
+        this._autoTestRunning = true;
+        console.log('[AutoTest] 开始自动测试 25 关裸关...');
+
+        // 清空旧数据
+        this.clearDifficultyTestData();
+
+        // 从第一关开始
+        this.startLevel(0);
+
+        // 延迟启动机器人循环（等棋盘初始化完成）
+        this.scheduleOnce(() => this.autoTestTick(), 2.0);
+    }
+
+    /** X2: 停止自动测试 */
+    private stopAutoTest(): void {
+        this._autoTestRunning = false;
+        console.log('[AutoTest] 已停止');
+    }
+
+    /** X2: 机器人主循环 — 每帧检查状态并行动 */
+    private autoTestTick(): void {
+        if (!this._autoTestRunning) return;
+
+        // 1. 如果结算面板打开 → 点下一关
+        if (this.resultPanel?.active) {
+            const config = this.levelConfigs[this.currentLevel];
+            const isWin = this.isGoalReached(config);
+            if (isWin) {
+                if (this.currentLevel >= this.levelConfigs.length - 1) {
+                    // 全部打完
+                    this._autoTestRunning = false;
+                    console.log('[AutoTest] ★ 25 关全部完成！执行 export 导出数据');
+                    this.exportDifficultyTestReport();
+                    return;
+                }
+                console.log(`[AutoTest] L${config.level} 过关，进入下一关`);
+                this.startLevel(this.currentLevel + 1);
+            } else {
+                console.log(`[AutoTest] L${config.level} 失败，重玩本关`);
+                this.startLevel(this.currentLevel);
+            }
+            this.scheduleOnce(() => this.autoTestTick(), 2.0);
+            return;
+        }
+
+        // 2. 如果步数耗尽弹层打开 → 点放弃（记录失败）
+        if (this.stepsPanel?.active) {
+            console.log(`[AutoTest] L${this.levelConfigs[this.currentLevel].level} 步数耗尽，放弃`);
+            this.onStepsGiveUpClick();
+            this.scheduleOnce(() => this.autoTestTick(), 2.0);
+            return;
+        }
+
+        // 3. 如果暂停面板打开 → 关闭
+        if (this.pausePanel?.active) {
+            this.hidePanel(this.pausePanel);
+            this.scheduleOnce(() => this.autoTestTick(), 1.0);
+            return;
+        }
+
+        // 4. 如果章节过场卡正在显示 → 跳过等待
+        if (this.chapterCardShowing) {
+            this.scheduleOnce(() => this.autoTestTick(), 1.0);
+            return;
+        }
+
+        // 5. 棋盘忙碌 → 等待
+        if (!this.board || this.board.state !== 0 /* BoardState.IDLE */) {
+            this.scheduleOnce(() => this.autoTestTick(), 0.3);
+            return;
+        }
+
+        // 6. 找一个有效交换并执行
+        const move = this.board.findAnyValidMove();
+        if (move) {
+            const dr = move.b.r - move.a.r;
+            const dc = move.b.c - move.a.c;
+            this.board.trySwapByDir(move.a.r, move.a.c, dr, dc);
+        } else {
+            // 无有效交换 → 棋盘应该自动洗牌了，等一下
+            console.log('[AutoTest] 无有效交换，等待自动洗牌');
+        }
+
+        // 循环
+        this.scheduleOnce(() => this.autoTestTick(), 0.4);
     }
 
     /** 结算面板得分文本（按目标类型） */
