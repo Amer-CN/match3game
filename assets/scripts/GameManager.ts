@@ -1988,8 +1988,31 @@ export class GameManager extends Component {
             return;
         }
 
-        // 6. 找最优交换并执行（优先四连/五连）
-        const move = this.board.findBestValidMove();
+        // 6. 目标感知最优交换
+        const config = this.levelConfigs[this.currentLevel];
+        const params: { goalType: 'score' | 'collect' | 'special' | 'ice' | 'crate'; targetColors?: number[]; targetScore?: number; currentScore?: number } = {
+            goalType: config.goalType,
+            targetScore: config.targetScore,
+            currentScore: this.currentScore,
+        };
+
+        // collect 类型：计算尚未达标的目标颜色 colorId 列表
+        if (config.goalType === 'collect') {
+            const colors = Array.isArray(config.goalColor) ? config.goalColor : [config.goalColor!];
+            const counts = Array.isArray(config.goalCount) ? config.goalCount : [config.goalCount!];
+            const remaining: number[] = [];
+            for (let i = 0; i < colors.length; i++) {
+                const need = this.safeNum(counts[i], 0);
+                const have = this.safeNum(this.collectedCount[colors[i]] ?? 0, 0);
+                if (have < need) {
+                    const id = COLOR_KEY_MAP[colors[i]];
+                    if (id !== undefined) remaining.push(id);
+                }
+            }
+            params.targetColors = remaining;
+        }
+
+        const move = this.board.findBestTargetMove(params);
         if (move) {
             const dr = move.b.r - move.a.r;
             const dc = move.b.c - move.a.c;

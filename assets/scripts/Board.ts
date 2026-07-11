@@ -2160,6 +2160,179 @@ return { cells, waveSeeds, isFullBoardClear: false };
         return best;
     }
 
+    /**
+     * X2.1: 目标感知一步启发式 — 枚举所有合法交换，按 goalType 评分选最优。
+     *
+     * 评估内容（只模拟当前棋盘可见状态，不预知补棋）：
+     *   - 消除数量
+     *   - 匹配形状（4连/5连/L-T → 特效生成）
+     *   - 已有特效棋子的引爆（交换方或目标方是特效）
+     *   - 冰层伤害（消除格相邻冰层）
+     *   - 木箱伤害（消除格相邻木箱）
+     *   - 目标颜色消除数（collect 类型）
+     *   - 估算分数变化
+     *
+     * 不做的事：
+     *   - 不模拟连锁后补棋
+     *   - 不读取未来 RNG
+     *   - 不搜索多步
+     */
+    public findBestTargetMove(params: {
+        goalType: 'score' | 'collect' | 'special' | 'ice' | 'crate';
+        targetColors?: number[];     // collect: 目标 colorId 列表（仅尚未达标的）
+        targetScore?: number;        // score: 目标分数
+        currentScore?: number;       // score: 当前分数
+    }): { a: { r: number; c: number }; b: { r: number; c: number } } | null {
+        const { ROWS, COLS } = Board;
+        let best: { a: { r: number; c: number }; b: { r: number; c: number } } | null = null;
+        let bestScore = -1;
+
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (!this.grid[r] || this.grid[r][c] === undefined) continue;
+                if (this.hasCrateAt(r, c)) continue;
+                if (this.grid[r][c] < 0) continue;
+
+                // 试右侧
+                if (c + 1 < COLS && this.grid[r][c + 1] !== undefined &&
+                    !this.hasCrateAt(r, c + 1) && this.grid[r][c + 1] >= 0) {
+                    const score = this.evaluateSwap(r, c, r, c + 1, params);
+                    if (score > bestScore) { bestScore = score; best = { a: { r, c }, b: { r, c: c + 1 } }; }
+                }
+
+                // 试下方
+                if (r + 1 < ROWS && this.grid[r + 1] && this.grid[r + 1][c] !== undefined &&
+                    !this.hasCrateAt(r + 1, c) && this.grid[r + 1][c] >= 0) {
+                    const score = this.evaluateSwap(r, c, r + 1, c, params);
+                    if (score > bestScore) { bestScore = score; best = { a: { r, c }, b: { r: r + 1, c } }; }
+                }
+            }
+        }
+        return best;
+    }
+
+    /**
+     * X2.1: 评估单个交换的得分（不修改实际棋盘数据，模拟后还原）。
+     */
+    private evaluateSwap(
+        r1: number, c1: number, r2: number, c2: number,
+        params: {
+            goalType: 'score' | 'collect' | 'special' | 'ice' | 'crate';
+            targetColors?: number[];
+            targetScore?: number;
+            currentScore?: number;
+        },
+    ): number {
+        const va = this.grid[r1][c1];
+        const vb = this.grid[r2][c2];
+        const sa = this.tileSpecials[r1]?.[c1] ?? SpecialType.NONE;
+        const sb = this.tileSpecials[r2]?.[c2] ?? SpecialType.NONE;
+
+        // 模拟交换
+        this.grid[r1][c1] = vb;
+        this.grid[r2][c2] = va;
+
+        let eliminatedCount = 0;
+        let specialCreatedCount = 0;
+        let specialDetonatedCount = 0;
+        let targetColorEliminated = 0;
+        let iceDamageCount = 0;
+        let crateDamageCount = 0;
+        let scoreDelta = 0;
+
+        // 1. 检查已有特效棋子被引爆
+        if (sa !== SpecialType.NONE) specialDetonatedCount++;
+        if (sb !== SpecialType.NONE) specialDetonatedCount++;
+
+        // 2. 检查匹配（形状 → 特效生成）
+        const groups = this.findMatchGroups();
+        if (groups.length > 0) {
+            // 收集所有被消除的格子
+            const eliminatedSet = new Set<string>();
+            for (const g of groups) {
+                for (const cell of g.cells) {
+                    eliminatedSet.add(`${cell.row},${cell.col}`);
+                }
+                // 特效生成判断
+                const sp = this.shapeToSpecial(g.shape);
+                if (sp !== SpecialType.NONE) specialCreatedCount++;
+            }
+            eliminatedCount = eliminatedSet.size;
+
+            // 3. 目标颜色消除统计
+            if (params.targetColors && params.targetColors.length > 0) {
+                for (const key of eliminatedSet) {
+                    const [er, ec] = key.split(',').map(Number);
+                    const colorId = this.grid[er]?.[ec] ?? -1;
+                    // 注意：此时 grid 已被交换，用原始颜色判断
+                    // 被消除的格子颜色就是交换后的颜色
+                    if (params.targetColors.includes(colorId)) {
+                        targetColorEliminated++;
+                    }
+                }
+            }
+
+            // 4. 冰层伤害统计（消除格相邻的冰层）
+            for (const key of eliminatedSet) {
+                const [er, ec] = key.split(',').map(Number);
+                // 检查 4 方向相邻格是否有冰层
+                const neighbors = [[er-1,ec],[er+1,ec],[er,ec-1],[er,ec+1]];
+                for (const [nr, nc] of neighbors) {
+                    if (nr >= 0 && nr < Board.ROWS && nc >= 0 && nc < Board.COLS) {
+                        if (this.iceLayers[nr]?.[nc] > 0) iceDamageCount++;
+                        if (this.crateLayers[nr]?.[nc] > 0) crateDamageCount++;
+                    }
+                }
+                // 消除格本身如果有冰层也算
+                if (this.iceLayers[er]?.[ec] > 0) iceDamageCount++;
+            }
+
+            // 5. 估算分数（每个消除约 30 分，特效额外加分）
+            scoreDelta = eliminatedCount * 30;
+            if (specialCreatedCount > 0) scoreDelta += specialCreatedCount * 200;
+            if (specialDetonatedCount > 0) scoreDelta += specialDetonatedCount * 300;
+        }
+
+        // 还原棋盘
+        this.grid[r1][c1] = va;
+        this.grid[r2][c2] = vb;
+
+        // 6. 按目标类型计算综合评分
+        let totalScore = 0;
+
+        // 通用基础分
+        totalScore += eliminatedCount * 10;
+        totalScore += specialCreatedCount * 300;
+        totalScore += specialDetonatedCount * 500;
+        totalScore += scoreDelta * 0.1;
+
+        switch (params.goalType) {
+            case 'score':
+                totalScore += scoreDelta * 2;
+                totalScore += specialCreatedCount * 500;
+                totalScore += specialDetonatedCount * 700;
+                break;
+            case 'collect':
+                totalScore += targetColorEliminated * 1000;
+                break;
+            case 'special':
+                totalScore += specialCreatedCount * 1200;
+                totalScore += specialDetonatedCount * 1800;
+                break;
+            case 'ice':
+                totalScore += iceDamageCount * 1200;
+                break;
+            case 'crate':
+                totalScore += crateDamageCount * 1000;
+                break;
+        }
+
+        // 加微小随机扰动打破平局
+        totalScore += Math.random() * 0.5;
+
+        return totalScore;
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     //  A3 · 开局/切关保证有可行步且无自动消（静默，无提示）
     // ══════════════════════════════════════════════════════════════════════════
