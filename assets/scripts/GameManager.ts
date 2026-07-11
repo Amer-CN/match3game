@@ -1873,12 +1873,14 @@ export class GameManager extends Component {
     /** X2: 安装控制台调试 API */
     private installDifficultyDebugApi(): void {
         try {
-            (globalThis as any).__MXMH_DIFFICULTY__ = {
+                (globalThis as any).__MXMH_DIFFICULTY__ = {
                 export: () => this.exportDifficultyTestReport(),
                 summary: () => this.printDifficultySummary(),
                 clear: () => this.clearDifficultyTestData(),
-                // X2: 自动测试机器人
+                // X2: 自动测试机器人（全 25 关）
                 autorun: () => this.startAutoTestRun(),
+                // X2.2: 定点测试 — testrun([13,16,18,20,23], 3)
+                testrun: (levels: number[], runs: number = 3) => this.startTargetedTestRun(levels, runs),
                 stop: () => this.stopAutoTest(),
             };
         } catch (e) {
@@ -1895,6 +1897,10 @@ export class GameManager extends Component {
     private static readonly AUTO_TEST_MAX_RETRIES = 3;
     private static readonly AUTO_TEST_TICK_MS = 0.15;
 
+    // X2.2: 定点测试支持
+    private _autoTestTargetQueue: number[] = [];  // 待测关卡索引队列
+    private _autoTestIsTargeted = false;           // 是否为定点测试模式
+
     /** X2: 启动自动测试，从 L1 开始打完 25 关 */
     private startAutoTestRun(): void {
         if (this._autoTestRunning) {
@@ -1903,6 +1909,8 @@ export class GameManager extends Component {
         }
         this._autoTestRunning = true;
         this._autoTestRetryCount = 0;
+        this._autoTestIsTargeted = false;
+        this._autoTestTargetQueue = [];
         console.log('[AutoTest] 开始自动测试 25 关裸关...');
 
         // 清空旧数据
@@ -1913,6 +1921,54 @@ export class GameManager extends Component {
 
         // 延迟启动机器人循环（等棋盘初始化完成）
         this.scheduleOnce(() => this.autoTestTick(), 0.5);
+    }
+
+    /** X2.2: 启动定点测试 — 指定关卡各打 N 局 */
+    private startTargetedTestRun(levelNumbers: number[], runs: number): void {
+        if (this._autoTestRunning) {
+            console.log('[AutoTest] 已在运行中，请先 stop');
+            return;
+        }
+        this._autoTestTargetQueue = [];
+        for (const ln of levelNumbers) {
+            const idx = ln - 1; // level number → array index
+            if (idx >= 0 && idx < this.levelConfigs.length) {
+                for (let i = 0; i < runs; i++) {
+                    this._autoTestTargetQueue.push(idx);
+                }
+            } else {
+                console.warn(`[AutoTest] L${ln} 不存在，跳过`);
+            }
+        }
+        if (this._autoTestTargetQueue.length === 0) {
+            console.log('[AutoTest] 队列为空，取消');
+            return;
+        }
+        this._autoTestRunning = true;
+        this._autoTestRetryCount = 0;
+        this._autoTestIsTargeted = true;
+        console.log(`[AutoTest] 定点测试开始：L${levelNumbers.join(',')} 各 ${runs} 局，共 ${this._autoTestTargetQueue.length} 局`);
+
+        this.clearDifficultyTestData();
+
+        const firstIdx = this._autoTestTargetQueue.shift()!;
+        this.startLevel(firstIdx);
+        this.scheduleOnce(() => this.autoTestTick(), 0.5);
+    }
+
+    /** X2.2: 定点测试 — 移到队列下一关，队列空则结束 */
+    private advanceTargetedTest(): boolean {
+        if (this._autoTestTargetQueue.length === 0) {
+            this._autoTestRunning = false;
+            this._autoTestIsTargeted = false;
+            console.log('[AutoTest] ★ 定点测试全部完成！执行 export 导出数据');
+            this.exportDifficultyTestReport();
+            return false;
+        }
+        const nextIdx = this._autoTestTargetQueue.shift()!;
+        console.log(`[AutoTest] → 下一关 L${this.levelConfigs[nextIdx].level}（队列剩余 ${this._autoTestTargetQueue.length}）`);
+        this.startLevel(nextIdx);
+        return true;
     }
 
     /** X2: 停止自动测试 */
@@ -1930,21 +1986,11 @@ export class GameManager extends Component {
             const config = this.levelConfigs[this.currentLevel];
             const isWin = this.isGoalReached(config);
             if (isWin) {
-                console.log(`[AutoTest] L${config.level} 过关，进入下一关`);
+                console.log(`[AutoTest] L${config.level} 过关`);
                 this._autoTestRetryCount = 0;
-                if (this.currentLevel >= this.levelConfigs.length - 1) {
-                    // 全部打完
-                    this._autoTestRunning = false;
-                    console.log('[AutoTest] ★ 25 关全部完成！执行 export 导出数据');
-                    this.exportDifficultyTestReport();
-                    return;
-                }
-                this.startLevel(this.currentLevel + 1);
-            } else {
-                this._autoTestRetryCount++;
-                if (this._autoTestRetryCount >= GameManager.AUTO_TEST_MAX_RETRIES) {
-                    console.log(`[AutoTest] L${config.level} 已失败 ${this._autoTestRetryCount} 次，跳过进入下一关`);
-                    this._autoTestRetryCount = 0;
+                if (this._autoTestIsTargeted) {
+                    if (!this.advanceTargetedTest()) return;
+                } else {
                     if (this.currentLevel >= this.levelConfigs.length - 1) {
                         this._autoTestRunning = false;
                         console.log('[AutoTest] ★ 25 关全部完成！执行 export 导出数据');
@@ -1952,6 +1998,23 @@ export class GameManager extends Component {
                         return;
                     }
                     this.startLevel(this.currentLevel + 1);
+                }
+            } else {
+                this._autoTestRetryCount++;
+                if (this._autoTestRetryCount >= GameManager.AUTO_TEST_MAX_RETRIES) {
+                    console.log(`[AutoTest] L${config.level} 已失败 ${this._autoTestRetryCount} 次，跳过`);
+                    this._autoTestRetryCount = 0;
+                    if (this._autoTestIsTargeted) {
+                        if (!this.advanceTargetedTest()) return;
+                    } else {
+                        if (this.currentLevel >= this.levelConfigs.length - 1) {
+                            this._autoTestRunning = false;
+                            console.log('[AutoTest] ★ 25 关全部完成！执行 export 导出数据');
+                            this.exportDifficultyTestReport();
+                            return;
+                        }
+                        this.startLevel(this.currentLevel + 1);
+                    }
                 } else {
                     console.log(`[AutoTest] L${config.level} 失败（第 ${this._autoTestRetryCount} 次），重玩本关`);
                     this.startLevel(this.currentLevel);
