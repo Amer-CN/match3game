@@ -1912,7 +1912,7 @@ export class GameManager extends Component {
         this.startLevel(0);
 
         // 延迟启动机器人循环（等棋盘初始化完成）
-        this.scheduleOnce(() => this.autoTestTick(), 2.0);
+        this.scheduleOnce(() => this.autoTestTick(), 0.5);
     }
 
     /** X2: 停止自动测试 */
@@ -1957,7 +1957,7 @@ export class GameManager extends Component {
                     this.startLevel(this.currentLevel);
                 }
             }
-            this.scheduleOnce(() => this.autoTestTick(), 2.0);
+            this.scheduleOnce(() => this.autoTestTick(), 0.5);
             return;
         }
 
@@ -1965,7 +1965,7 @@ export class GameManager extends Component {
         if (this.stepsPanel?.active) {
             console.log(`[AutoTest] L${this.levelConfigs[this.currentLevel].level} 步数耗尽，放弃`);
             this.onStepsGiveUpClick();
-            this.scheduleOnce(() => this.autoTestTick(), 2.0);
+            this.scheduleOnce(() => this.autoTestTick(), 0.5);
             return;
         }
 
@@ -1978,7 +1978,7 @@ export class GameManager extends Component {
 
         // 4. 如果章节过场卡正在显示 → 跳过等待
         if (this.chapterCardShowing) {
-            this.scheduleOnce(() => this.autoTestTick(), 1.0);
+            this.scheduleOnce(() => this.autoTestTick(), 0.3);
             return;
         }
 
