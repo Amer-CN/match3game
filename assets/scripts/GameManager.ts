@@ -45,6 +45,72 @@ type GoalType = 'score' | 'collect' | 'special' | 'ice' | 'crate';
 /** X1: 难度档位 */
 type DifficultyTier = 'tutorial' | 'normal' | 'hard' | 'boss';
 
+/** X2: 单局目标进度快照 */
+interface GoalProgressSnapshot {
+    current: number;
+    target: number;
+    ratio: number;
+}
+
+/** X2: 单局难度测试记录 */
+interface DifficultyRunRecord {
+    version: 1;
+    timestamp: string;
+
+    level: number;
+    chapter: number;
+    difficulty: DifficultyTier;
+    designIntent: string;
+    goalType: GoalType;
+
+    result: 'win' | 'fail';
+    attemptInSession: number;
+
+    baseMoves: number;
+    validMovesUsed: number;
+    stepsRemaining: number;
+    score: number;
+
+    goalCurrent: number;
+    goalTarget: number;
+    goalProgress: number;
+
+    hammerUsed: boolean;
+    shuffleUsed: boolean;
+    addStepsUsed: boolean;
+    continueAdUsed: boolean;
+
+    assisted: boolean;
+}
+
+/** X2: 单关累计统计 */
+interface DifficultyLevelSummary {
+    level: number;
+    difficulty: DifficultyTier;
+
+    attempts: number;
+    wins: number;
+    fails: number;
+    winRate: number;
+
+    cleanAttempts: number;
+    cleanWins: number;
+    cleanWinRate: number;
+
+    assistedAttempts: number;
+    assistedWins: number;
+    assistedWinRate: number;
+
+    avgValidMoves: number;
+    avgWinStepsRemaining: number;
+    avgFailProgress: number;
+
+    hammerUseRate: number;
+    shuffleUseRate: number;
+    addStepsUseRate: number;
+    continueAdUseRate: number;
+}
+
 /** 关卡配置 */
 interface LevelConfig {
     level: number;
@@ -465,6 +531,11 @@ export class GameManager extends Component {
     /** 章末Boss首次通关赠送的公仔 monId（按章号 1/2/3 → 0兔/3鹿/5狐） */
     private static readonly CHAPTER_BOSS_MONSTER: number[] = [0, 3, 5, 4, 2];
 
+    /** X2: 难度测试独立存储键 */
+    private static readonly DIFFICULTY_TEST_KEY = 'mxmh_difficulty_test_v1';
+    /** X2: 最多保留测试记录数 */
+    private static readonly DIFFICULTY_TEST_MAX_RECORDS = 500;
+
     // ── 录屏 videoPath ─────────────────────────
     private recordedVideoPath: string | null = null;
 
@@ -558,6 +629,9 @@ export class GameManager extends Component {
 
         // 初始化录屏回调
         this.setupRecorder();
+
+        // X2: 安装难度测试调试 API
+        this.installDifficultyDebugApi();
     }
 
     start(): void {
@@ -1535,34 +1609,278 @@ export class GameManager extends Component {
         console.log(`[GameManager] 结算: ${isWin ? '过关' : '失败'} | 得分 ${this.currentScore}`);
     }
 
-    /** X1: 输出结构化难度诊断日志（防重复，同一局只输出一次） */
+    /** X1/X2: 输出结构化难度诊断日志 + 持久化测试记录（防重复，同一局只输出一次） */
     private logDifficultyResult(isWin: boolean): void {
         if (this.difficultyResultLogged) return;
         this.difficultyResultLogged = true;
 
-        const config = this.levelConfigs[this.currentLevel];
+        const cfg = this.levelConfigs[this.currentLevel];
+        const goal = this.getGoalProgressSnapshot(cfg);
 
-        console.log(
-            '[DifficultyRun]',
-            JSON.stringify({
-                level: config.level,
-                chapter: config.chapter,
-                difficulty: config.difficulty,
-                designIntent: config.designIntent,
-                result: isWin ? 'win' : 'fail',
-                attempt: this.levelAttemptCounts[config.level] ?? 1,
-                baseMoves: config.moves,
-                validMovesUsed: this.validMovesUsedThisRun,
-                stepsRemaining: this.currentSteps,
-                score: this.currentScore,
-                goalType: config.goalType,
-                goalText: this.getGoalHudText(config),
-                hammerUsed: this.hammerUsedThisRun,
-                shuffleUsed: this.shuffleUsedThisRun,
-                addStepsUsed: this.addStepsUsedThisRun,
-                continueAdUsed: this.continueAdUsed,
-            }),
-        );
+        const assisted =
+            this.hammerUsedThisRun ||
+            this.shuffleUsedThisRun ||
+            this.addStepsUsedThisRun ||
+            this.continueAdUsed;
+
+        const record: DifficultyRunRecord = {
+            version: 1,
+            timestamp: new Date().toISOString(),
+
+            level: cfg.level,
+            chapter: cfg.chapter,
+            difficulty: cfg.difficulty,
+            designIntent: cfg.designIntent,
+            goalType: cfg.goalType,
+
+            result: isWin ? 'win' : 'fail',
+            attemptInSession: this.levelAttemptCounts[cfg.level] ?? 1,
+
+            baseMoves: cfg.moves,
+            validMovesUsed: this.validMovesUsedThisRun,
+            stepsRemaining: this.currentSteps,
+            score: this.currentScore,
+
+            goalCurrent: goal.current,
+            goalTarget: goal.target,
+            goalProgress: goal.ratio,
+
+            hammerUsed: this.hammerUsedThisRun,
+            shuffleUsed: this.shuffleUsedThisRun,
+            addStepsUsed: this.addStepsUsedThisRun,
+            continueAdUsed: this.continueAdUsed,
+
+            assisted,
+        };
+
+        console.log('[DifficultyRun]', JSON.stringify(record));
+
+        this.saveDifficultyRecord(record);
+
+        // 输出当前关累计摘要
+        const summaries = this.buildDifficultySummary(this.loadDifficultyRecords());
+        const currentSummary = summaries.find(s => s.level === cfg.level);
+        if (currentSummary) {
+            console.log('[DifficultySummary]', JSON.stringify(currentSummary));
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  X2: 难度遥测 — 目标进度 / 存取 / 汇总 / 导出
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** X2: 计算当前目标进度快照 */
+    private getGoalProgressSnapshot(cfg: LevelConfig): GoalProgressSnapshot {
+        let current = 0;
+        let target = 0;
+
+        switch (cfg.goalType) {
+            case 'score':
+                current = this.safeNum(this.currentScore, 0);
+                target = this.safeNum(cfg.targetScore, 0);
+                break;
+            case 'collect': {
+                const colors = Array.isArray(cfg.goalColor) ? cfg.goalColor : [cfg.goalColor!];
+                const counts = Array.isArray(cfg.goalCount) ? cfg.goalCount : [cfg.goalCount!];
+                for (let i = 0; i < colors.length; i++) {
+                    const need = this.safeNum(counts[i], 0);
+                    const have = this.safeNum(this.collectedCount[colors[i]] ?? 0, 0);
+                    current += Math.min(have, need);
+                    target += need;
+                }
+                break;
+            }
+            case 'special':
+                current = this.safeNum(this.detonatedSpecials, 0);
+                target = this.safeNum(cfg.specialCount, 0);
+                break;
+            case 'ice':
+                current = this.safeNum(this.clearedIceCells, 0);
+                target = this.safeNum(cfg.iceTarget, 0);
+                break;
+            case 'crate':
+                current = this.safeNum(this.clearedCrateCells, 0);
+                target = this.safeNum(cfg.crateTarget, 0);
+                break;
+        }
+
+        if (!isFinite(current) || current < 0) current = 0;
+        if (!isFinite(target) || target < 0) target = 0;
+
+        let ratio = target > 0 ? current / target : 0;
+        if (!isFinite(ratio)) ratio = 0;
+        ratio = Math.max(0, Math.min(1, ratio));
+
+        return { current, target, ratio };
+    }
+
+    /** X2: 从 localStorage 加载测试记录 */
+    private loadDifficultyRecords(): DifficultyRunRecord[] {
+        try {
+            const raw = sys.localStorage.getItem(GameManager.DIFFICULTY_TEST_KEY);
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return [];
+
+            const valid = parsed.filter((r: any) =>
+                r && typeof r === 'object' &&
+                r.version === 1 &&
+                typeof r.level === 'number' && isFinite(r.level) &&
+                r.level >= 1 && r.level <= 25 &&
+                (r.result === 'win' || r.result === 'fail') &&
+                typeof r.timestamp === 'string',
+            );
+
+            // 最多返回最近 500 条
+            if (valid.length > GameManager.DIFFICULTY_TEST_MAX_RECORDS) {
+                return valid.slice(valid.length - GameManager.DIFFICULTY_TEST_MAX_RECORDS);
+            }
+            return valid as DifficultyRunRecord[];
+        } catch (e) {
+            console.warn('[DifficultyTest] 加载测试记录失败:', e);
+            return [];
+        }
+    }
+
+    /** X2: 保存单局测试记录到 localStorage */
+    private saveDifficultyRecord(record: DifficultyRunRecord): void {
+        try {
+            const records = this.loadDifficultyRecords();
+            records.push(record);
+            // 只保留最后 500 条
+            const trimmed = records.length > GameManager.DIFFICULTY_TEST_MAX_RECORDS
+                ? records.slice(records.length - GameManager.DIFFICULTY_TEST_MAX_RECORDS)
+                : records;
+            sys.localStorage.setItem(
+                GameManager.DIFFICULTY_TEST_KEY,
+                JSON.stringify(trimmed),
+            );
+        } catch (e) {
+            console.warn('[DifficultyTest] 保存测试记录失败:', e);
+        }
+    }
+
+    /** X2: 按关卡汇总统计 */
+    private buildDifficultySummary(records: DifficultyRunRecord[]): DifficultyLevelSummary[] {
+        const map = new Map<number, DifficultyRunRecord[]>();
+        for (const r of records) {
+            let arr = map.get(r.level);
+            if (!arr) { arr = []; map.set(r.level, arr); }
+            arr.push(r);
+        }
+
+        const summaries: DifficultyLevelSummary[] = [];
+
+        for (const [level, recs] of map) {
+            const attempts = recs.length;
+            const wins = recs.filter(r => r.result === 'win').length;
+            const fails = attempts - wins;
+
+            const cleanRecs = recs.filter(r => !r.assisted);
+            const cleanAttempts = cleanRecs.length;
+            const cleanWins = cleanRecs.filter(r => r.result === 'win').length;
+
+            const assistedRecs = recs.filter(r => r.assisted);
+            const assistedAttempts = assistedRecs.length;
+            const assistedWins = assistedRecs.filter(r => r.result === 'win').length;
+
+            const winRecs = recs.filter(r => r.result === 'win');
+            const failRecs = recs.filter(r => r.result === 'fail');
+
+            const avgValidMoves = attempts > 0
+                ? Math.round(recs.reduce((s, r) => s + this.safeNum(r.validMovesUsed, 0), 0) / attempts * 1000) / 1000
+                : 0;
+            const avgWinStepsRemaining = winRecs.length > 0
+                ? Math.round(winRecs.reduce((s, r) => s + this.safeNum(r.stepsRemaining, 0), 0) / winRecs.length * 1000) / 1000
+                : 0;
+            const avgFailProgress = failRecs.length > 0
+                ? Math.round(failRecs.reduce((s, r) => s + this.safeNum(r.goalProgress, 0), 0) / failRecs.length * 1000) / 1000
+                : 0;
+
+            const r3 = (n: number) => Math.round(n * 1000) / 1000;
+
+            summaries.push({
+                level,
+                difficulty: recs[0]?.difficulty ?? 'normal',
+
+                attempts,
+                wins,
+                fails,
+                winRate: r3(attempts > 0 ? wins / attempts : 0),
+
+                cleanAttempts,
+                cleanWins,
+                cleanWinRate: r3(cleanAttempts > 0 ? cleanWins / cleanAttempts : 0),
+
+                assistedAttempts,
+                assistedWins,
+                assistedWinRate: r3(assistedAttempts > 0 ? assistedWins / assistedAttempts : 0),
+
+                avgValidMoves,
+                avgWinStepsRemaining,
+                avgFailProgress,
+
+                hammerUseRate: r3(attempts > 0 ? recs.filter(r => r.hammerUsed).length / attempts : 0),
+                shuffleUseRate: r3(attempts > 0 ? recs.filter(r => r.shuffleUsed).length / attempts : 0),
+                addStepsUseRate: r3(attempts > 0 ? recs.filter(r => r.addStepsUsed).length / attempts : 0),
+                continueAdUseRate: r3(attempts > 0 ? recs.filter(r => r.continueAdUsed).length / attempts : 0),
+            });
+        }
+
+        summaries.sort((a, b) => a.level - b.level);
+        return summaries;
+    }
+
+    /** X2: 导出完整测试报告 */
+    private exportDifficultyTestReport(): string {
+        const records = this.loadDifficultyRecords();
+        const summaries = this.buildDifficultySummary(records);
+
+        const report = {
+            version: 1,
+            exportedAt: new Date().toISOString(),
+            totalRuns: records.length,
+            summaries,
+            records,
+        };
+
+        const text = JSON.stringify(report, null, 2);
+        console.log('[DifficultyExport]\n' + text);
+        return text;
+    }
+
+    /** X2: 打印所有关卡摘要 */
+    private printDifficultySummary(): DifficultyLevelSummary[] {
+        const records = this.loadDifficultyRecords();
+        const summaries = this.buildDifficultySummary(records);
+        if (typeof console.table === 'function') {
+            console.table(summaries);
+        }
+        console.log('[DifficultySummaryAll]', JSON.stringify(summaries));
+        return summaries;
+    }
+
+    /** X2: 清空难度测试数据 */
+    private clearDifficultyTestData(): void {
+        try {
+            sys.localStorage.removeItem(GameManager.DIFFICULTY_TEST_KEY);
+            console.log('[DifficultyTest] 测试数据已清空');
+        } catch (e) {
+            console.warn('[DifficultyTest] 清空测试数据失败:', e);
+        }
+    }
+
+    /** X2: 安装控制台调试 API */
+    private installDifficultyDebugApi(): void {
+        try {
+            (globalThis as any).__MXMH_DIFFICULTY__ = {
+                export: () => this.exportDifficultyTestReport(),
+                summary: () => this.printDifficultySummary(),
+                clear: () => this.clearDifficultyTestData(),
+            };
+        } catch (e) {
+            console.warn('[DifficultyTest] 安装调试 API 失败:', e);
+        }
     }
 
     /** 结算面板得分文本（按目标类型） */
