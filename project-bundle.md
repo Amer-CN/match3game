@@ -1,6 +1,6 @@
-﻿# project-bundle.md — X3 Repomix Source Bundle
+﻿# project-bundle.md — X3.1 Repomix Source Bundle
 
-Generated: 2026-07-11 19:44:51
+Generated: 2026-07-11 20:04:51
 Files: 9
 
 <file path="assets/scripts/Board.ts">
@@ -4676,7 +4676,7 @@ return { cells, waveSeeds, isFullBoardClear: false };
 </file>
 
 <file path="assets/scripts/GameManager.ts">
-(7042 lines)
+(7074 lines)
 
 import {
     _decorator,
@@ -5820,7 +5820,10 @@ export class GameManager extends Component {
         }, 0.1);
 
         // 开始录屏（抖音环境才生效，非抖音降级跳过）
-        RecorderManager.getInstance().start(300);
+        // X3.1: 自动测试期间不启动录屏
+        if (!this._autoTestRunning) {
+            RecorderManager.getInstance().start(300);
+        }
 
         console.log(
             `[GameManager] ── L${config.level} ` +
@@ -6168,20 +6171,25 @@ export class GameManager extends Component {
         this.hidePanel(this.pausePanel);
 
         // 停止录屏（onStop 会拿到 videoPath）
-        RecorderManager.getInstance().stop();
+        // X3.1: 自动测试期间未启动录屏，也跳过停止
+        if (!this._autoTestRunning) {
+            RecorderManager.getInstance().stop();
+        }
 
         this.showPanel(this.resultPanel, true);
 
-        // 结算页 → 显示游戏圈按钮
-        this.gameClubEntry?.show();
+        // 结算页 → 显示游戏圈按钮（X3.1: 自动测试期间跳过）
+        if (!this._autoTestRunning) {
+            this.gameClubEntry?.show();
+        }
 
         this.resultTitle!.string = isWin ? '过关 🎉' : '再试一次 😵';
         this.resultTitle!.color = isWin ? this.COLOR_TITLE_WIN.clone() : this.COLOR_TITLE_LOSE.clone();
         this.resultScore!.string = this.getResultScoreText(this.levelConfigs[this.currentLevel]);
 
-        // ★ Boss 关过关：额外庆祝
+        // ★ Boss 关过关：额外庆祝（X3.1: 自动测试期间跳过粒子）
         const config = this.levelConfigs[this.currentLevel];
-        if (isWin && config.isBoss) {
+        if (isWin && config.isBoss && !this._autoTestRunning) {
             const chapter = this.safeNum(config.chapter, 1);
             const chapterClearTexts = [
                 '',
@@ -6223,74 +6231,88 @@ export class GameManager extends Component {
 
         if (isWin) {
             this.logDifficultyResult(true);
-            AudioManager.inst?.playWin();
-            VibrateManager.inst?.long();
-            // Boss 关额外震动
-            if (config.isBoss) VibrateManager.inst?.heavy();
 
-            // ★ 章末Boss首次通关：解锁公仔（必须在 markCleared 之前判断 isCleared）
-            let unlockedMonId = -1;
-            if (config.isBoss) {
-                const levelNum = this.safeNum(config.level, this.currentLevel + 1);
-                const isFirstClear = !SaveManager.inst.isCleared(levelNum);
-                if (isFirstClear) {
-                    const chapter = this.safeNum(config.chapter, 1);
-                    // 章号 → monId 映射（越界回退 -1 不赠送）
-                    if (chapter >= 1 && chapter <= GameManager.CHAPTER_BOSS_MONSTER.length) {
-                        unlockedMonId = GameManager.CHAPTER_BOSS_MONSTER[chapter - 1];
-                        // monId 范围防护 0-5
-                        if (unlockedMonId < 0 || unlockedMonId > 5) unlockedMonId = -1;
-                    }
-                    if (unlockedMonId >= 0) {
-                        try {
-                            SaveManager.inst.addMonster(unlockedMonId);
-                            console.log(`[GameManager] ★ 章末Boss首次通关 → 解锁公仔 monId=${unlockedMonId} (${COLOR_EMOJI_MAP[unlockedMonId] ?? '?'})`);
-                            // ★ H3: 解锁公仔上扬小音阶（复用 combo3→combo5，无文件静默）
+            // X3.1: 自动测试模式 — 跳过存档、发币、公仔解锁、音效和震动
+            if (this._autoTestRunning) {
+                this.lastCoinReward = 0;
+                if (this.resultCoinLabel) this.resultCoinLabel.node.active = false;
+                if (this.resultMonsterLabel) this.resultMonsterLabel.node.active = false;
+                if (this.resultCoinAdBtn) this.resultCoinAdBtn.active = false;
+                console.log('[AutoTest] 测试模式：跳过存档、发币和公仔解锁');
+            } else {
+                AudioManager.inst?.playWin();
+                VibrateManager.inst?.long();
+                // Boss 关额外震动
+                if (config.isBoss) VibrateManager.inst?.heavy();
+
+                // ★ 章末Boss首次通关：解锁公仔（必须在 markCleared 之前判断 isCleared）
+                let unlockedMonId = -1;
+                if (config.isBoss) {
+                    const levelNum = this.safeNum(config.level, this.currentLevel + 1);
+                    const isFirstClear = !SaveManager.inst.isCleared(levelNum);
+                    if (isFirstClear) {
+                        const chapter = this.safeNum(config.chapter, 1);
+                        // 章号 → monId 映射（越界回退 -1 不赠送）
+                        if (chapter >= 1 && chapter <= GameManager.CHAPTER_BOSS_MONSTER.length) {
+                            unlockedMonId = GameManager.CHAPTER_BOSS_MONSTER[chapter - 1];
+                            // monId 范围防护 0-5
+                            if (unlockedMonId < 0 || unlockedMonId > 5) unlockedMonId = -1;
+                        }
+                        if (unlockedMonId >= 0) {
                             try {
-                                AudioManager.inst?.playCombo(3);
-                                this.scheduleOnce(() => { try { AudioManager.inst?.playCombo(5); } catch (_) { /* ignore */ } }, 0.12);
-                            } catch (e) { /* ignore */ }
-                        } catch (e) {
-                            console.warn('[GameManager] addMonster 异常:', e);
-                            unlockedMonId = -1;
+                                SaveManager.inst.addMonster(unlockedMonId);
+                                console.log(`[GameManager] ★ 章末Boss首次通关 → 解锁公仔 monId=${unlockedMonId} (${COLOR_EMOJI_MAP[unlockedMonId] ?? '?'})`);
+                                // ★ H3: 解锁公仔上扬小音阶（复用 combo3→combo5，无文件静默）
+                                try {
+                                    AudioManager.inst?.playCombo(3);
+                                    this.scheduleOnce(() => { try { AudioManager.inst?.playCombo(5); } catch (_) { /* ignore */ } }, 0.12);
+                                } catch (e) { /* ignore */ }
+                            } catch (e) {
+                                console.warn('[GameManager] addMonster 异常:', e);
+                                unlockedMonId = -1;
+                            }
                         }
                     }
                 }
-            }
 
-            // D1: 过关写入存档（level 号从 LevelConfig.level 取，1~15）
-            SaveManager.inst.markCleared(this.safeNum(config.level, this.currentLevel + 1), this.currentScore);
-            // E1: 过关发放扭蛋币（普通关 +10、Boss 关 +30）
-            const coinReward = config.isBoss ? 30 : 10;
-            this.lastCoinReward = this.safeNum(coinReward, 10);
-            SaveManager.inst.addCoins(this.lastCoinReward);
-            // 结算页显示扭蛋币提示
-            if (this.resultCoinLabel) {
-                this.resultCoinLabel.string = `+${this.lastCoinReward} 🎲 扭蛋币`;
-                this.resultCoinLabel.node.active = true;
-            }
-            // ★ 章末公仔解锁提示 + backOut 弹入动画
-            if (this.resultMonsterLabel) {
-                if (unlockedMonId >= 0) {
-                    const emoji = COLOR_EMOJI_MAP[unlockedMonId] ?? '?';
-                    this.resultMonsterLabel.string = `🏅 第${chapter}章通关 · 解锁 ${emoji}`;
-                    this.resultMonsterLabel.fontSize = 36;
-                    this.resultMonsterLabel.node.active = true;
-                    // backOut 弹入（复用章节卡同款缓动）
-                    Tween.stopAllByTarget(this.resultMonsterLabel.node);
-                    this.resultMonsterLabel.node.setScale(0, 0, 1);
-                    tween(this.resultMonsterLabel.node)
-                        .to(0.3, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
-                        .to(0.1, { scale: new Vec3(1, 1, 1) })
-                        .start();
-                } else {
-                    this.resultMonsterLabel.node.active = false;
+                // D1: 过关写入存档（level 号从 LevelConfig.level 取，1~15）
+                SaveManager.inst.markCleared(this.safeNum(config.level, this.currentLevel + 1), this.currentScore);
+                // E1: 过关发放扭蛋币（普通关 +10、Boss 关 +30）
+                const coinReward = config.isBoss ? 30 : 10;
+                this.lastCoinReward = this.safeNum(coinReward, 10);
+                SaveManager.inst.addCoins(this.lastCoinReward);
+                // 结算页显示扭蛋币提示
+                if (this.resultCoinLabel) {
+                    this.resultCoinLabel.string = `+${this.lastCoinReward} 🎲 扭蛋币`;
+                    this.resultCoinLabel.node.active = true;
+                }
+                // ★ 章末公仔解锁提示 + backOut 弹入动画
+                if (this.resultMonsterLabel) {
+                    if (unlockedMonId >= 0) {
+                        const emoji = COLOR_EMOJI_MAP[unlockedMonId] ?? '?';
+                        this.resultMonsterLabel.string = `🏅 第${this.safeNum(config.chapter, 1)}章通关 · 解锁 ${emoji}`;
+                        this.resultMonsterLabel.fontSize = 36;
+                        this.resultMonsterLabel.node.active = true;
+                        // backOut 弹入（复用章节卡同款缓动）
+                        Tween.stopAllByTarget(this.resultMonsterLabel.node);
+                        this.resultMonsterLabel.node.setScale(0, 0, 1);
+                        tween(this.resultMonsterLabel.node)
+                            .to(0.3, { scale: new Vec3(1.2, 1.2, 1) }, { easing: 'backOut' })
+                            .to(0.1, { scale: new Vec3(1, 1, 1) })
+                            .start();
+                    } else {
+                        this.resultMonsterLabel.node.active = false;
+                    }
                 }
             }
         } else {
             this.logDifficultyResult(false);
-            AudioManager.inst?.playLose();
-            VibrateManager.inst?.long();
+
+            // X3.1: 自动测试模式 — 跳过音效和震动
+            if (!this._autoTestRunning) {
+                AudioManager.inst?.playLose();
+                VibrateManager.inst?.long();
+            }
             // 失败不发币，隐藏提示
             this.lastCoinReward = 0;
             if (this.resultCoinLabel) {
@@ -6765,23 +6787,46 @@ export class GameManager extends Component {
     /** X2: 停止自动测试 */
     private stopAutoTest(): void {
         this._autoTestRunning = false;
-        console.log('[AutoTest] 已停止');
+        this._autoTestIsTargeted = false;
+        this._autoTestTargetQueue = [];
+        this._autoTestRetryCount = 0;
+        console.log('[AutoTest] 已停止，状态已清理');
     }
 
     /** X2: 机器人主循环 — 每帧检查状态并行动 */
     private autoTestTick(): void {
         if (!this._autoTestRunning) return;
 
-        // 1. 如果结算面板打开 → 点下一关
+        // 1. 如果结算面板打开 → 处理下一局
         if (this.resultPanel?.active) {
             const config = this.levelConfigs[this.currentLevel];
             const isWin = this.isGoalReached(config);
+
+            // X3.1: targeted / batch 模式 — 每项只跑一局，不重试
+            if (this._autoTestIsTargeted) {
+                console.log(`[AutoTest] L${config.level} ${isWin ? '过关' : '失败'}，进入下一个队列项`);
+                this._autoTestRetryCount = 0;
+                if (!this.advanceTargetedTest()) return;
+                this.scheduleOnce(() => this.autoTestTick(), 0.5);
+                return;
+            }
+
+            // X3.1: 非 targeted（autorun）模式 — 保留旧逻辑：失败最多重试 3 次
             if (isWin) {
                 console.log(`[AutoTest] L${config.level} 过关`);
                 this._autoTestRetryCount = 0;
-                if (this._autoTestIsTargeted) {
-                    if (!this.advanceTargetedTest()) return;
-                } else {
+                if (this.currentLevel >= this.levelConfigs.length - 1) {
+                    this._autoTestRunning = false;
+                    console.log('[AutoTest] ★ 25 关全部完成！执行 export 导出数据');
+                    this.exportDifficultyTestReport();
+                    return;
+                }
+                this.startLevel(this.currentLevel + 1);
+            } else {
+                this._autoTestRetryCount++;
+                if (this._autoTestRetryCount >= GameManager.AUTO_TEST_MAX_RETRIES) {
+                    console.log(`[AutoTest] L${config.level} 已失败 ${this._autoTestRetryCount} 次，跳过`);
+                    this._autoTestRetryCount = 0;
                     if (this.currentLevel >= this.levelConfigs.length - 1) {
                         this._autoTestRunning = false;
                         console.log('[AutoTest] ★ 25 关全部完成！执行 export 导出数据');
@@ -6789,23 +6834,6 @@ export class GameManager extends Component {
                         return;
                     }
                     this.startLevel(this.currentLevel + 1);
-                }
-            } else {
-                this._autoTestRetryCount++;
-                if (this._autoTestRetryCount >= GameManager.AUTO_TEST_MAX_RETRIES) {
-                    console.log(`[AutoTest] L${config.level} 已失败 ${this._autoTestRetryCount} 次，跳过`);
-                    this._autoTestRetryCount = 0;
-                    if (this._autoTestIsTargeted) {
-                        if (!this.advanceTargetedTest()) return;
-                    } else {
-                        if (this.currentLevel >= this.levelConfigs.length - 1) {
-                            this._autoTestRunning = false;
-                            console.log('[AutoTest] ★ 25 关全部完成！执行 export 导出数据');
-                            this.exportDifficultyTestReport();
-                            return;
-                        }
-                        this.startLevel(this.currentLevel + 1);
-                    }
                 } else {
                     console.log(`[AutoTest] L${config.level} 失败（第 ${this._autoTestRetryCount} 次），重玩本关`);
                     this.startLevel(this.currentLevel);
@@ -7063,10 +7091,14 @@ export class GameManager extends Component {
         // X0: 刷新广告按钮状态（已用/加载中/可用）
         this.updateStepsAdState();
         this.showPanel(this.stepsPanel, true);
-        // 步数耗尽弹层 → 显示游戏圈按钮
-        this.gameClubEntry?.show();
-        // 停止录屏
-        RecorderManager.getInstance().stop();
+        // 步数耗尽弹层 → 显示游戏圈按钮（X3.1: 自动测试期间跳过）
+        if (!this._autoTestRunning) {
+            this.gameClubEntry?.show();
+        }
+        // 停止录屏（X3.1: 自动测试期间未启动录屏，也跳过停止）
+        if (!this._autoTestRunning) {
+            RecorderManager.getInstance().stop();
+        }
         console.log('[GameManager] 步数耗尽弹层');
     }
 
