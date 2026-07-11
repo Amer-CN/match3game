@@ -1,4 +1,52 @@
-# project-bundle.md — X3 机器人评估器代码包
+# project-bundle.md — X3 数据驱动精准调参代码包
+
+## 0. X3 调参总览
+
+**提交**: `balance: apply X3 data driven tuning`
+**范围**: 仅修改 `GameManager.ts` 中的 `levelConfigs`，共 20 个关卡的参数调整。
+**依据**: 107 局目标感知机器人测试数据。
+
+### X3 参数变更表
+
+| 关卡 | 类型 | 旧值 | 新值 | 旧步数 | 新步数 |
+|------|------|------|------|--------|--------|
+| L3 | collect | 12 | 18 | 22 | 20 |
+| L4 | score | 1400 | 1600 | 22 | 20 |
+| L5 | score | 2000 | 2200 | 22 | 22 |
+| L7 | collect | [12,12] | [16,16] | 26 | 24 |
+| L8 | score | 2200 | 2000 | 24 | 24 |
+| L10 | score | 2800 | 2500 | 24 | 24 |
+| L11 | score | 2200 | 2100 | 26 | 26 |
+| L12 | collect | [16,16] | [20,20] | 26 | 24 |
+| L13 | special | 4 | 5 | 24 | 24 |
+| L14 | score | 3000 | 2200 | 24 | 24 |
+| L15 | score | 3600 | 2400 | 24 | 26 |
+| L16 | ice | 8 | 8 | 28 | 22 |
+| L17 | collect | [12,12,12] | [15,15,15] | 28 | 26 |
+| L18 | special | 4 | 4 | 26 | 23 |
+| L19 | score | 3000 | 2700 | 26 | 26 |
+| L20 | ice | 14 | 14 | 28 | 30 |
+| L22 | collect | [14,14] | [18,18] | 28 | 26 |
+| L23 | special | 4 | 5 | 27 | 27 |
+| L24 | score | 3000 | 2100 | 26 | 26 |
+| L25 | crate | 12 | 12 | 30 | 24 |
+
+### 未修改关卡
+
+L1、L2、L6、L9、L21 参数保持不变。
+
+### 调参策略
+
+- **高分关降目标**: L8(2200→2000)、L10(2800→2500)、L14(3000→2200)、L15(3600→2400)、L19(3000→2700)、L24(3000→2100)
+- **高分关微升目标**: L4(1400→1600)、L5(2000→2200) — 基于对照关数据机器人得分能力良好
+- **收集关加目标**: L3(12→18)、L7([12,12]→[16,16])、L12([16,16]→[20,20])、L17([12,12,12]→[15,15,15])、L22([14,14]→[18,18])
+- **特效关加目标**: L13(4→5)、L23(4→5)
+- **步数收紧**: L16(28→22)、L18(26→23)、L25(30→24)
+- **步数放宽**: L15(24→26)、L20(28→30)
+- **冰层/木箱坐标**: 完全不变
+- **goalType / difficulty / designIntent**: 完全不变
+
+---
 
 ## 1. findBestTargetMove（Board.ts L2184-L2216）
 
@@ -276,7 +324,7 @@ private triggerSpecialExchange(a: TileInfo, b: TileInfo): SpecialExchangeResult 
 | 彩球+线炸目标色 | `getMostCommonColor()` | `getMostCommonColor()` | ✅ |
 | LINE/BOMB+普通 | return null → 普通匹配 | 走 else 分支 → findMatchGroups | ✅ |
 
-## 4. X3 新增：DifficultyExport 字段
+## 4. DifficultyExport 字段（version 2）
 
 ### DifficultyRunRecord 新增字段
 
@@ -333,3 +381,55 @@ collectDetail: { color: string; avgHave: number; need: number }[];
 - `this.grid[r1][c1]` / `this.grid[r2][c2]` → try/finally 恢复
 - `this.tileSpecials[r1][c1]` / `this.tileSpecials[r2][c2]` → try/finally 恢复
 - 不修改 `tiles` / `tileInfoMap` / `iceLayers` / `crateLayers` / `_activatedSpecials` / `totalScore` / `callbacks`
+
+## 7. X3 调参后完整 levelConfigs 一览
+
+```
+L1:  score   600/25   5色  第1章  tutorial
+L2:  score   900/22   5色  第1章  normal
+L3:  collect 18/20    5色  第1章  normal    [pink]
+L4:  score   1600/20  5色  第1章  hard
+L5:  score   2200/22  5色  第1章  boss
+L6:  score   1400/26  6色  第2章  tutorial
+L7:  collect [16,16]/24 6色  第2章  normal   [blue,green]
+L8:  score   2000/24  6色  第2章  hard
+L9:  special 3/24     6色  第2章  normal
+L10: score   2500/24  6色  第2章  boss
+L11: score   2100/26  6色  第3章  normal
+L12: collect [20,20]/24 6色 第3章  normal    [mon_purple,orange]
+L13: special 5/24     6色  第3章  hard
+L14: score   2200/24  6色  第3章  hard
+L15: score   2400/26  6色  第3章  boss
+L16: ice     8/22     6色  第4章  tutorial  (8格单层冰)
+L17: collect [15,15,15]/26 6色 第4章 normal [blue,green,yellow] (10格冰)
+L18: special 4/23     6色  第4章  normal    (8格混合冰)
+L19: score   2700/26  6色  第4章  hard      (12格双层冰)
+L20: ice     14/30    6色  第4章  boss      (14格混合冰)
+L21: crate   6/28     6色  第5章  tutorial  (6格单层箱)
+L22: collect [18,18]/26 6色 第5章  normal   [pink,blue] (8格箱)
+L23: special 5/27     6色  第5章  hard      (6格箱含2双层)
+L24: score   2100/26  6色  第5章  hard      (10格箱含4双层)
+L25: crate   12/24    6色  第5章  boss      (12格箱含5双层)
+```
+
+## 8. 五章难度曲线（X3 调参后）
+
+### 第1章：入门（5色）
+- L1(600) → L2(900) → L3(collect 18) → L4(1600) → L5(2200, Boss)
+- 平滑上升，Boss 关 2200 分 / 22 步
+
+### 第2章：进阶（6色）
+- L6(1400) → L7(collect [16,16]) → L8(2000) → L9(special 3) → L10(2500, Boss)
+- 6 色引入后匹配率下降，目标分适度调整
+
+### 第3章：挑战（6色）
+- L11(2100) → L12(collect [20,20]) → L13(special 5) → L14(2200) → L15(2400, Boss)
+- 特效关加压至 5 个，Boss 关 2400 分 / 26 步
+
+### 第4章：冰层障碍（6色）
+- L16(ice 8/22) → L17(collect [15,15,15]/26) → L18(special 4/23) → L19(2700) → L20(ice 14/30, Boss)
+- 冰层入门收紧至 22 步，Boss 放宽至 30 步
+
+### 第5章：木箱障碍（6色）
+- L21(crate 6) → L22(collect [18,18]) → L23(special 5) → L24(2100) → L25(crate 12/24, Boss)
+- 木箱 Boss 收紧至 24 步，分数关降至 2100
