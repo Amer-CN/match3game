@@ -237,7 +237,7 @@ export class GameManager extends Component {
         // —— 第 3 章：挑战（6 色）——
         { level: 11, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 2100, moves: 26, colors: 6,
           difficulty: 'normal',   designIntent: '章节喘息关，稳定得分并复习六色棋盘' },
-        { level: 12, chapter: 3, isBoss: false, goalType: 'collect', goalColor: ['mon_purple', 'orange'], goalCount: [20, 20], moves: 24, colors: 6,
+        { level: 12, chapter: 3, isBoss: false, goalType: 'collect', goalColor: ['mon_purple', 'orange'], goalCount: [18, 18], moves: 26, colors: 6,
           difficulty: 'normal',   designIntent: '双颜色收集，要求兼顾目标但保留足够容错' },
         { level: 13, chapter: 3, isBoss: false, goalType: 'special', specialCount: 5, moves: 24, colors: 6,
           difficulty: 'hard',     designIntent: '要求主动制造和引爆特殊棋子，为后续高分关做准备' },
@@ -247,7 +247,7 @@ export class GameManager extends Component {
           difficulty: 'boss',     designIntent: '第三章综合考试，考察特殊棋子、组合与连锁效率' },
         // —— 第 4 章：新篇 · 冰层障碍（6 色）——
         // U1: L16 冰层入门 — 清除 8 格单层冰
-        { level: 16, chapter: 4, isBoss: false, goalType: 'ice', iceTarget: 8, moves: 22, colors: 6,
+        { level: 16, chapter: 4, isBoss: false, goalType: 'ice', iceTarget: 8, moves: 24, colors: 6,
           difficulty: 'tutorial', designIntent: '明确学习消除冰层覆盖格的棋子，单层冰一次清除',
           ice: [
               {row:1,col:1,layers:1},{row:1,col:6,layers:1},
@@ -257,7 +257,7 @@ export class GameManager extends Component {
           ],
         },
         // U1: L17 收集 + 冰层障碍
-        { level: 17, chapter: 4, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green', 'yellow'], goalCount: [15, 15, 15], moves: 26, colors: 6,
+        { level: 17, chapter: 4, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green', 'yellow'], goalCount: [16, 16, 16], moves: 26, colors: 6,
           difficulty: 'normal',   designIntent: '在颜色收集过程中顺带处理冰层，不要求清完所有冰',
           ice: [
               {row:0,col:2,layers:1},{row:0,col:5,layers:1},
@@ -268,7 +268,7 @@ export class GameManager extends Component {
           ],
         },
         // U1: L18 特效引爆 + 混合冰层（单层+双层）
-        { level: 18, chapter: 4, isBoss: false, goalType: 'special', specialCount: 4, moves: 23, colors: 6,
+        { level: 18, chapter: 4, isBoss: false, goalType: 'special', specialCount: 4, moves: 25, colors: 6,
           difficulty: 'normal',   designIntent: '学习利用特殊棋子批量命中单层和双层冰',
           ice: [
               {row:1,col:1,layers:2},{row:1,col:6,layers:2},
@@ -287,7 +287,7 @@ export class GameManager extends Component {
           ],
         },
         // U1: L20 Boss — 清除 14 格混合冰层
-        { level: 20, chapter: 4, isBoss: true, goalType: 'ice', iceTarget: 14, moves: 30, colors: 6,
+        { level: 20, chapter: 4, isBoss: true, goalType: 'ice', iceTarget: 14, moves: 32, colors: 6,
           difficulty: 'boss',     designIntent: '清除全部混合冰层，优先规划双层冰和特效覆盖范围',
           ice: [
               {row:0,col:0,layers:2},{row:0,col:3,layers:2},{row:0,col:7,layers:2},
@@ -308,7 +308,7 @@ export class GameManager extends Component {
           ],
         },
         // V: L22 收集 + 木箱
-        { level: 22, chapter: 5, isBoss: false, goalType: 'collect', goalColor: ['pink', 'blue'], goalCount: [18, 18], moves: 26, colors: 6,
+        { level: 22, chapter: 5, isBoss: false, goalType: 'collect', goalColor: ['pink', 'blue'], goalCount: [19, 19], moves: 25, colors: 6,
           difficulty: 'normal',   designIntent: '在木箱切割的棋盘中完成双颜色收集',
           crate: [
               {row:1,col:1,layers:1},{row:1,col:6,layers:1},
