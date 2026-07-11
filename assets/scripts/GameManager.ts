@@ -217,37 +217,37 @@ export class GameManager extends Component {
           difficulty: 'tutorial', designIntent: '完成第一次普通三消，建立"交换—消除—得分"认知' },
         { level: 2,  chapter: 1, isBoss: false, goalType: 'score',   targetScore: 900,  moves: 22, colors: 5,
           difficulty: 'normal',   designIntent: '在宽松步数内练习连续有效交换' },
-        { level: 3,  chapter: 1, isBoss: false, goalType: 'collect', goalColor: 'pink', goalCount: 12, moves: 22, colors: 5,
+        { level: 3,  chapter: 1, isBoss: false, goalType: 'collect', goalColor: 'pink', goalCount: 18, moves: 20, colors: 5,
           difficulty: 'normal',   designIntent: '第一次学习指定颜色收集目标' },
-        { level: 4,  chapter: 1, isBoss: false, goalType: 'score',   targetScore: 1400, moves: 22, colors: 5,
+        { level: 4,  chapter: 1, isBoss: false, goalType: 'score',   targetScore: 1600, moves: 20, colors: 5,
           difficulty: 'hard',     designIntent: '引导玩家通过四连和自然连锁提高单步收益' },
-        { level: 5,  chapter: 1, isBoss: true,  goalType: 'score',   targetScore: 2000, moves: 22, colors: 5,
+        { level: 5,  chapter: 1, isBoss: true,  goalType: 'score',   targetScore: 2200, moves: 22, colors: 5,
           difficulty: 'boss',     designIntent: '第一章综合考试，要求稳定制造高价值消除但不依赖道具' },
         // —— 第 2 章：进阶（6 色）——
         { level: 6,  chapter: 2, isBoss: false, goalType: 'score',   targetScore: 1400, moves: 26, colors: 6,
           difficulty: 'tutorial', designIntent: '用宽松条件适应六种颜色带来的匹配率下降' },
-        { level: 7,  chapter: 2, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green'], goalCount: [12, 12], moves: 26, colors: 6,
+        { level: 7,  chapter: 2, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green'], goalCount: [16, 16], moves: 24, colors: 6,
           difficulty: 'normal',   designIntent: '在六色棋盘中练习双颜色收集' },
-        { level: 8,  chapter: 2, isBoss: false, goalType: 'score',   targetScore: 2200, moves: 24, colors: 6,
+        { level: 8,  chapter: 2, isBoss: false, goalType: 'score',   targetScore: 2000, moves: 24, colors: 6,
           difficulty: 'hard',     designIntent: '要求玩家开始主动追求四连、五连和连锁得分' },
         { level: 9,  chapter: 2, isBoss: false, goalType: 'special', specialCount: 3, moves: 24, colors: 6,
           difficulty: 'normal',   designIntent: '明确教学特殊棋子的制造和引爆' },
-        { level: 10, chapter: 2, isBoss: true,  goalType: 'score',   targetScore: 2800, moves: 24, colors: 6,
+        { level: 10, chapter: 2, isBoss: true,  goalType: 'score',   targetScore: 2500, moves: 24, colors: 6,
           difficulty: 'boss',     designIntent: '第二章综合考试，通过特殊棋子提升分数效率' },
         // —— 第 3 章：挑战（6 色）——
-        { level: 11, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 2200, moves: 26, colors: 6,
+        { level: 11, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 2100, moves: 26, colors: 6,
           difficulty: 'normal',   designIntent: '章节喘息关，稳定得分并复习六色棋盘' },
-        { level: 12, chapter: 3, isBoss: false, goalType: 'collect', goalColor: ['mon_purple', 'orange'], goalCount: [16, 16], moves: 26, colors: 6,
+        { level: 12, chapter: 3, isBoss: false, goalType: 'collect', goalColor: ['mon_purple', 'orange'], goalCount: [20, 20], moves: 24, colors: 6,
           difficulty: 'normal',   designIntent: '双颜色收集，要求兼顾目标但保留足够容错' },
-        { level: 13, chapter: 3, isBoss: false, goalType: 'special', specialCount: 4, moves: 24, colors: 6,
+        { level: 13, chapter: 3, isBoss: false, goalType: 'special', specialCount: 5, moves: 24, colors: 6,
           difficulty: 'hard',     designIntent: '要求主动制造和引爆特殊棋子，为后续高分关做准备' },
-        { level: 14, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 3000, moves: 24, colors: 6,
+        { level: 14, chapter: 3, isBoss: false, goalType: 'score',   targetScore: 2200, moves: 24, colors: 6,
           difficulty: 'hard',     designIntent: '使用特殊棋子和连锁完成高分目标，但不需要广告续步' },
-        { level: 15, chapter: 3, isBoss: true,  goalType: 'score',   targetScore: 3600, moves: 24, colors: 6,
+        { level: 15, chapter: 3, isBoss: true,  goalType: 'score',   targetScore: 2400, moves: 26, colors: 6,
           difficulty: 'boss',     designIntent: '第三章综合考试，考察特殊棋子、组合与连锁效率' },
         // —— 第 4 章：新篇 · 冰层障碍（6 色）——
         // U1: L16 冰层入门 — 清除 8 格单层冰
-        { level: 16, chapter: 4, isBoss: false, goalType: 'ice', iceTarget: 8, moves: 28, colors: 6,
+        { level: 16, chapter: 4, isBoss: false, goalType: 'ice', iceTarget: 8, moves: 22, colors: 6,
           difficulty: 'tutorial', designIntent: '明确学习消除冰层覆盖格的棋子，单层冰一次清除',
           ice: [
               {row:1,col:1,layers:1},{row:1,col:6,layers:1},
@@ -257,7 +257,7 @@ export class GameManager extends Component {
           ],
         },
         // U1: L17 收集 + 冰层障碍
-        { level: 17, chapter: 4, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green', 'yellow'], goalCount: [12, 12, 12], moves: 28, colors: 6,
+        { level: 17, chapter: 4, isBoss: false, goalType: 'collect', goalColor: ['blue', 'green', 'yellow'], goalCount: [15, 15, 15], moves: 26, colors: 6,
           difficulty: 'normal',   designIntent: '在颜色收集过程中顺带处理冰层，不要求清完所有冰',
           ice: [
               {row:0,col:2,layers:1},{row:0,col:5,layers:1},
@@ -268,7 +268,7 @@ export class GameManager extends Component {
           ],
         },
         // U1: L18 特效引爆 + 混合冰层（单层+双层）
-        { level: 18, chapter: 4, isBoss: false, goalType: 'special', specialCount: 4, moves: 26, colors: 6,
+        { level: 18, chapter: 4, isBoss: false, goalType: 'special', specialCount: 4, moves: 23, colors: 6,
           difficulty: 'normal',   designIntent: '学习利用特殊棋子批量命中单层和双层冰',
           ice: [
               {row:1,col:1,layers:2},{row:1,col:6,layers:2},
@@ -278,7 +278,7 @@ export class GameManager extends Component {
           ],
         },
         // U1: L19 高分 + 重冰（全双层）
-        { level: 19, chapter: 4, isBoss: false, goalType: 'score', targetScore: 3000, moves: 26, colors: 6,
+{ level: 19, chapter: 4, isBoss: false, goalType: 'score',   targetScore: 2700, moves: 26, colors: 6,
           difficulty: 'hard',     designIntent: '在双层冰干扰下制造连锁和特殊棋子获得高分',
           ice: [
               {row:0,col:1,layers:2},{row:0,col:3,layers:2},{row:0,col:5,layers:2},{row:0,col:7,layers:2},
@@ -287,7 +287,7 @@ export class GameManager extends Component {
           ],
         },
         // U1: L20 Boss — 清除 14 格混合冰层
-        { level: 20, chapter: 4, isBoss: true, goalType: 'ice', iceTarget: 14, moves: 28, colors: 6,
+        { level: 20, chapter: 4, isBoss: true, goalType: 'ice', iceTarget: 14, moves: 30, colors: 6,
           difficulty: 'boss',     designIntent: '清除全部混合冰层，优先规划双层冰和特效覆盖范围',
           ice: [
               {row:0,col:0,layers:2},{row:0,col:3,layers:2},{row:0,col:7,layers:2},
@@ -308,7 +308,7 @@ export class GameManager extends Component {
           ],
         },
         // V: L22 收集 + 木箱
-        { level: 22, chapter: 5, isBoss: false, goalType: 'collect', goalColor: ['pink', 'blue'], goalCount: [14, 14], moves: 28, colors: 6,
+        { level: 22, chapter: 5, isBoss: false, goalType: 'collect', goalColor: ['pink', 'blue'], goalCount: [18, 18], moves: 26, colors: 6,
           difficulty: 'normal',   designIntent: '在木箱切割的棋盘中完成双颜色收集',
           crate: [
               {row:1,col:1,layers:1},{row:1,col:6,layers:1},
@@ -318,7 +318,7 @@ export class GameManager extends Component {
           ],
         },
         // V: L23 特效 + 木箱（含 2 个双层）
-        { level: 23, chapter: 5, isBoss: false, goalType: 'special', specialCount: 4, moves: 27, colors: 6,
+        { level: 23, chapter: 5, isBoss: false, goalType: 'special', specialCount: 5, moves: 27, colors: 6,
           difficulty: 'hard',     designIntent: '在受限空间中制造特殊棋子并利用特效命中木箱',
           crate: [
               {row:1,col:2,layers:1},{row:1,col:5,layers:2},
@@ -327,7 +327,7 @@ export class GameManager extends Component {
           ],
         },
         // V: L24 分数 + 木箱阵（含 4 个双层）
-        { level: 24, chapter: 5, isBoss: false, goalType: 'score', targetScore: 3000, moves: 26, colors: 6,
+{ level: 24, chapter: 5, isBoss: false, goalType: 'score',   targetScore: 2100, moves: 26, colors: 6,
           difficulty: 'hard',     designIntent: '在木箱分段重力条件下通过特效和连锁完成高分',
           crate: [
               {row:0,col:2,layers:1},{row:0,col:5,layers:2},
@@ -338,7 +338,7 @@ export class GameManager extends Component {
           ],
         },
         // V: L25 Boss — 拆箱（12 个木箱，含 5 个双层）
-        { level: 25, chapter: 5, isBoss: true, goalType: 'crate', crateTarget: 12, moves: 30, colors: 6,
+        { level: 25, chapter: 5, isBoss: true, goalType: 'crate', crateTarget: 12, moves: 24, colors: 6,
           difficulty: 'boss',     designIntent: '清除全部混合木箱，综合考察相邻消除、特效和分段重力',
           crate: [
               {row:0,col:1,layers:1},{row:0,col:4,layers:2},{row:0,col:6,layers:1},
