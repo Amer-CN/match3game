@@ -2167,7 +2167,7 @@ return { cells, waveSeeds, isFullBoardClear: false };
      *   - 消除数量
      *   - 匹配形状（4连/5连/L-T → 特效生成）
      *   - 已有特效棋子的引爆（交换方或目标方是特效）
-     *   - 冰层伤害（消除格相邻冰层）
+     *   - 冰层伤害（消除格本身有冰层才计，不检查四邻）
      *   - 木箱伤害（消除格相邻木箱）
      *   - 目标颜色消除数（collect 类型）
      *   - 估算分数变化
@@ -2272,22 +2272,30 @@ return { cells, waveSeeds, isFullBoardClear: false };
                 }
             }
 
-            // 4. 冰层伤害统计（消除格相邻的冰层）
+            // 4. 冰层伤害统计（只检查消除格本身，不检查四邻）
             for (const key of eliminatedSet) {
                 const [er, ec] = key.split(',').map(Number);
-                // 检查 4 方向相邻格是否有冰层
-                const neighbors = [[er-1,ec],[er+1,ec],[er,ec-1],[er,ec+1]];
-                for (const [nr, nc] of neighbors) {
-                    if (nr >= 0 && nr < Board.ROWS && nc >= 0 && nc < Board.COLS) {
-                        if (this.iceLayers[nr]?.[nc] > 0) iceDamageCount++;
-                        if (this.crateLayers[nr]?.[nc] > 0) crateDamageCount++;
-                    }
-                }
-                // 消除格本身如果有冰层也算
                 if (this.iceLayers[er]?.[ec] > 0) iceDamageCount++;
             }
 
-            // 5. 估算分数（每个消除约 30 分，特效额外加分）
+            // 5. 木箱伤害统计（消除格四邻有木箱 → 去重计数）
+            {
+                const crateHitSet = new Set<string>();
+                for (const key of eliminatedSet) {
+                    const [er, ec] = key.split(',').map(Number);
+                    const neighbors = [[er-1,ec],[er+1,ec],[er,ec-1],[er,ec+1]];
+                    for (const [nr, nc] of neighbors) {
+                        if (nr >= 0 && nr < Board.ROWS && nc >= 0 && nc < Board.COLS) {
+                            if (this.crateLayers[nr]?.[nc] > 0) {
+                                crateHitSet.add(`${nr},${nc}`);
+                            }
+                        }
+                    }
+                }
+                crateDamageCount = crateHitSet.size;
+            }
+
+            // 6. 估算分数（每个消除约 30 分，特效额外加分）
             scoreDelta = eliminatedCount * 30;
             if (specialCreatedCount > 0) scoreDelta += specialCreatedCount * 200;
             if (specialDetonatedCount > 0) scoreDelta += specialDetonatedCount * 300;
@@ -2297,7 +2305,7 @@ return { cells, waveSeeds, isFullBoardClear: false };
         this.grid[r1][c1] = va;
         this.grid[r2][c2] = vb;
 
-        // 6. 按目标类型计算综合评分
+        // 7. 按目标类型计算综合评分
         let totalScore = 0;
 
         // 通用基础分
