@@ -1,6 +1,6 @@
-﻿# project-bundle.md — X3.2 Repomix Source Bundle
+﻿# project-bundle.md — X3.3 Repomix Source Bundle
 
-Generated: 2026-07-11 21:26:31
+Generated: 2026-07-11 22:15:49
 Files: 9
 
 <file path="assets/scripts/Board.ts">
@@ -5021,10 +5021,10 @@ export class GameManager extends Component {
         { level: 25, chapter: 5, isBoss: true, goalType: 'crate', crateTarget: 12, moves: 24, colors: 6,
           difficulty: 'boss',     designIntent: '清除全部混合木箱，综合考察相邻消除、特效和分段重力',
           crate: [
-              {row:0,col:1,layers:1},{row:0,col:4,layers:2},{row:0,col:6,layers:1},
-              {row:2,col:2,layers:2},{row:2,col:5,layers:1},
-              {row:4,col:1,layers:1},{row:4,col:3,layers:2},{row:4,col:6,layers:2},
-              {row:5,col:2,layers:1},{row:5,col:5,layers:1},
+              {row:0,col:1,layers:1},{row:0,col:4,layers:2},{row:0,col:6,layers:2},
+              {row:2,col:2,layers:2},{row:2,col:5,layers:2},
+              {row:4,col:1,layers:2},{row:4,col:3,layers:2},{row:4,col:6,layers:2},
+              {row:5,col:2,layers:2},{row:5,col:5,layers:2},
               {row:7,col:1,layers:2},{row:7,col:6,layers:1},
           ],
         },
