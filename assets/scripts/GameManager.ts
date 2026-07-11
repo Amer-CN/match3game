@@ -70,10 +70,14 @@ interface DifficultyRunRecord {
     validMovesUsed: number;
     stepsRemaining: number;
     score: number;
+    targetScore: number;  // X3: 目标分数（score 类型有值，其余为 0）
 
     goalCurrent: number;
     goalTarget: number;
     goalProgress: number;
+
+    // X3: collect 详情 — 每个目标颜色的最终收集量
+    collectDetail?: { color: string; have: number; need: number }[];
 
     hammerUsed: boolean;
     shuffleUsed: boolean;
@@ -87,6 +91,7 @@ interface DifficultyRunRecord {
 interface DifficultyLevelSummary {
     level: number;
     difficulty: DifficultyTier;
+    goalType: GoalType;  // X3: 关卡目标类型
 
     attempts: number;
     wins: number;
@@ -109,6 +114,18 @@ interface DifficultyLevelSummary {
     shuffleUseRate: number;
     addStepsUseRate: number;
     continueAdUseRate: number;
+
+    // X3: 高分关额外指标
+    targetScore: number;           // 目标分数（非 score 类型为 0）
+    scores: number[];              // 每局最终分数列表
+    avgScore: number;              // 平均分
+    medianScore: number;           // 中位数
+    minScore: number;              // 最低分
+    maxScore: number;              // 最高分
+    scoreReachedCount: number;     // 达到目标分数的局数（含通关）
+
+    // X3: 收集关额外指标
+    collectDetail: { color: string; avgHave: number; need: number }[];  // 每个目标颜色的平均收集量
 }
 
 /** 关卡配置 */
@@ -1640,6 +1657,7 @@ export class GameManager extends Component {
             validMovesUsed: this.validMovesUsedThisRun,
             stepsRemaining: this.currentSteps,
             score: this.currentScore,
+            targetScore: this.safeNum(cfg.targetScore, 0),
 
             goalCurrent: goal.current,
             goalTarget: goal.target,
@@ -1652,6 +1670,17 @@ export class GameManager extends Component {
 
             assisted,
         };
+
+        // X3: collect 详情
+        if (cfg.goalType === 'collect') {
+            const colors = Array.isArray(cfg.goalColor) ? cfg.goalColor : [cfg.goalColor!];
+            const counts = Array.isArray(cfg.goalCount) ? cfg.goalCount : [cfg.goalCount!];
+            record.collectDetail = colors.map((color, i) => ({
+                color,
+                have: this.safeNum(this.collectedCount[color] ?? 0, 0),
+                need: this.safeNum(counts[i], 0),
+            }));
+        }
 
         console.log('[DifficultyRun]', JSON.stringify(record));
 
@@ -1799,9 +1828,38 @@ export class GameManager extends Component {
 
             const r3 = (n: number) => Math.round(n * 1000) / 1000;
 
+            // X3: 高分关额外指标
+            const scores = recs.map(r => this.safeNum(r.score, 0));
+            const targetScore = this.safeNum(recs[0]?.targetScore, 0);
+            const sortedScores = [...scores].sort((a, b) => a - b);
+            const avgScore = scores.length > 0 ? Math.round(scores.reduce((s, v) => s + v, 0) / scores.length) : 0;
+            const medianScore = sortedScores.length > 0
+                ? sortedScores.length % 2 === 0
+                    ? Math.round((sortedScores[sortedScores.length / 2 - 1] + sortedScores[sortedScores.length / 2]) / 2)
+                    : sortedScores[Math.floor(sortedScores.length / 2)]
+                : 0;
+            const minScore = sortedScores.length > 0 ? sortedScores[0] : 0;
+            const maxScore = sortedScores.length > 0 ? sortedScores[sortedScores.length - 1] : 0;
+            const scoreReachedCount = targetScore > 0 ? scores.filter(s => s >= targetScore).length : 0;
+
+            // X3: 收集关额外指标
+            const collectDetail: { color: string; avgHave: number; need: number }[] = [];
+            const firstCollect = recs.find(r => r.collectDetail && r.collectDetail.length > 0);
+            if (firstCollect && firstCollect.collectDetail) {
+                for (const cd of firstCollect.collectDetail) {
+                    const allHaves = recs
+                        .map(r => r.collectDetail?.find(d => d.color === cd.color)?.have ?? 0);
+                    const avgHave = allHaves.length > 0
+                        ? r3(allHaves.reduce((s, v) => s + v, 0) / allHaves.length)
+                        : 0;
+                    collectDetail.push({ color: cd.color, avgHave, need: cd.need });
+                }
+            }
+
             summaries.push({
                 level,
                 difficulty: recs[0]?.difficulty ?? 'normal',
+                goalType: recs[0]?.goalType ?? 'score',
 
                 attempts,
                 wins,
@@ -1824,6 +1882,18 @@ export class GameManager extends Component {
                 shuffleUseRate: r3(attempts > 0 ? recs.filter(r => r.shuffleUsed).length / attempts : 0),
                 addStepsUseRate: r3(attempts > 0 ? recs.filter(r => r.addStepsUsed).length / attempts : 0),
                 continueAdUseRate: r3(attempts > 0 ? recs.filter(r => r.continueAdUsed).length / attempts : 0),
+
+                // X3: 高分关额外指标
+                targetScore,
+                scores,
+                avgScore,
+                medianScore,
+                minScore,
+                maxScore,
+                scoreReachedCount,
+
+                // X3: 收集关额外指标
+                collectDetail,
             });
         }
 
@@ -1837,7 +1907,7 @@ export class GameManager extends Component {
         const summaries = this.buildDifficultySummary(records);
 
         const report = {
-            version: 1,
+            version: 2,
             exportedAt: new Date().toISOString(),
             totalRuns: records.length,
             summaries,
@@ -1881,6 +1951,8 @@ export class GameManager extends Component {
                 autorun: () => this.startAutoTestRun(),
                 // X2.2: 定点测试 — testrun([13,16,18,20,23], 3)
                 testrun: (levels: number[], runs: number = 3) => this.startTargetedTestRun(levels, runs),
+                // X3: 批量定点测试 — batchtest([{levels:[8,10,14,15,19,24],runs:5},{levels:[4,5,11],runs:3},{levels:[3,7,12,17,22],runs:3},{levels:[25],runs:5}])
+                batchtest: (groups: { levels: number[]; runs: number }[]) => this.startBatchTestRun(groups),
                 stop: () => this.stopAutoTest(),
             };
         } catch (e) {
@@ -1969,6 +2041,45 @@ export class GameManager extends Component {
         console.log(`[AutoTest] → 下一关 L${this.levelConfigs[nextIdx].level}（队列剩余 ${this._autoTestTargetQueue.length}）`);
         this.startLevel(nextIdx);
         return true;
+    }
+
+    /** X3: 批量定点测试 — 多组关卡各打 N 局，一次调用完成全部 */
+    private startBatchTestRun(groups: { levels: number[]; runs: number }[]): void {
+        if (this._autoTestRunning) {
+            console.log('[AutoTest] 已在运行中，请先 stop');
+            return;
+        }
+        this._autoTestTargetQueue = [];
+        let totalRuns = 0;
+        const groupDesc: string[] = [];
+        for (const g of groups) {
+            groupDesc.push(`L${g.levels.join(',')}×${g.runs}`);
+            for (const ln of g.levels) {
+                const idx = ln - 1;
+                if (idx >= 0 && idx < this.levelConfigs.length) {
+                    for (let i = 0; i < g.runs; i++) {
+                        this._autoTestTargetQueue.push(idx);
+                        totalRuns++;
+                    }
+                } else {
+                    console.warn(`[AutoTest] L${ln} 不存在，跳过`);
+                }
+            }
+        }
+        if (this._autoTestTargetQueue.length === 0) {
+            console.log('[AutoTest] 队列为空，取消');
+            return;
+        }
+        this._autoTestRunning = true;
+        this._autoTestRetryCount = 0;
+        this._autoTestIsTargeted = true;
+        console.log(`[AutoTest] 批量测试开始：${groupDesc.join(' + ')}，共 ${totalRuns} 局`);
+
+        this.clearDifficultyTestData();
+
+        const firstIdx = this._autoTestTargetQueue.shift()!;
+        this.startLevel(firstIdx);
+        this.scheduleOnce(() => this.autoTestTick(), 0.5);
     }
 
     /** X2: 停止自动测试 */
