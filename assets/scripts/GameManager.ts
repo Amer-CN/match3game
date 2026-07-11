@@ -1891,6 +1891,9 @@ export class GameManager extends Component {
     // ══════════════════════════════════════════════════════════════════════════
 
     private _autoTestRunning = false;
+    private _autoTestRetryCount = 0;
+    private static readonly AUTO_TEST_MAX_RETRIES = 3;
+    private static readonly AUTO_TEST_TICK_MS = 0.15;
 
     /** X2: 启动自动测试，从 L1 开始打完 25 关 */
     private startAutoTestRun(): void {
@@ -1899,6 +1902,7 @@ export class GameManager extends Component {
             return;
         }
         this._autoTestRunning = true;
+        this._autoTestRetryCount = 0;
         console.log('[AutoTest] 开始自动测试 25 关裸关...');
 
         // 清空旧数据
@@ -1926,6 +1930,8 @@ export class GameManager extends Component {
             const config = this.levelConfigs[this.currentLevel];
             const isWin = this.isGoalReached(config);
             if (isWin) {
+                console.log(`[AutoTest] L${config.level} 过关，进入下一关`);
+                this._autoTestRetryCount = 0;
                 if (this.currentLevel >= this.levelConfigs.length - 1) {
                     // 全部打完
                     this._autoTestRunning = false;
@@ -1933,11 +1939,23 @@ export class GameManager extends Component {
                     this.exportDifficultyTestReport();
                     return;
                 }
-                console.log(`[AutoTest] L${config.level} 过关，进入下一关`);
                 this.startLevel(this.currentLevel + 1);
             } else {
-                console.log(`[AutoTest] L${config.level} 失败，重玩本关`);
-                this.startLevel(this.currentLevel);
+                this._autoTestRetryCount++;
+                if (this._autoTestRetryCount >= GameManager.AUTO_TEST_MAX_RETRIES) {
+                    console.log(`[AutoTest] L${config.level} 已失败 ${this._autoTestRetryCount} 次，跳过进入下一关`);
+                    this._autoTestRetryCount = 0;
+                    if (this.currentLevel >= this.levelConfigs.length - 1) {
+                        this._autoTestRunning = false;
+                        console.log('[AutoTest] ★ 25 关全部完成！执行 export 导出数据');
+                        this.exportDifficultyTestReport();
+                        return;
+                    }
+                    this.startLevel(this.currentLevel + 1);
+                } else {
+                    console.log(`[AutoTest] L${config.level} 失败（第 ${this._autoTestRetryCount} 次），重玩本关`);
+                    this.startLevel(this.currentLevel);
+                }
             }
             this.scheduleOnce(() => this.autoTestTick(), 2.0);
             return;
@@ -1966,7 +1984,7 @@ export class GameManager extends Component {
 
         // 5. 棋盘忙碌 → 等待
         if (!this.board || this.board.state !== 0 /* BoardState.IDLE */) {
-            this.scheduleOnce(() => this.autoTestTick(), 0.3);
+            this.scheduleOnce(() => this.autoTestTick(), 0.2);
             return;
         }
 
@@ -1977,12 +1995,11 @@ export class GameManager extends Component {
             const dc = move.b.c - move.a.c;
             this.board.trySwapByDir(move.a.r, move.a.c, dr, dc);
         } else {
-            // 无有效交换 → 棋盘应该自动洗牌了，等一下
             console.log('[AutoTest] 无有效交换，等待自动洗牌');
         }
 
         // 循环
-        this.scheduleOnce(() => this.autoTestTick(), 0.4);
+        this.scheduleOnce(() => this.autoTestTick(), GameManager.AUTO_TEST_TICK_MS);
     }
 
     /** 结算面板得分文本（按目标类型） */
