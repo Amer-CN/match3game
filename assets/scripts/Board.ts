@@ -2100,6 +2100,66 @@ return { cells, waveSeeds, isFullBoardClear: false };
         return this.findAnyValidMove() !== null;
     }
 
+    /**
+     * X2: 扫描所有有效交换，返回消除数最多的一个（优先四连/五连）。
+     * 只读模拟，不修改实际棋盘。
+     */
+    public findBestValidMove(): { a: { r: number; c: number }; b: { r: number; c: number } } | null {
+        const { ROWS, COLS } = Board;
+        let best: { a: { r: number; c: number }; b: { r: number; c: number } } | null = null;
+        let bestScore = 0;
+
+        for (let r = 0; r < ROWS; r++) {
+            for (let c = 0; c < COLS; c++) {
+                if (!this.grid[r] || this.grid[r][c] === undefined) continue;
+                if (this.hasCrateAt(r, c)) continue;
+                if (this.grid[r][c] < 0) continue;
+
+                // 试右侧
+                if (
+                    c + 1 < COLS &&
+                    this.grid[r][c + 1] !== undefined &&
+                    !this.hasCrateAt(r, c + 1) &&
+                    this.grid[r][c + 1] >= 0
+                ) {
+                    const va = this.grid[r][c];
+                    const vb = this.grid[r][c + 1];
+                    this.grid[r][c] = vb;
+                    this.grid[r][c + 1] = va;
+                    const score = this.findMatches().length;
+                    this.grid[r][c] = va;
+                    this.grid[r][c + 1] = vb;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        best = { a: { r, c }, b: { r, c: c + 1 } };
+                    }
+                }
+
+                // 试下方
+                if (
+                    r + 1 < ROWS &&
+                    this.grid[r + 1] &&
+                    this.grid[r + 1][c] !== undefined &&
+                    !this.hasCrateAt(r + 1, c) &&
+                    this.grid[r + 1][c] >= 0
+                ) {
+                    const va = this.grid[r][c];
+                    const vb = this.grid[r + 1][c];
+                    this.grid[r][c] = vb;
+                    this.grid[r + 1][c] = va;
+                    const score = this.findMatches().length;
+                    this.grid[r][c] = va;
+                    this.grid[r + 1][c] = vb;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        best = { a: { r, c }, b: { r: r + 1, c } };
+                    }
+                }
+            }
+        }
+        return best;
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     //  A3 · 开局/切关保证有可行步且无自动消（静默，无提示）
     // ══════════════════════════════════════════════════════════════════════════

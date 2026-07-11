@@ -1988,8 +1988,8 @@ export class GameManager extends Component {
             return;
         }
 
-        // 6. 找一个有效交换并执行
-        const move = this.board.findAnyValidMove();
+        // 6. 找最优交换并执行（优先四连/五连）
+        const move = this.board.findBestValidMove();
         if (move) {
             const dr = move.b.r - move.a.r;
             const dc = move.b.c - move.a.c;
