@@ -1,40 +1,6 @@
-This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
-
-# File Summary
-
-## Purpose
-This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
-It is designed to be easily consumable by AI systems for analysis, code review,
-or other automated processes.
-
-## File Format
-The content is organized as follows:
-1. This summary section
-2. Repository information
-3. Directory structure
-4. Repository files (if enabled)
-5. Multiple file entries, each consisting of:
-  a. A header with the file path (## File: path/to/file)
-  b. The full contents of the file in a code block
-
-## Usage Guidelines
-- This file should be treated as read-only. Any changes should be made to the
-  original repository files, not this packed version.
-- When processing this file, use the file path to distinguish
-  between different files in the repository.
-- Be aware that this file may contain sensitive information. Handle it with
-  the same level of security as you would the original repository.
-
-## Notes
-- Some files may have been excluded based on .gitignore rules and Repomix's configuration
-- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
-- Only files matching these patterns are included: assets/scripts/*.ts
-- Files matching patterns in .gitignore are excluded
-- Files matching default ignore patterns are excluded
-- Files are sorted by Git change count (files with more changes are at the bottom)
-
-# Directory Structure
-```
+================================================================
+Directory Structure
+================================================================
 assets/
   scripts/
     AdManager.ts
@@ -46,12 +12,14 @@ assets/
     SaveManager.ts
     TileGesture.ts
     VibrateManager.ts
-```
 
-# Files
+================================================================
+Files
+================================================================
 
-## File: assets/scripts/AdManager.ts
-```typescript
+================
+File: assets/scripts/AdManager.ts
+================
 /**
  * AdManager — 微信激励视频广告单例
  *
@@ -248,10 +216,10 @@ export class AdManager {
         if (cb) cb();
     }
 }
-```
 
-## File: assets/scripts/RecorderManager.ts
-```typescript
+================
+File: assets/scripts/RecorderManager.ts
+================
 /**
  * RecorderManager — 抖音录屏单例
  *
@@ -468,10 +436,10 @@ export class RecorderManager {
         }, RecorderManager.COOLDOWN_MS);
     }
 }
-```
 
-## File: assets/scripts/TileGesture.ts
-```typescript
+================
+File: assets/scripts/TileGesture.ts
+================
 import { _decorator, Component, Node, EventTouch, Vec2 } from 'cc';
 
 const { ccclass } = _decorator;
@@ -549,10 +517,10 @@ export class TileGesture extends Component {
         this._startPos = null;
     }
 }
-```
 
-## File: assets/scripts/VibrateManager.ts
-```typescript
+================
+File: assets/scripts/VibrateManager.ts
+================
 import { _decorator, Component } from 'cc';
 const { ccclass, property } = _decorator;
 
@@ -607,10 +575,10 @@ export class VibrateManager extends Component {
     medium() { this.short('medium'); }
     heavy()  { this.short('heavy'); }
 }
-```
 
-## File: assets/scripts/AudioManager.ts
-```typescript
+================
+File: assets/scripts/AudioManager.ts
+================
 import { _decorator, Component, AudioClip, AudioSource, resources } from 'cc';
 import { SaveManager } from './SaveManager';
 const { ccclass } = _decorator;
@@ -901,10 +869,10 @@ export class AudioManager extends Component {
         return this._enabled;
     }
 }
-```
 
-## File: assets/scripts/GameClubEntry.ts
-```typescript
+================
+File: assets/scripts/GameClubEntry.ts
+================
 /**
  * GameClubEntry — 微信游戏圈入口按钮
  *
@@ -1132,10 +1100,10 @@ export class GameClubEntry {
         return this.isValidNum(v) ? v : fallback;
     }
 }
-```
 
-## File: assets/scripts/SaveManager.ts
-```typescript
+================
+File: assets/scripts/SaveManager.ts
+================
 /**
  * SaveManager — 进度存档持久化单例（纯数据，非 Component）
  *
@@ -1161,6 +1129,28 @@ export interface BoosterInventory {
     hammer: number;
     shuffle: number;
     addSteps: number;
+}
+
+// ── 广告位类型（Y2） ─────────────────────────────
+
+export type RewardedAdPlacement =
+    | 'continue'
+    | 'gacha'
+    | 'boosterHammer'
+    | 'boosterShuffle'
+    | 'boosterAddSteps'
+    | 'resultScore'
+    | 'resultCoins';
+
+export interface DailyAdUsage {
+    date: string;
+    continue: number;
+    gacha: number;
+    boosterHammer: number;
+    boosterShuffle: number;
+    boosterAddSteps: number;
+    resultScore: number;
+    resultCoins: number;
 }
 
 // ── 存档结构 ────────────────────────────────
@@ -1194,7 +1184,8 @@ interface SaveData {
     signedTotal: number;                         // 累计签到天数（默认 0）
     // Y1: 道具库存
     boosters: BoosterInventory;                  // 持久化道具库存
-}
+    // Y2: 每日广告使用记录
+    dailyAdUsage: DailyAdUsage;
 
 // ── 常量 ────────────────────────────────────
 
@@ -1219,6 +1210,16 @@ function createDefaultSave(): SaveData {
             hammer: 2,
             shuffle: 2,
             addSteps: 2,
+        },
+        dailyAdUsage: {
+            date: '',
+            continue: 0,
+            gacha: 0,
+            boosterHammer: 0,
+            boosterShuffle: 0,
+            boosterAddSteps: 0,
+            resultScore: 0,
+            resultCoins: 0,
         },
     };
 }
@@ -1445,7 +1446,39 @@ export class SaveManager {
             };
         }
 
+        // Y2: 每日广告使用记录清洗（向后兼容，老存档无则补默认）
+        const rawAdUsage =
+            parsed.dailyAdUsage &&
+            typeof parsed.dailyAdUsage === 'object'
+                ? parsed.dailyAdUsage as any
+                : null;
+
+        if (rawAdUsage) {
+            result.dailyAdUsage = {
+                date: (typeof rawAdUsage.date === 'string') ? rawAdUsage.date : '',
+                continue: this._sanitizeAdCount(rawAdUsage.continue),
+                gacha: this._sanitizeAdCount(rawAdUsage.gacha),
+                boosterHammer: this._sanitizeAdCount(rawAdUsage.boosterHammer),
+                boosterShuffle: this._sanitizeAdCount(rawAdUsage.boosterShuffle),
+                boosterAddSteps: this._sanitizeAdCount(rawAdUsage.boosterAddSteps),
+                resultScore: this._sanitizeAdCount(rawAdUsage.resultScore),
+                resultCoins: this._sanitizeAdCount(rawAdUsage.resultCoins),
+            };
+        }
+
         return result;
+    }
+
+    /** Y2: 广告计数清洗 — NaN/Infinity → 0，负数 → 0，小数向下取整，最大 99 */
+    private _sanitizeAdCount(value: unknown): number {
+        if (
+            typeof value !== 'number' ||
+            !isFinite(value) ||
+            isNaN(value)
+        ) {
+            return 0;
+        }
+        return Math.max(0, Math.min(99, Math.floor(value)));
     }
 
     /** Y1: 道具数量清洗 — NaN/Infinity 回退，clamp 0-99 */
@@ -1826,6 +1859,138 @@ export class SaveManager {
         return true;
     }
 
+    // ── 每日广告频控 API（Y2） ───────────────────
+
+    /** 每日广告上限 */
+    private static readonly DAILY_AD_CAPS: Record<RewardedAdPlacement, number> = {
+        continue: 3,
+        gacha: 1,
+        boosterHammer: 1,
+        boosterShuffle: 1,
+        boosterAddSteps: 1,
+        resultScore: 1,
+        resultCoins: 2,
+    };
+
+    /** 获取本地日期字符串 YYYY-MM-DD（不使用 UTC，避免北京时间错位） */
+    private _getTodayStr(): string {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    /** 跨天自动重置每日广告计数 */
+    private _ensureDailyAdDate(): void {
+        const today = this._getTodayStr();
+        if (this._data.dailyAdUsage.date !== today) {
+            this._data.dailyAdUsage = {
+                date: today,
+                continue: 0,
+                gacha: 0,
+                boosterHammer: 0,
+                boosterShuffle: 0,
+                boosterAddSteps: 0,
+                resultScore: 0,
+                resultCoins: 0,
+            };
+            this._flush();
+        }
+    }
+
+    /** 获取每日广告使用记录副本（不暴露内部引用） */
+    getDailyAdUsage(): DailyAdUsage {
+        this.load();
+        this._ensureDailyAdDate();
+        return {
+            date: this._data.dailyAdUsage.date,
+            continue: this._data.dailyAdUsage.continue,
+            gacha: this._data.dailyAdUsage.gacha,
+            boosterHammer: this._data.dailyAdUsage.boosterHammer,
+            boosterShuffle: this._data.dailyAdUsage.boosterShuffle,
+            boosterAddSteps: this._data.dailyAdUsage.boosterAddSteps,
+            resultScore: this._data.dailyAdUsage.resultScore,
+            resultCoins: this._data.dailyAdUsage.resultCoins,
+        };
+    }
+
+    /** 获取指定广告位今日已使用次数 */
+    getRewardedAdCount(placement: RewardedAdPlacement): number {
+        this.load();
+        this._ensureDailyAdDate();
+        switch (placement) {
+            case 'continue': return this._data.dailyAdUsage.continue;
+            case 'gacha': return this._data.dailyAdUsage.gacha;
+            case 'boosterHammer': return this._data.dailyAdUsage.boosterHammer;
+            case 'boosterShuffle': return this._data.dailyAdUsage.boosterShuffle;
+            case 'boosterAddSteps': return this._data.dailyAdUsage.boosterAddSteps;
+            case 'resultScore': return this._data.dailyAdUsage.resultScore;
+            case 'resultCoins': return this._data.dailyAdUsage.resultCoins;
+            default: return 0;
+        }
+    }
+
+    /** 获取指定广告位今日剩余次数 */
+    getRewardedAdRemaining(placement: RewardedAdPlacement): number {
+        const cap = SaveManager.DAILY_AD_CAPS[placement] ?? 0;
+        const used = this.getRewardedAdCount(placement);
+        return Math.max(0, cap - used);
+    }
+
+    /** 判断指定广告位今日是否还可使用 */
+    canUseRewardedAd(placement: RewardedAdPlacement): boolean {
+        const cap = SaveManager.DAILY_AD_CAPS[placement] ?? 0;
+        const used = this.getRewardedAdCount(placement);
+        return used < cap;
+    }
+
+    /**
+     * 记录一次广告成功完成（+1 并写盘）。
+     * 只在广告成功完成后调用；未看完/关闭/失败时不调用。
+     * 已达上限返回 false，成功返回 true。
+     */
+    recordRewardedAd(placement: RewardedAdPlacement): boolean {
+        this.load();
+        this._ensureDailyAdDate();
+        const cap = SaveManager.DAILY_AD_CAPS[placement] ?? 0;
+        switch (placement) {
+            case 'continue':
+                if (this._data.dailyAdUsage.continue >= cap) return false;
+                this._data.dailyAdUsage.continue += 1;
+                break;
+            case 'gacha':
+                if (this._data.dailyAdUsage.gacha >= cap) return false;
+                this._data.dailyAdUsage.gacha += 1;
+                break;
+            case 'boosterHammer':
+                if (this._data.dailyAdUsage.boosterHammer >= cap) return false;
+                this._data.dailyAdUsage.boosterHammer += 1;
+                break;
+            case 'boosterShuffle':
+                if (this._data.dailyAdUsage.boosterShuffle >= cap) return false;
+                this._data.dailyAdUsage.boosterShuffle += 1;
+                break;
+            case 'boosterAddSteps':
+                if (this._data.dailyAdUsage.boosterAddSteps >= cap) return false;
+                this._data.dailyAdUsage.boosterAddSteps += 1;
+                break;
+            case 'resultScore':
+                if (this._data.dailyAdUsage.resultScore >= cap) return false;
+                this._data.dailyAdUsage.resultScore += 1;
+                break;
+            case 'resultCoins':
+                if (this._data.dailyAdUsage.resultCoins >= cap) return false;
+                this._data.dailyAdUsage.resultCoins += 1;
+                break;
+            default:
+                return false;
+        }
+        this._flush();
+        console.log(`[SaveManager] recordRewardedAd(${placement}) → ${this.getRewardedAdCount(placement)}/${cap}`);
+        return true;
+    }
+
     // ── 内部 ────────────────────────────────────
 
     private _flush(): void {
@@ -1837,10 +2002,10 @@ export class SaveManager {
         }
     }
 }
-```
 
-## File: assets/scripts/Board.ts
-```typescript
+================
+File: assets/scripts/Board.ts
+================
 import {
     _decorator,
     Component,
@@ -6507,10 +6672,10 @@ return { cells, waveSeeds, isFullBoardClear: false };
             .start();
     }
 }
-```
 
-## File: assets/scripts/GameManager.ts
-```typescript
+================
+File: assets/scripts/GameManager.ts
+================
 import {
     _decorator,
     Component,
@@ -6542,7 +6707,7 @@ import { VibrateManager } from './VibrateManager';
 import { AdManager } from './AdManager';
 import { GameClubEntry } from './GameClubEntry';
 import { RecorderManager } from './RecorderManager';
-import { SaveManager, BoosterType } from './SaveManager';
+import { SaveManager, BoosterType, RewardedAdPlacement } from './SaveManager';
 
 // 抩音小游戏全局 API（非抩音环境下不存在）
 declare const tt: any;
@@ -8037,17 +8202,22 @@ export class GameManager extends Component {
 
         this.scoreDoubled = false;
         this.coinDoubled = false;
-        this.resultAdBtn!.getComponent(Button)!.interactable = true;
-        this.resultAdLabel!.string = '▶  看广告·得分翻倍';
+        // Y2: 得分翻倍按钮 — 检查每日上限
+        const scoreAdCanUse = SaveManager.inst.canUseRewardedAd('resultScore');
+        this.resultAdBtn!.getComponent(Button)!.interactable = scoreAdCanUse;
+        this.resultAdLabel!.string = scoreAdCanUse ? '▶  看广告·得分翻倍' : '今日已用完';
 
         // E5: 扭蛋币翻倍按钮仅在过关且 lastCoinReward > 0 时显示
         if (this.resultCoinAdBtn) {
             const showCoinAd = isWin && this.safeNum(this.lastCoinReward, 0) > 0;
+            // Y2: 检查每日上限
+            const coinAdCanUse = showCoinAd && SaveManager.inst.canUseRewardedAd('resultCoins');
             this.resultCoinAdBtn.active = showCoinAd;
-            this.resultCoinAdBtn.getComponent(Button)!.interactable = showCoinAd && !this.coinDoubled;
+            this.resultCoinAdBtn.getComponent(Button)!.interactable = coinAdCanUse && !this.coinDoubled;
         }
         if (this.resultCoinAdLabel) {
-            this.resultCoinAdLabel.string = '看广告·扭蛋币翻倍';
+            const coinAdCanUse2 = SaveManager.inst.canUseRewardedAd('resultCoins');
+            this.resultCoinAdLabel.string = coinAdCanUse2 ? '看广告·扭蛋币翻倍' : '今日已用完';
         }
 
         if (isWin) {
@@ -8770,6 +8940,14 @@ export class GameManager extends Component {
     private onResultAdClick(): void {
         if (this.scoreDoubled) return;
 
+        // Y2: 每日得分翻倍广告上限检查
+        if (!SaveManager.inst.canUseRewardedAd('resultScore')) {
+            console.log('[GameManager] 今日得分翻倍广告已用完');
+            this.resultAdBtn!.getComponent(Button)!.interactable = false;
+            this.resultAdLabel!.string = '今日已用完';
+            return;
+        }
+
         // 置灰按钮，防止广告展示期间重复点击
         this.resultAdBtn!.getComponent(Button)!.interactable = false;
         this.resultAdLabel!.string = '广告加载中...';
@@ -8778,6 +8956,8 @@ export class GameManager extends Component {
             () => {
                 // ✓ 发奖：得分翻倍
                 this.scoreDoubled = true;
+                // Y2: 记录每日广告次数
+                SaveManager.inst.recordRewardedAd('resultScore');
                 this.board?.multiplyScore(2);
                 this.resultScore!.string = this.getResultScoreText(this.levelConfigs[this.currentLevel]);
                 this.resultAdLabel!.string = '已翻倍';
@@ -8797,6 +8977,14 @@ export class GameManager extends Component {
         if (this.coinDoubled) return;
         if (this.safeNum(this.lastCoinReward, 0) <= 0) return;
 
+        // Y2: 每日扭蛋币翻倍广告上限检查
+        if (!SaveManager.inst.canUseRewardedAd('resultCoins')) {
+            console.log('[GameManager] 今日扭蛋币翻倍广告已用完');
+            this.resultCoinAdBtn!.getComponent(Button)!.interactable = false;
+            this.resultCoinAdLabel!.string = '今日已用完';
+            return;
+        }
+
         // 置灰按钮
         this.resultCoinAdBtn!.getComponent(Button)!.interactable = false;
         this.resultCoinAdLabel!.string = '广告加载中...';
@@ -8805,6 +8993,8 @@ export class GameManager extends Component {
             () => {
                 // ✓ 发奖：补发同等数量的扭蛋币
                 this.coinDoubled = true;
+                // Y2: 记录每日广告次数
+                SaveManager.inst.recordRewardedAd('resultCoins');
                 const bonus = this.safeNum(this.lastCoinReward, 0);
                 SaveManager.inst.addCoins(bonus);
                 this.resultCoinAdLabel!.string = `已翻倍 (+${bonus} 🎲)`;
@@ -8933,39 +9123,104 @@ export class GameManager extends Component {
         console.log('[GameManager] 步数耗尽弹层');
     }
 
-    /** X0: 刷新步数耗尽弹层的广告按钮状态 */
+    /** Y2: 智能续步广告资格判定 */
+    private getContinueAdEligibility(): {
+        allowed: boolean;
+        reason: 'ok' | 'tutorial' | 'progress' | 'usedThisRun' | 'dailyCap' | 'pending';
+        progress: number;
+    } {
+        const cfg = this.levelConfigs[this.currentLevel];
+
+        // 1. 广告进行中
+        if (this.continueAdPending) {
+            return { allowed: false, reason: 'pending', progress: 0 };
+        }
+
+        // 2. 本局已用
+        if (this.continueAdUsed) {
+            return { allowed: false, reason: 'usedThisRun', progress: 0 };
+        }
+
+        // 3. 前 5 关不展示续步广告
+        if (cfg.level <= 5) {
+            return { allowed: false, reason: 'tutorial', progress: 0 };
+        }
+
+        // 4. 每日续步次数用尽
+        if (!SaveManager.inst.canUseRewardedAd('continue')) {
+            return { allowed: false, reason: 'dailyCap', progress: 0 };
+        }
+
+        // 5. 进度门槛
+        const snapshot = this.getGoalProgressSnapshot(cfg);
+        const progress = this.safeNum(snapshot.ratio, 0);
+        const diff = cfg.difficulty;
+        let threshold = 1.0; // tutorial 默认不允许
+        if (diff === 'normal') threshold = 0.85;
+        else if (diff === 'hard') threshold = 0.75;
+        else if (diff === 'boss') threshold = 0.70;
+        // tutorial 永远不满足
+        if (diff === 'tutorial') {
+            return { allowed: false, reason: 'tutorial', progress };
+        }
+
+        if (progress < threshold) {
+            return { allowed: false, reason: 'progress', progress };
+        }
+
+        return { allowed: true, reason: 'ok', progress };
+    }
+
+    /** Y2: 刷新步数耗尽弹层的广告按钮状态（智能资格判定） */
     private updateStepsAdState(): void {
         if (!this.stepsAdBtn || !this.stepsAdBtn.isValid) return;
         const button = this.stepsAdBtn.getComponent(Button);
         if (!button) return;
 
-        if (this.continueAdUsed) {
-            button.interactable = false;
-            if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
-                this.stepsAdLabel.string = '本局续步机会已使用';
-            }
-        } else if (this.continueAdPending) {
+        const eligibility = this.getContinueAdEligibility();
+
+        if (eligibility.reason === 'pending') {
             button.interactable = false;
             if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
                 this.stepsAdLabel.string = '广告加载中…';
             }
+        } else if (eligibility.reason === 'usedThisRun') {
+            button.interactable = false;
+            if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
+                this.stepsAdLabel.string = '本局续步机会已使用';
+            }
+        } else if (eligibility.reason === 'tutorial') {
+            button.interactable = false;
+            if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
+                this.stepsAdLabel.string = '前5关练习中，继续努力~';
+            }
+        } else if (eligibility.reason === 'dailyCap') {
+            button.interactable = false;
+            if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
+                this.stepsAdLabel.string = '今日续步次数已用完';
+            }
+        } else if (eligibility.reason === 'progress') {
+            button.interactable = false;
+            if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
+                const pct = Math.floor(eligibility.progress * 100);
+                this.stepsAdLabel.string = `进度 ${pct}%，再努力一下~`;
+            }
         } else {
+            // ok
             button.interactable = true;
             if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
-                this.stepsAdLabel.string = '▶  看广告 +5 步';
+                const remain = SaveManager.inst.getRewardedAdRemaining('continue');
+                this.stepsAdLabel.string = `▶  看广告 +5 步 (今日剩${remain})`;
             }
         }
     }
 
     private onStepsAdClick(): void {
-        // X0: 入口保护 — 已用 / 进行中 / 弹层未开
-        if (this.continueAdUsed) {
-            console.log('[GameManager] 本局续步广告已使用，拒绝重复请求');
+        // Y2: 智能资格判定
+        const eligibility = this.getContinueAdEligibility();
+        if (!eligibility.allowed) {
+            console.log(`[GameManager] 续步广告不可用: ${eligibility.reason}`);
             this.updateStepsAdState();
-            return;
-        }
-        if (this.continueAdPending) {
-            console.log('[GameManager] 续步广告请求进行中，忽略重复点击');
             return;
         }
         if (!this.stepsPanel?.active) {
@@ -8995,6 +9250,9 @@ export class GameManager extends Component {
                 this.continueAdUsed = true;
                 this.continueAdPending = false;
 
+                // Y2: 记录每日广告次数（广告成功才计数）
+                SaveManager.inst.recordRewardedAd('continue');
+
                 // ✓ 发奖：+5 步、关闭弹层、继续本关
                 this.currentSteps += 5;
                 this.updateHUD();
@@ -9017,7 +9275,7 @@ export class GameManager extends Component {
                 }
                 this.continueAdPending = false;
                 this.updateStepsAdState();
-                console.log('[GameManager] 广告未完成，本局续步机会未消耗');
+                console.log('[GameManager] 广告未完成，本局续步机会未消耗，不计数');
             },
         );
     }
@@ -10708,6 +10966,12 @@ export class GameManager extends Component {
         if (this.gachaPullLabel) {
             this.gachaPullLabel.color = canPull ? Color.WHITE.clone() : new Color(0x99, 0x99, 0x99);
         }
+        // Y2: 免费抽卡广告按钮状态
+        if (this.gachaAdBtn && this.gachaAdLabel) {
+            const adCanUse = SaveManager.inst.canUseRewardedAd('gacha');
+            this.gachaAdBtn.getComponent(Button)!.interactable = adCanUse;
+            this.gachaAdLabel.string = adCanUse ? '▶  看广告·免费单抽' : '今日已用完';
+        }
     }
 
     /** Show gacha panel */
@@ -10784,6 +11048,15 @@ export class GameManager extends Component {
         };
 
         if (fromAd) {
+            // Y2: 每日免费抽卡广告上限检查
+            if (!SaveManager.inst.canUseRewardedAd('gacha')) {
+                console.log('[Gacha] 今日免费抽卡广告已用完');
+                if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = false;
+                if (this.gachaAdLabel) this.gachaAdLabel.string = '今日已用完';
+                this.gachaPulling = false;
+                return;
+            }
+
             // Disable button during ad
             if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = false;
             if (this.gachaAdLabel) this.gachaAdLabel.string = '广告加载中...';
@@ -10791,8 +11064,10 @@ export class GameManager extends Component {
             AdManager.getInstance().showRewardedAd(
                 () => {
                     // Reward: free pull
-                    if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = true;
-                    if (this.gachaAdLabel) this.gachaAdLabel.string = '▶  看广告·免费单抽';
+                    // Y2: 记录每日广告次数
+                    SaveManager.inst.recordRewardedAd('gacha');
+                    if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = false;
+                    if (this.gachaAdLabel) this.gachaAdLabel.string = '今日已用完';
                     doPull();
                 },
                 () => {
@@ -11656,23 +11931,39 @@ export class GameManager extends Component {
         this.addStepsCount = inv.addSteps;
     }
 
-    /** W: 刷新道具栏 UI（次数、按钮状态、高亮） */
+    /** W: 刷新道具栏 UI（次数、按钮状态、高亮）
+     *  Y2: 库存为 0 且今日广告还有剩余 → 按钮变为「看广告补充」入口
+     */
     private updateBoosterUI(): void {
         if (!this.boosterBar) return;
 
-        const setBtn = (btn: Node | null, label: Label | null, count: number, baseText: string, highlight: boolean) => {
+        // Y2: 辅助 — 判断某道具是否可看广告补充
+        const canAdRefill = (placement: RewardedAdPlacement): boolean => {
+            return SaveManager.inst.canUseRewardedAd(placement);
+        };
+
+        const setBtn = (
+            btn: Node | null, label: Label | null, count: number, baseText: string,
+            highlight: boolean, adPlacement: RewardedAdPlacement,
+        ) => {
             if (!btn) return;
             const btnComp = btn.getComponent(Button);
             const g = btn.getComponent(Graphics);
             if (!btnComp || !g) return;
 
             const used = count <= 0;
-            btnComp.interactable = !used && !this.boosterBusy;
+            const canRefill = used && canAdRefill(adPlacement) && !this.boosterBusy;
+            // Y2: 库存 0 时，如果有广告剩余则可点击（进入广告补充流程）
+            btnComp.interactable = (!used && !this.boosterBusy) || canRefill;
 
             // 重绘底色
             const w = 165, h = 50;
             g.clear();
-            if (used) {
+            if (used && canRefill) {
+                // Y2: 广告补充入口 — 金色底
+                g.fillColor = new Color(0xFF, 0xF0, 0xA0, 240);
+                g.strokeColor = new Color(0xE8, 0x8B, 0x1A, 255);
+            } else if (used) {
                 g.fillColor = new Color(200, 200, 200, 100);
                 g.strokeColor = new Color(150, 150, 150, 120);
             } else if (highlight) {
@@ -11682,7 +11973,7 @@ export class GameManager extends Component {
                 g.fillColor = new Color(255, 255, 255, 220);
                 g.strokeColor = new Color(0x9B, 0x59, 0xD9, 255);
             }
-            g.lineWidth = highlight ? 3 : 2;
+            g.lineWidth = (highlight || (used && canRefill)) ? 3 : 2;
             g.roundRect(-w / 2, -h / 2, w, h, 24);
             g.fill();
             g.stroke();
@@ -11691,18 +11982,23 @@ export class GameManager extends Component {
             if (label) {
                 if (highlight) {
                     label.string = '🔨 选目标';
+                    label.color = new Color(0xC0, 0x60, 0x00, 255);
+                } else if (used && canRefill) {
+                    label.string = '▶ 看广告+1';
+                    label.color = new Color(0xC0, 0x60, 0x00, 255);
+                } else if (used) {
+                    label.string = baseText + ' ×0';
+                    label.color = new Color(150, 150, 150, 150);
                 } else {
                     label.string = baseText + ` ×${count}`;
+                    label.color = new Color(0x6A, 0x3D, 0xA8, 255);
                 }
-                label.color = used
-                    ? new Color(150, 150, 150, 150)
-                    : (highlight ? new Color(0xC0, 0x60, 0x00, 255) : new Color(0x6A, 0x3D, 0xA8, 255));
             }
         };
 
-        setBtn(this.hammerBtn, this.hammerLabel, this.hammerCount, '🔨', this.hammerSelecting);
-        setBtn(this.shuffleBtn, this.shuffleLabel, this.shuffleCount, '🔀', false);
-        setBtn(this.addStepsBtn, this.addStepsLabel, this.addStepsCount, '👣+3', false);
+        setBtn(this.hammerBtn, this.hammerLabel, this.hammerCount, '🔨', this.hammerSelecting, 'boosterHammer');
+        setBtn(this.shuffleBtn, this.shuffleLabel, this.shuffleCount, '🔀', false, 'boosterShuffle');
+        setBtn(this.addStepsBtn, this.addStepsLabel, this.addStepsCount, '👣+3', false, 'boosterAddSteps');
     }
 
     // ── W: 道具栏位置（在 layoutBoard 后调用） ──────
@@ -11793,7 +12089,13 @@ export class GameManager extends Component {
     /** W: 小锤子按钮 */
     private onHammerBoosterClick(): void {
         this.syncBoosterInventory();
-        if (this.hammerCount <= 0) return;
+
+        // Y2: 库存为 0 → 看广告补充
+        if (this.hammerCount <= 0) {
+            this.tryRefillBoosterAd('hammer', 'boosterHammer');
+            return;
+        }
+
         if (this.boosterBusy) return;
 
         // 如果正在选目标，再次点击 = 取消
@@ -11817,7 +12119,13 @@ export class GameManager extends Component {
     /** W: 重新洗牌按钮 */
     private async onShuffleBoosterClick(): Promise<void> {
         this.syncBoosterInventory();
-        if (this.shuffleCount <= 0) return;
+
+        // Y2: 库存为 0 → 看广告补充
+        if (this.shuffleCount <= 0) {
+            this.tryRefillBoosterAd('shuffle', 'boosterShuffle');
+            return;
+        }
+
         if (this.boosterBusy) return;
         if (this.hammerSelecting) return;
 
@@ -11851,7 +12159,12 @@ export class GameManager extends Component {
         if (this.resultPanel?.active || this.stepsPanel?.active || this.pausePanel?.active) return;
 
         this.syncBoosterInventory();
-        if (this.addStepsCount <= 0) return;
+
+        // Y2: 库存为 0 → 看广告补充
+        if (this.addStepsCount <= 0) {
+            this.tryRefillBoosterAd('addSteps', 'boosterAddSteps');
+            return;
+        }
 
         // Y1: 先原子扣除库存，再增加步数
         const spent = SaveManager.inst.spendBooster('addSteps', 1);
@@ -11900,6 +12213,77 @@ export class GameManager extends Component {
             this.hideHammerHint();
             this.updateBoosterUI();
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  Y2 · 道具广告补充
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Y2: 看广告补充道具（+1）。
+     * - 每种道具每天最多 1 次
+     * - 广告成功才计数、才发道具
+     * - 补充后不自动使用，玩家需再次点击
+     */
+    private tryRefillBoosterAd(
+        boosterType: BoosterType,
+        placement: RewardedAdPlacement,
+    ): void {
+        // 弹层打开时不可用
+        if (this.resultPanel?.active || this.stepsPanel?.active || this.pausePanel?.active) return;
+        if (this.boosterBusy) return;
+
+        // 检查每日上限
+        if (!SaveManager.inst.canUseRewardedAd(placement)) {
+            console.log(`[Y2] ${boosterType} 广告补充今日已用完`);
+            this.updateBoosterUI();
+            return;
+        }
+
+        // 锁定道具栏防重复
+        this.boosterBusy = true;
+        this.updateBoosterUI();
+
+        const token = this.levelRunToken;
+
+        AdManager.getInstance().showRewardedAd(
+            () => {
+                // 旧关卡回调 → 丢弃
+                if (token !== this.levelRunToken) {
+                    this.boosterBusy = false;
+                    this.updateBoosterUI();
+                    return;
+                }
+
+                // 记录广告次数
+                const recorded = SaveManager.inst.recordRewardedAd(placement);
+                if (!recorded) {
+                    console.warn(`[Y2] ${boosterType} 广告记录失败（已达上限）`);
+                    this.boosterBusy = false;
+                    this.updateBoosterUI();
+                    return;
+                }
+
+                // 补充道具 +1
+                SaveManager.inst.addBooster(boosterType, 1);
+                this.syncBoosterInventory();
+                this.boosterBusy = false;
+                this.updateBoosterUI();
+
+                console.log(`[Y2] ${boosterType} 广告补充成功 → ${SaveManager.inst.getBoosterCount(boosterType)}`);
+            },
+            () => {
+                // 广告未完成 → 不计数、不发道具
+                if (token !== this.levelRunToken) {
+                    this.boosterBusy = false;
+                    this.updateBoosterUI();
+                    return;
+                }
+                this.boosterBusy = false;
+                this.updateBoosterUI();
+                console.log(`[Y2] ${boosterType} 广告未完成，不补充不计数`);
+            },
+        );
     }
     // ══════════════════════════════════════════════════════════════════════════
 
@@ -13620,4 +14004,11 @@ export class GameManager extends Component {
         this.refreshDailySignPanel();
     }
 }
-```
+
+
+
+
+
+================================================================
+End of Codebase
+================================================================

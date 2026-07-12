@@ -25,6 +25,28 @@ export interface BoosterInventory {
     addSteps: number;
 }
 
+// ── 广告位类型（Y2） ─────────────────────────────
+
+export type RewardedAdPlacement =
+    | 'continue'
+    | 'gacha'
+    | 'boosterHammer'
+    | 'boosterShuffle'
+    | 'boosterAddSteps'
+    | 'resultScore'
+    | 'resultCoins';
+
+export interface DailyAdUsage {
+    date: string;
+    continue: number;
+    gacha: number;
+    boosterHammer: number;
+    boosterShuffle: number;
+    boosterAddSteps: number;
+    resultScore: number;
+    resultCoins: number;
+}
+
 // ── 存档结构 ────────────────────────────────
 
 interface LevelRecord {
@@ -56,7 +78,8 @@ interface SaveData {
     signedTotal: number;                         // 累计签到天数（默认 0）
     // Y1: 道具库存
     boosters: BoosterInventory;                  // 持久化道具库存
-}
+    // Y2: 每日广告使用记录
+    dailyAdUsage: DailyAdUsage;
 
 // ── 常量 ────────────────────────────────────
 
@@ -81,6 +104,16 @@ function createDefaultSave(): SaveData {
             hammer: 2,
             shuffle: 2,
             addSteps: 2,
+        },
+        dailyAdUsage: {
+            date: '',
+            continue: 0,
+            gacha: 0,
+            boosterHammer: 0,
+            boosterShuffle: 0,
+            boosterAddSteps: 0,
+            resultScore: 0,
+            resultCoins: 0,
         },
     };
 }
@@ -307,7 +340,39 @@ export class SaveManager {
             };
         }
 
+        // Y2: 每日广告使用记录清洗（向后兼容，老存档无则补默认）
+        const rawAdUsage =
+            parsed.dailyAdUsage &&
+            typeof parsed.dailyAdUsage === 'object'
+                ? parsed.dailyAdUsage as any
+                : null;
+
+        if (rawAdUsage) {
+            result.dailyAdUsage = {
+                date: (typeof rawAdUsage.date === 'string') ? rawAdUsage.date : '',
+                continue: this._sanitizeAdCount(rawAdUsage.continue),
+                gacha: this._sanitizeAdCount(rawAdUsage.gacha),
+                boosterHammer: this._sanitizeAdCount(rawAdUsage.boosterHammer),
+                boosterShuffle: this._sanitizeAdCount(rawAdUsage.boosterShuffle),
+                boosterAddSteps: this._sanitizeAdCount(rawAdUsage.boosterAddSteps),
+                resultScore: this._sanitizeAdCount(rawAdUsage.resultScore),
+                resultCoins: this._sanitizeAdCount(rawAdUsage.resultCoins),
+            };
+        }
+
         return result;
+    }
+
+    /** Y2: 广告计数清洗 — NaN/Infinity → 0，负数 → 0，小数向下取整，最大 99 */
+    private _sanitizeAdCount(value: unknown): number {
+        if (
+            typeof value !== 'number' ||
+            !isFinite(value) ||
+            isNaN(value)
+        ) {
+            return 0;
+        }
+        return Math.max(0, Math.min(99, Math.floor(value)));
     }
 
     /** Y1: 道具数量清洗 — NaN/Infinity 回退，clamp 0-99 */
@@ -685,6 +750,138 @@ export class SaveManager {
         }
         this._flush();
         console.log(`[SaveManager] spendBooster(${type},-${cost}) → ${this.getBoosterCount(type)}`);
+        return true;
+    }
+
+    // ── 每日广告频控 API（Y2） ───────────────────
+
+    /** 每日广告上限 */
+    private static readonly DAILY_AD_CAPS: Record<RewardedAdPlacement, number> = {
+        continue: 3,
+        gacha: 1,
+        boosterHammer: 1,
+        boosterShuffle: 1,
+        boosterAddSteps: 1,
+        resultScore: 1,
+        resultCoins: 2,
+    };
+
+    /** 获取本地日期字符串 YYYY-MM-DD（不使用 UTC，避免北京时间错位） */
+    private _getTodayStr(): string {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    /** 跨天自动重置每日广告计数 */
+    private _ensureDailyAdDate(): void {
+        const today = this._getTodayStr();
+        if (this._data.dailyAdUsage.date !== today) {
+            this._data.dailyAdUsage = {
+                date: today,
+                continue: 0,
+                gacha: 0,
+                boosterHammer: 0,
+                boosterShuffle: 0,
+                boosterAddSteps: 0,
+                resultScore: 0,
+                resultCoins: 0,
+            };
+            this._flush();
+        }
+    }
+
+    /** 获取每日广告使用记录副本（不暴露内部引用） */
+    getDailyAdUsage(): DailyAdUsage {
+        this.load();
+        this._ensureDailyAdDate();
+        return {
+            date: this._data.dailyAdUsage.date,
+            continue: this._data.dailyAdUsage.continue,
+            gacha: this._data.dailyAdUsage.gacha,
+            boosterHammer: this._data.dailyAdUsage.boosterHammer,
+            boosterShuffle: this._data.dailyAdUsage.boosterShuffle,
+            boosterAddSteps: this._data.dailyAdUsage.boosterAddSteps,
+            resultScore: this._data.dailyAdUsage.resultScore,
+            resultCoins: this._data.dailyAdUsage.resultCoins,
+        };
+    }
+
+    /** 获取指定广告位今日已使用次数 */
+    getRewardedAdCount(placement: RewardedAdPlacement): number {
+        this.load();
+        this._ensureDailyAdDate();
+        switch (placement) {
+            case 'continue': return this._data.dailyAdUsage.continue;
+            case 'gacha': return this._data.dailyAdUsage.gacha;
+            case 'boosterHammer': return this._data.dailyAdUsage.boosterHammer;
+            case 'boosterShuffle': return this._data.dailyAdUsage.boosterShuffle;
+            case 'boosterAddSteps': return this._data.dailyAdUsage.boosterAddSteps;
+            case 'resultScore': return this._data.dailyAdUsage.resultScore;
+            case 'resultCoins': return this._data.dailyAdUsage.resultCoins;
+            default: return 0;
+        }
+    }
+
+    /** 获取指定广告位今日剩余次数 */
+    getRewardedAdRemaining(placement: RewardedAdPlacement): number {
+        const cap = SaveManager.DAILY_AD_CAPS[placement] ?? 0;
+        const used = this.getRewardedAdCount(placement);
+        return Math.max(0, cap - used);
+    }
+
+    /** 判断指定广告位今日是否还可使用 */
+    canUseRewardedAd(placement: RewardedAdPlacement): boolean {
+        const cap = SaveManager.DAILY_AD_CAPS[placement] ?? 0;
+        const used = this.getRewardedAdCount(placement);
+        return used < cap;
+    }
+
+    /**
+     * 记录一次广告成功完成（+1 并写盘）。
+     * 只在广告成功完成后调用；未看完/关闭/失败时不调用。
+     * 已达上限返回 false，成功返回 true。
+     */
+    recordRewardedAd(placement: RewardedAdPlacement): boolean {
+        this.load();
+        this._ensureDailyAdDate();
+        const cap = SaveManager.DAILY_AD_CAPS[placement] ?? 0;
+        switch (placement) {
+            case 'continue':
+                if (this._data.dailyAdUsage.continue >= cap) return false;
+                this._data.dailyAdUsage.continue += 1;
+                break;
+            case 'gacha':
+                if (this._data.dailyAdUsage.gacha >= cap) return false;
+                this._data.dailyAdUsage.gacha += 1;
+                break;
+            case 'boosterHammer':
+                if (this._data.dailyAdUsage.boosterHammer >= cap) return false;
+                this._data.dailyAdUsage.boosterHammer += 1;
+                break;
+            case 'boosterShuffle':
+                if (this._data.dailyAdUsage.boosterShuffle >= cap) return false;
+                this._data.dailyAdUsage.boosterShuffle += 1;
+                break;
+            case 'boosterAddSteps':
+                if (this._data.dailyAdUsage.boosterAddSteps >= cap) return false;
+                this._data.dailyAdUsage.boosterAddSteps += 1;
+                break;
+            case 'resultScore':
+                if (this._data.dailyAdUsage.resultScore >= cap) return false;
+                this._data.dailyAdUsage.resultScore += 1;
+                break;
+            case 'resultCoins':
+                if (this._data.dailyAdUsage.resultCoins >= cap) return false;
+                this._data.dailyAdUsage.resultCoins += 1;
+                break;
+            default:
+                return false;
+        }
+        this._flush();
+        console.log(`[SaveManager] recordRewardedAd(${placement}) → ${this.getRewardedAdCount(placement)}/${cap}`);
         return true;
     }
 
