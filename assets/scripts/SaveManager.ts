@@ -12,6 +12,19 @@
 // 微信小游戏全局 API
 declare const wx: any;
 
+// ── 道具类型（Y1） ─────────────────────────────
+
+export type BoosterType =
+    | 'hammer'
+    | 'shuffle'
+    | 'addSteps';
+
+export interface BoosterInventory {
+    hammer: number;
+    shuffle: number;
+    addSteps: number;
+}
+
 // ── 存档结构 ────────────────────────────────
 
 interface LevelRecord {
@@ -30,6 +43,19 @@ interface SaveData {
     levelRecords: { [level: number]: LevelRecord };
     gachaCoins: number;                          // 扭蛋币余额（E0）
     collection: { [monId: number]: MonsterRecord }; // 怪物收藏（E0）
+    // Q0: 装扮系统字段
+    equippedTheme: number;                       // 当前装备的主题 id（默认 0）
+    ownedThemes: number[];                       // 已拥有的主题列表（默认 [0]）
+    equippedAccessory: number;                   // 当前装备的配饰 id（-1=无）
+    ownedAccessories: number[];                  // 已拥有的配饰列表（默认 []）
+    // R0: 设置 + 签到字段
+    soundEnabled: boolean;                       // 音效开关（默认 true）
+    vibrateEnabled: boolean;                     // 震动开关（默认 true）
+    signStreak: number;                          // 连续签到天数（默认 0）
+    lastSignDate: string;                        // 上次签到日期 YYYY-MM-DD（默认 ''）
+    signedTotal: number;                         // 累计签到天数（默认 0）
+    // Y1: 道具库存
+    boosters: BoosterInventory;                  // 持久化道具库存
 }
 
 // ── 常量 ────────────────────────────────────
@@ -42,6 +68,20 @@ function createDefaultSave(): SaveData {
         levelRecords: {},
         gachaCoins: 0,
         collection: {},
+        equippedTheme: 0,
+        ownedThemes: [0],
+        equippedAccessory: -1,
+        ownedAccessories: [],
+        soundEnabled: true,
+        vibrateEnabled: true,
+        signStreak: 0,
+        lastSignDate: '',
+        signedTotal: 0,
+        boosters: {
+            hammer: 2,
+            shuffle: 2,
+            addSteps: 2,
+        },
     };
 }
 
@@ -199,7 +239,94 @@ export class SaveManager {
             }
         }
 
+        // Q0: 装扮系统字段（向后兼容，老存档无则补默认）
+        const equippedTheme = (typeof parsed.equippedTheme === 'number' && !isNaN(parsed.equippedTheme) && isFinite(parsed.equippedTheme))
+            ? Math.floor(parsed.equippedTheme) : 0;
+        const ownedThemes = (Array.isArray(parsed.ownedThemes))
+            ? parsed.ownedThemes.filter((t: any) => typeof t === 'number' && !isNaN(t) && isFinite(t)).map((t: number) => Math.floor(t))
+            : [0];
+        // equippedTheme 必须在 ownedThemes 内，否则回退 0
+        result.equippedTheme = ownedThemes.includes(equippedTheme) ? equippedTheme : 0;
+        // 确保 ownedThemes 至少含 0
+        if (!ownedThemes.includes(0)) ownedThemes.push(0);
+        result.ownedThemes = ownedThemes;
+
+        const equippedAccessory = (typeof parsed.equippedAccessory === 'number' && !isNaN(parsed.equippedAccessory) && isFinite(parsed.equippedAccessory))
+            ? Math.floor(parsed.equippedAccessory) : -1;
+        const ownedAccessories = (Array.isArray(parsed.ownedAccessories))
+            ? parsed.ownedAccessories.filter((a: any) => typeof a === 'number' && !isNaN(a) && isFinite(a)).map((a: number) => Math.floor(a))
+            : [];
+        // equippedAccessory 必须在 ownedAccessories 内（-1 表示无配饰，永远合法）
+        result.equippedAccessory = (equippedAccessory === -1 || ownedAccessories.includes(equippedAccessory)) ? equippedAccessory : -1;
+        result.ownedAccessories = ownedAccessories;
+
+        // R0: 设置 + 签到字段（向后兼容，老存档无则补默认）
+        result.soundEnabled = (typeof parsed.soundEnabled === 'boolean') ? parsed.soundEnabled : true;
+        result.vibrateEnabled = (typeof parsed.vibrateEnabled === 'boolean') ? parsed.vibrateEnabled : true;
+
+        // signStreak: 非数/NaN → 0，越界 clamp 0-7
+        const rawStreak = parsed.signStreak;
+        if (typeof rawStreak === 'number' && !isNaN(rawStreak) && isFinite(rawStreak)) {
+            result.signStreak = Math.max(0, Math.min(7, Math.floor(rawStreak)));
+        } else {
+            result.signStreak = 0;
+        }
+
+        // lastSignDate: 非字符串 → ''
+        result.lastSignDate = (typeof parsed.lastSignDate === 'string') ? parsed.lastSignDate : '';
+
+        // signedTotal: 负/NaN/非数 → 0
+        const rawTotal = parsed.signedTotal;
+        if (typeof rawTotal === 'number' && !isNaN(rawTotal) && isFinite(rawTotal) && rawTotal >= 0) {
+            result.signedTotal = Math.floor(rawTotal);
+        } else {
+            result.signedTotal = 0;
+        }
+
+        // Y1: 道具库存清洗（向后兼容，老存档无则补默认 {2,2,2}）
+        const rawBoosters =
+            parsed.boosters &&
+            typeof parsed.boosters === 'object'
+                ? parsed.boosters
+                : null;
+
+        if (rawBoosters) {
+            result.boosters = {
+                hammer: this._sanitizeBoosterCount(
+                    (rawBoosters as any).hammer,
+                    2,
+                ),
+                shuffle: this._sanitizeBoosterCount(
+                    (rawBoosters as any).shuffle,
+                    2,
+                ),
+                addSteps: this._sanitizeBoosterCount(
+                    (rawBoosters as any).addSteps,
+                    2,
+                ),
+            };
+        }
+
         return result;
+    }
+
+    /** Y1: 道具数量清洗 — NaN/Infinity 回退，clamp 0-99 */
+    private _sanitizeBoosterCount(
+        value: unknown,
+        fallback: number,
+    ): number {
+        if (
+            typeof value !== 'number' ||
+            !isFinite(value) ||
+            isNaN(value)
+        ) {
+            return fallback;
+        }
+
+        return Math.max(
+            0,
+            Math.min(99, Math.floor(value)),
+        );
     }
 
     /** 获取当前最大已解锁关卡（至少为 1） */
@@ -368,6 +495,197 @@ export class SaveManager {
         this._data = createDefaultSave();
         this._flush();
         console.log('[SaveManager] 存档已清空');
+    }
+
+    // ── 装扮系统 API（Q0） ───────────────────────
+
+    /** 获取当前装备的主题 id */
+    getEquippedTheme(): number {
+        this.load();
+        return this._data.equippedTheme;
+    }
+
+    /** 设置当前装备的主题 id（必须已拥有，每次写盘） */
+    setEquippedTheme(id: number): void {
+        this.load();
+        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 3) ? Math.floor(id) : 0;
+        if (!this._data.ownedThemes.includes(safeId)) return;
+        this._data.equippedTheme = safeId;
+        this._flush();
+    }
+
+    /** 获取已拥有的主题列表 */
+    getOwnedThemes(): number[] {
+        this.load();
+        return [...this._data.ownedThemes];
+    }
+
+    /** 拥有某主题（加入列表并写盘） */
+    ownTheme(id: number): void {
+        this.load();
+        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 3) ? Math.floor(id) : 0;
+        if (!this._data.ownedThemes.includes(safeId)) {
+            this._data.ownedThemes.push(safeId);
+            this._flush();
+        }
+    }
+
+    /** 获取当前装备的配饰 id（-1=无） */
+    getEquippedAccessory(): number {
+        this.load();
+        return this._data.equippedAccessory;
+    }
+
+    /** 设置当前装备的配饰 id（必须已拥有，-1 表示取下，每次写盘） */
+    setEquippedAccessory(id: number): void {
+        this.load();
+        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= -1 && id <= 2) ? Math.floor(id) : -1;
+        if (safeId !== -1 && !this._data.ownedAccessories.includes(safeId)) return;
+        this._data.equippedAccessory = safeId;
+        this._flush();
+    }
+
+    /** 获取已拥有的配饰列表 */
+    getOwnedAccessories(): number[] {
+        this.load();
+        return [...this._data.ownedAccessories];
+    }
+
+    /** 拥有某配饰（加入列表并写盘） */
+    ownAccessory(id: number): void {
+        this.load();
+        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 2) ? Math.floor(id) : 0;
+        if (!this._data.ownedAccessories.includes(safeId)) {
+            this._data.ownedAccessories.push(safeId);
+            this._flush();
+        }
+    }
+
+    // ── 设置 + 签到 API（R0） ─────────────────────
+
+    /** 获取音效开关 */
+    getSoundEnabled(): boolean {
+        this.load();
+        return this._data.soundEnabled;
+    }
+
+    /** 设置音效开关并写盘 */
+    setSoundEnabled(enabled: boolean): void {
+        this.load();
+        this._data.soundEnabled = (enabled === true);
+        this._flush();
+    }
+
+    /** 获取震动开关 */
+    getVibrateEnabled(): boolean {
+        this.load();
+        return this._data.vibrateEnabled;
+    }
+
+    /** 设置震动开关并写盘 */
+    setVibrateEnabled(enabled: boolean): void {
+        this.load();
+        this._data.vibrateEnabled = (enabled === true);
+        this._flush();
+    }
+
+    /** 获取签到数据 */
+    getSignData(): { streak: number; lastDate: string; total: number } {
+        this.load();
+        return {
+            streak: this._data.signStreak,
+            lastDate: this._data.lastSignDate,
+            total: this._data.signedTotal,
+        };
+    }
+
+    /** 写入签到数据并写盘 */
+    writeSignData(streak: number, dateStr: string, total: number): void {
+        this.load();
+        // streak clamp 0-7
+        this._data.signStreak = (typeof streak === 'number' && !isNaN(streak) && isFinite(streak))
+            ? Math.max(0, Math.min(7, Math.floor(streak))) : 0;
+        // dateStr 必须是字符串
+        this._data.lastSignDate = (typeof dateStr === 'string') ? dateStr : '';
+        // total 非负整数
+        this._data.signedTotal = (typeof total === 'number' && !isNaN(total) && isFinite(total) && total >= 0)
+            ? Math.floor(total) : 0;
+        this._flush();
+    }
+
+    // ── 道具库存 API（Y1） ───────────────────────
+
+    /** 获取道具库存副本（不暴露内部引用） */
+    getBoosterInventory(): BoosterInventory {
+        this.load();
+        return {
+            hammer: this._data.boosters.hammer,
+            shuffle: this._data.boosters.shuffle,
+            addSteps: this._data.boosters.addSteps,
+        };
+    }
+
+    /** 获取指定道具数量 */
+    getBoosterCount(type: BoosterType): number {
+        this.load();
+        switch (type) {
+            case 'hammer': return this._data.boosters.hammer;
+            case 'shuffle': return this._data.boosters.shuffle;
+            case 'addSteps': return this._data.boosters.addSteps;
+            default: return 0;
+        }
+    }
+
+    /** 增加道具（clamp 到 99，立即写盘） */
+    addBooster(type: BoosterType, amount: number = 1): void {
+        this.load();
+        if (typeof amount !== 'number' || !isFinite(amount) || isNaN(amount) || amount <= 0) return;
+        const add = Math.floor(amount);
+        if (add <= 0) return;
+
+        switch (type) {
+            case 'hammer':
+                this._data.boosters.hammer = Math.min(99, this._data.boosters.hammer + add);
+                break;
+            case 'shuffle':
+                this._data.boosters.shuffle = Math.min(99, this._data.boosters.shuffle + add);
+                break;
+            case 'addSteps':
+                this._data.boosters.addSteps = Math.min(99, this._data.boosters.addSteps + add);
+                break;
+            default:
+                return;
+        }
+        this._flush();
+        console.log(`[SaveManager] addBooster(${type},+${add}) → ${this.getBoosterCount(type)}`);
+    }
+
+    /** 消耗道具（不足返回 false 不扣，成功返回 true） */
+    spendBooster(type: BoosterType, amount: number = 1): boolean {
+        this.load();
+        if (typeof amount !== 'number' || !isFinite(amount) || isNaN(amount) || amount <= 0) return false;
+        const cost = Math.floor(amount);
+        if (cost <= 0) return false;
+
+        const current = this.getBoosterCount(type);
+        if (current < cost) return false;
+
+        switch (type) {
+            case 'hammer':
+                this._data.boosters.hammer = Math.max(0, this._data.boosters.hammer - cost);
+                break;
+            case 'shuffle':
+                this._data.boosters.shuffle = Math.max(0, this._data.boosters.shuffle - cost);
+                break;
+            case 'addSteps':
+                this._data.boosters.addSteps = Math.max(0, this._data.boosters.addSteps - cost);
+                break;
+            default:
+                return false;
+        }
+        this._flush();
+        console.log(`[SaveManager] spendBooster(${type},-${cost}) → ${this.getBoosterCount(type)}`);
+        return true;
     }
 
     // ── 内部 ────────────────────────────────────
