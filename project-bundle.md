@@ -1,6 +1,6 @@
-﻿# project-bundle.md — X3.3 Repomix Source Bundle
+﻿# project-bundle.md — Y1 Repomix Source Bundle
 
-Generated: 2026-07-11 22:15:49
+Generated: 2026-07-12 16:35:37
 Files: 9
 
 <file path="assets/scripts/Board.ts">
@@ -4676,7 +4676,7 @@ return { cells, waveSeeds, isFullBoardClear: false };
 </file>
 
 <file path="assets/scripts/GameManager.ts">
-(7074 lines)
+(7107 lines)
 
 import {
     _decorator,
@@ -4709,7 +4709,7 @@ import { VibrateManager } from './VibrateManager';
 import { AdManager } from './AdManager';
 import { GameClubEntry } from './GameClubEntry';
 import { RecorderManager } from './RecorderManager';
-import { SaveManager } from './SaveManager';
+import { SaveManager, BoosterType } from './SaveManager';
 
 // 抩音小游戏全局 API（非抩音环境下不存在）
 declare const tt: any;
@@ -5178,9 +5178,9 @@ export class GameManager extends Component {
     private _inLevel = false;
 
     // ── W: 局内道具系统 ─────────────────────────
-    private hammerCount = 1;
-    private shuffleCount = 1;
-    private addStepsCount = 1;
+    private hammerCount = 0;
+    private shuffleCount = 0;
+    private addStepsCount = 0;
 
     private boosterBar: Node | null = null;
     private hammerBtn: Node | null = null;
@@ -5777,9 +5777,7 @@ export class GameManager extends Component {
         this.clearedCrateCells = 0;  // V: 清零木箱格计数
 
         // W: 重置局内道具
-        this.hammerCount = 1;
-        this.shuffleCount = 1;
-        this.addStepsCount = 1;
+        this.syncBoosterInventory();
         this.hammerSelecting = false;
         this.boosterBusy = false;
         this.board?.cancelHammerMode();
@@ -9817,6 +9815,14 @@ export class GameManager extends Component {
         return node;
     }
 
+    /** Y1: 从存档同步道具库存到运行时缓存 */
+    private syncBoosterInventory(): void {
+        const inv = SaveManager.inst.getBoosterInventory();
+        this.hammerCount = inv.hammer;
+        this.shuffleCount = inv.shuffle;
+        this.addStepsCount = inv.addSteps;
+    }
+
     /** W: 刷新道具栏 UI（次数、按钮状态、高亮） */
     private updateBoosterUI(): void {
         if (!this.boosterBar) return;
@@ -9953,6 +9959,7 @@ export class GameManager extends Component {
 
     /** W: 小锤子按钮 */
     private onHammerBoosterClick(): void {
+        this.syncBoosterInventory();
         if (this.hammerCount <= 0) return;
         if (this.boosterBusy) return;
 
@@ -9976,6 +9983,7 @@ export class GameManager extends Component {
 
     /** W: 重新洗牌按钮 */
     private async onShuffleBoosterClick(): Promise<void> {
+        this.syncBoosterInventory();
         if (this.shuffleCount <= 0) return;
         if (this.boosterBusy) return;
         if (this.hammerSelecting) return;
@@ -9986,12 +9994,16 @@ export class GameManager extends Component {
         try {
             const ok = await this.board?.useShuffleBooster();
             if (ok) {
-                this.shuffleCount = Math.max(0, this.shuffleCount - 1);
+                const spent = SaveManager.inst.spendBooster('shuffle', 1);
+                if (!spent) {
+                    console.warn('[Booster] 洗牌已生效，但库存扣除失败');
+                }
                 this.shuffleUsedThisRun = true;
             }
         } catch (e) {
             console.error('[GameManager] 洗牌道具异常:', e);
         } finally {
+            this.syncBoosterInventory();
             this.boosterBusy = false;
             this.updateBoosterUI();
         }
@@ -9999,16 +10011,26 @@ export class GameManager extends Component {
 
     /** W: +3 步按钮 */
     private onAddStepsBoosterClick(): void {
-        if (this.addStepsCount <= 0) return;
         if (this.boosterBusy) return;
         if (this.hammerSelecting) return;
         if (!this._inLevel) return;
         // 弹层打开时不可用
         if (this.resultPanel?.active || this.stepsPanel?.active || this.pausePanel?.active) return;
 
+        this.syncBoosterInventory();
+        if (this.addStepsCount <= 0) return;
+
+        // Y1: 先原子扣除库存，再增加步数
+        const spent = SaveManager.inst.spendBooster('addSteps', 1);
+        if (!spent) {
+            this.syncBoosterInventory();
+            this.updateBoosterUI();
+            return;
+        }
+
         this.currentSteps += 3;
-        this.addStepsCount = Math.max(0, this.addStepsCount - 1);
         this.addStepsUsedThisRun = true;
+        this.syncBoosterInventory();
         this.updateHUD();
         this.updateBoosterUI();
 
@@ -10025,7 +10047,11 @@ export class GameManager extends Component {
     /** W: Board 锤子解析完成回调 */
     private onHammerResolved(success: boolean): void {
         if (success) {
-            this.hammerCount = Math.max(0, this.hammerCount - 1);
+            const spent = SaveManager.inst.spendBooster('hammer', 1);
+            if (!spent) {
+                console.warn('[Booster] 锤子已生效，但库存扣除失败');
+            }
+            this.syncBoosterInventory();
             this.hammerSelecting = false;
             this.boosterBusy = false;
             this.hammerUsedThisRun = true;
@@ -10034,7 +10060,8 @@ export class GameManager extends Component {
             // 统一目标判定
             this.evaluateLevelAfterBoardStable();
         } else {
-            // 失败 — 不扣次数
+            // 失败 — 不扣库存
+            this.syncBoosterInventory();
             this.hammerSelecting = false;
             this.boosterBusy = false;
             this.hideHammerHint();
@@ -11364,13 +11391,13 @@ export class GameManager extends Component {
     // ══════════════════════════════════════════════════════════════════════════
 
     /** R3: 每日签到奖励表（7天） */
-    private static readonly SIGN_REWARDS: { coins: number; extra: string }[] = [
+    private static readonly SIGN_REWARDS: { coins: number; booster?: BoosterType; extra: string }[] = [
         { coins: 20, extra: '' },
-        { coins: 30, extra: '' },
+        { coins: 30, booster: 'hammer', extra: '+🔨锤子' },
         { coins: 40, extra: '' },
-        { coins: 50, extra: '' },
+        { coins: 50, booster: 'shuffle', extra: '+🔀洗牌' },
         { coins: 60, extra: '' },
-        { coins: 80, extra: '' },
+        { coins: 80, booster: 'addSteps', extra: '+👣+3步' },
         { coins: 100, extra: '+🎁免费抽' },
     ];
 
@@ -11737,6 +11764,12 @@ export class GameManager extends Component {
         const coins = this.safeNum(reward.coins, 20);
         SaveManager.inst.addCoins(coins);
 
+        // Y1: 第2/4/6天额外发道具
+        if (reward.booster) {
+            SaveManager.inst.addBooster(reward.booster, 1);
+            console.log(`[Sign] 道具奖励: +1 ${reward.booster}`);
+        }
+
         // 第7天额外发等值金币占位（100币 = 1次抽卡券等值）
         if (todayStreak === 7 && reward.extra) {
             SaveManager.inst.addCoins(100); // 占位：等值1次免费单抽
@@ -12052,7 +12085,7 @@ export class AudioManager extends Component {
 </file>
 
 <file path="assets/scripts/SaveManager.ts">
-(563 lines)
+(701 lines)
 
 /**
  * SaveManager — 进度存档持久化单例（纯数据，非 Component）
@@ -12067,6 +12100,19 @@ export class AudioManager extends Component {
 
 // 微信小游戏全局 API
 declare const wx: any;
+
+// ── 道具类型（Y1） ─────────────────────────────
+
+export type BoosterType =
+    | 'hammer'
+    | 'shuffle'
+    | 'addSteps';
+
+export interface BoosterInventory {
+    hammer: number;
+    shuffle: number;
+    addSteps: number;
+}
 
 // ── 存档结构 ────────────────────────────────
 
@@ -12097,6 +12143,8 @@ interface SaveData {
     signStreak: number;                          // 连续签到天数（默认 0）
     lastSignDate: string;                        // 上次签到日期 YYYY-MM-DD（默认 ''）
     signedTotal: number;                         // 累计签到天数（默认 0）
+    // Y1: 道具库存
+    boosters: BoosterInventory;                  // 持久化道具库存
 }
 
 // ── 常量 ────────────────────────────────────
@@ -12118,6 +12166,11 @@ function createDefaultSave(): SaveData {
         signStreak: 0,
         lastSignDate: '',
         signedTotal: 0,
+        boosters: {
+            hammer: 2,
+            shuffle: 2,
+            addSteps: 2,
+        },
     };
 }
 
@@ -12319,7 +12372,50 @@ export class SaveManager {
             result.signedTotal = 0;
         }
 
+        // Y1: 道具库存清洗（向后兼容，老存档无则补默认 {2,2,2}）
+        const rawBoosters =
+            parsed.boosters &&
+            typeof parsed.boosters === 'object'
+                ? parsed.boosters
+                : null;
+
+        if (rawBoosters) {
+            result.boosters = {
+                hammer: this._sanitizeBoosterCount(
+                    (rawBoosters as any).hammer,
+                    2,
+                ),
+                shuffle: this._sanitizeBoosterCount(
+                    (rawBoosters as any).shuffle,
+                    2,
+                ),
+                addSteps: this._sanitizeBoosterCount(
+                    (rawBoosters as any).addSteps,
+                    2,
+                ),
+            };
+        }
+
         return result;
+    }
+
+    /** Y1: 道具数量清洗 — NaN/Infinity 回退，clamp 0-99 */
+    private _sanitizeBoosterCount(
+        value: unknown,
+        fallback: number,
+    ): number {
+        if (
+            typeof value !== 'number' ||
+            !isFinite(value) ||
+            isNaN(value)
+        ) {
+            return fallback;
+        }
+
+        return Math.max(
+            0,
+            Math.min(99, Math.floor(value)),
+        );
     }
 
     /** 获取当前最大已解锁关卡（至少为 1） */
@@ -12604,6 +12700,81 @@ export class SaveManager {
         this._data.signedTotal = (typeof total === 'number' && !isNaN(total) && isFinite(total) && total >= 0)
             ? Math.floor(total) : 0;
         this._flush();
+    }
+
+    // ── 道具库存 API（Y1） ───────────────────────
+
+    /** 获取道具库存副本（不暴露内部引用） */
+    getBoosterInventory(): BoosterInventory {
+        this.load();
+        return {
+            hammer: this._data.boosters.hammer,
+            shuffle: this._data.boosters.shuffle,
+            addSteps: this._data.boosters.addSteps,
+        };
+    }
+
+    /** 获取指定道具数量 */
+    getBoosterCount(type: BoosterType): number {
+        this.load();
+        switch (type) {
+            case 'hammer': return this._data.boosters.hammer;
+            case 'shuffle': return this._data.boosters.shuffle;
+            case 'addSteps': return this._data.boosters.addSteps;
+            default: return 0;
+        }
+    }
+
+    /** 增加道具（clamp 到 99，立即写盘） */
+    addBooster(type: BoosterType, amount: number = 1): void {
+        this.load();
+        if (typeof amount !== 'number' || !isFinite(amount) || isNaN(amount) || amount <= 0) return;
+        const add = Math.floor(amount);
+        if (add <= 0) return;
+
+        switch (type) {
+            case 'hammer':
+                this._data.boosters.hammer = Math.min(99, this._data.boosters.hammer + add);
+                break;
+            case 'shuffle':
+                this._data.boosters.shuffle = Math.min(99, this._data.boosters.shuffle + add);
+                break;
+            case 'addSteps':
+                this._data.boosters.addSteps = Math.min(99, this._data.boosters.addSteps + add);
+                break;
+            default:
+                return;
+        }
+        this._flush();
+        console.log(`[SaveManager] addBooster(${type},+${add}) → ${this.getBoosterCount(type)}`);
+    }
+
+    /** 消耗道具（不足返回 false 不扣，成功返回 true） */
+    spendBooster(type: BoosterType, amount: number = 1): boolean {
+        this.load();
+        if (typeof amount !== 'number' || !isFinite(amount) || isNaN(amount) || amount <= 0) return false;
+        const cost = Math.floor(amount);
+        if (cost <= 0) return false;
+
+        const current = this.getBoosterCount(type);
+        if (current < cost) return false;
+
+        switch (type) {
+            case 'hammer':
+                this._data.boosters.hammer = Math.max(0, this._data.boosters.hammer - cost);
+                break;
+            case 'shuffle':
+                this._data.boosters.shuffle = Math.max(0, this._data.boosters.shuffle - cost);
+                break;
+            case 'addSteps':
+                this._data.boosters.addSteps = Math.max(0, this._data.boosters.addSteps - cost);
+                break;
+            default:
+                return false;
+        }
+        this._flush();
+        console.log(`[SaveManager] spendBooster(${type},-${cost}) → ${this.getBoosterCount(type)}`);
+        return true;
     }
 
     // ── 内部 ────────────────────────────────────
