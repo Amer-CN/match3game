@@ -111,7 +111,7 @@ export class GameClubEntry {
             }
 
             console.log(
-                `[GameClub] 创建按钮: screenLeft=${screenTop.toFixed(1)}, ` +
+                `[GameClub] 创建按钮: screenLeft=${screenLeft.toFixed(1)}, ` +
                 `screenTop=${screenTop.toFixed(1)}, ` +
                 `winW=${winW}, winH=${winH}, scaleY=${scaleY.toFixed(3)}`,
             );

@@ -6713,11 +6713,11 @@ export class GameManager extends Component {
     /** R3: 每日签到奖励表（7天） */
     private static readonly SIGN_REWARDS: { coins: number; booster?: BoosterType; extra: string }[] = [
         { coins: 20, extra: '' },
-        { coins: 30, booster: 'hammer', extra: '+🔨锤子' },
+        { coins: 30, booster: 'hammer', extra: '🔨×1' },
         { coins: 40, extra: '' },
-        { coins: 50, booster: 'shuffle', extra: '+🔀洗牌' },
+        { coins: 50, booster: 'shuffle', extra: '🔀×1' },
         { coins: 60, extra: '' },
-        { coins: 80, booster: 'addSteps', extra: '+👣+3步' },
+        { coins: 80, booster: 'addSteps', extra: '👣+3×1' },
         { coins: 100, extra: '+🎁免费抽' },
     ];
 
@@ -7087,7 +7087,9 @@ export class GameManager extends Component {
         // Y1: 第2/4/6天额外发道具
         if (reward.booster) {
             SaveManager.inst.addBooster(reward.booster, 1);
-            console.log(`[Sign] 道具奖励: +1 ${reward.booster}`);
+            this.syncBoosterInventory();
+            this.updateBoosterUI();
+            console.log(`[DailySign] 获得道具 ${reward.booster} ×1`);
         }
 
         // 第7天额外发等值金币占位（100币 = 1次抽卡券等值）
