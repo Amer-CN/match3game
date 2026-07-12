@@ -1,11 +1,1846 @@
-﻿# project-bundle.md — Y1 Repomix Source Bundle
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
 
-Generated: 2026-07-12 16:35:37
-Files: 9
+# File Summary
 
-<file path="assets/scripts/Board.ts">
-(4666 lines)
+## Purpose
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
 
+## File Format
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  a. A header with the file path (## File: path/to/file)
+  b. The full contents of the file in a code block
+
+## Usage Guidelines
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+
+## Notes
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: assets/scripts/*.ts
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+
+# Directory Structure
+```
+assets/
+  scripts/
+    AdManager.ts
+    AudioManager.ts
+    Board.ts
+    GameClubEntry.ts
+    GameManager.ts
+    RecorderManager.ts
+    SaveManager.ts
+    TileGesture.ts
+    VibrateManager.ts
+```
+
+# Files
+
+## File: assets/scripts/AdManager.ts
+```typescript
+/**
+ * AdManager — 微信激励视频广告单例
+ *
+ * 封装 wx.createRewardedVideoAd，提供 showRewardedAd(onReward, onFail?)。
+ *
+ * 降级策略（保证流程永远不卡）：
+ *   以下任一情况 → 直接调用 onReward 发奖，并打印 '[Ad] 降级发奖'：
+ *   1. wx 不存在（浏览器预览）
+ *   2. wx.createRewardedVideoAd 不可用
+ *   3. 广告 onError
+ *   4. adUnitId 仍为占位值 'TODO_REPLACE_广告位ID'
+ */
+
+// WeChat mini-game 全局 API（非微信环境下不存在）
+declare const wx: any;
+
+export class AdManager {
+    // ── 单例 ──────────────────────────────────
+    private static _instance: AdManager | null = null;
+
+    public static getInstance(): AdManager {
+        if (!AdManager._instance) {
+            AdManager._instance = new AdManager();
+        }
+        return AdManager._instance;
+    }
+
+    // ── 广告位 ID ─────────────────────────────
+    /**
+     * ⚠️ 上线前替换为真实广告位 ID
+     * 目前为占位值，所有广告请求将走降级逻辑（直接发奖）。
+     */
+    private static readonly ADUNIT_ID = 'TODO_REPLACE_广告位ID';
+
+    // ── 广告实例 ──────────────────────────────
+    private videoAd: any = null;
+
+    // ── 当前请求的回调 ────────────────────────
+    private currentOnReward: (() => void) | null = null;
+    private currentOnFail: (() => void) | null = null;
+
+    // ── 是否有进行中的广告请求（防止重复触发） ──
+    private pending = false;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  构造（私有，单例）
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private constructor() {
+        this.initAd();
+    }
+
+    /**
+     * 初始化广告实例。
+     * 仅在「微信环境 + API 可用 + adUnitId 非占位」时创建，否则保持 null（降级模式）。
+     * onLoad / onError / onClose 只绑定一次，通过成员变量传递回调，避免重复触发。
+     */
+    private initAd(): void {
+        // ── 降级检查 1：wx 不存在（浏览器预览） ──
+        if (typeof wx === 'undefined') {
+            console.log('[Ad] wx 不存在（浏览器预览），降级模式');
+            return;
+        }
+
+        // ── 降级检查 2：createRewardedVideoAd 不可用 ──
+        if (typeof wx.createRewardedVideoAd !== 'function') {
+            console.log('[Ad] createRewardedVideoAd 不可用，降级模式');
+            return;
+        }
+
+        // ── 降级检查 3：adUnitId 仍为占位值 ──
+        if (AdManager.ADUNIT_ID === 'TODO_REPLACE_广告位ID') {
+            console.log('[Ad] adUnitId 仍为占位值，降级模式');
+            return;
+        }
+
+        try {
+            this.videoAd = wx.createRewardedVideoAd({ adUnitId: AdManager.ADUNIT_ID });
+
+            // 广告加载成功
+            this.videoAd.onLoad(() => {
+                console.log('[Ad] 广告加载成功 (onLoad)');
+            });
+
+            // 广告加载/展示失败 → 降级发奖
+            this.videoAd.onError((err: any) => {
+                console.error('[Ad] 广告 onError:', JSON.stringify(err));
+                this.degrade();
+            });
+
+            // 广告关闭 → 判断是否完整观看
+            this.videoAd.onClose((res: any) => {
+                console.log('[Ad] 广告 onClose:', JSON.stringify(res));
+                if (res && res.isEnded === true) {
+                    // 完整看完 → 发奖
+                    this.doReward();
+                } else {
+                    // 中途关闭 → 不发奖，走 onFail
+                    this.doFail();
+                }
+            });
+
+            console.log('[Ad] 广告实例创建成功，adUnitId =', AdManager.ADUNIT_ID);
+        } catch (e) {
+            console.error('[Ad] 创建广告实例异常:', e);
+            this.videoAd = null;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  公开接口
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * 展示激励视频广告。
+     *
+     * - 玩家【完整看完】(onClose res.isEnded === true) → 调用 onReward 发奖
+     * - 玩家【中途关闭】→ 调用 onFail（可选）
+     * - 降级情况（wx 不存在 / API 不可用 / onError / adUnitId 占位）→ 直接调用 onReward
+     *
+     * @param onReward 完整看完或降级时的发奖回调
+     * @param onFail   中途关闭时的回调（可选，不传则什么都不做）
+     */
+    public showRewardedAd(onReward: () => void, onFail?: () => void): void {
+        // 防止重复调用（广告展示期间用户无法再次触发）
+        if (this.pending) {
+            console.warn('[Ad] 已有广告请求进行中，忽略本次调用');
+            return;
+        }
+
+        this.pending = true;
+        this.currentOnReward = onReward;
+        this.currentOnFail = onFail ?? null;
+
+        // ── 降级检查：广告实例不存在 ──
+        // （wx 不存在 / API 不可用 / adUnitId 占位 / 创建异常 都会导致 videoAd 为 null）
+        if (!this.videoAd) {
+            this.degrade();
+            return;
+        }
+
+        // ── 展示广告 ──
+        console.log('[Ad] 调用 show()');
+        this.videoAd.show().catch((err: any) => {
+            // show 失败（通常是广告尚未加载完成），尝试 load 后再 show
+            console.warn('[Ad] show 失败，尝试 load 后重试:', JSON.stringify(err));
+            this.videoAd
+                .load()
+                .then(() => {
+                    console.log('[Ad] load 成功，再次 show');
+                    return this.videoAd.show();
+                })
+                .catch((err2: any) => {
+                    console.error('[Ad] load + show 均失败:', JSON.stringify(err2));
+                    this.degrade();
+                });
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  内部结算（pending 标志保证只触发一次）
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** 发奖（完整观看） */
+    private doReward(): void {
+        if (!this.pending) return;
+        this.pending = false;
+        console.log('[Ad] ✓ 发奖（完整观看）');
+        const cb = this.currentOnReward;
+        this.currentOnReward = null;
+        this.currentOnFail = null;
+        if (cb) cb();
+    }
+
+    /** 不发奖（中途关闭） */
+    private doFail(): void {
+        if (!this.pending) return;
+        this.pending = false;
+        console.log('[Ad] ✗ 未看完，不发奖');
+        const cb = this.currentOnFail;
+        this.currentOnReward = null;
+        this.currentOnFail = null;
+        if (cb) cb();
+    }
+
+    /** 降级发奖（直接调用 onReward） */
+    private degrade(): void {
+        if (!this.pending) return;
+        this.pending = false;
+        console.log('[Ad] 降级发奖');
+        const cb = this.currentOnReward;
+        this.currentOnReward = null;
+        this.currentOnFail = null;
+        if (cb) cb();
+    }
+}
+```
+
+## File: assets/scripts/RecorderManager.ts
+```typescript
+/**
+ * RecorderManager — 抖音录屏单例
+ *
+ * 封装 tt.getGameRecorderManager()，提供 start/stop/onStart/onStop。
+ *
+ * 降级策略（和 AdManager 一致，保证流程不卡）：
+ *   以下任一情况 → 降级跳过，不报错：
+ *   1. tt 不存在（浏览器 / 微信预览）
+ *   2. tt.getGameRecorderManager 不可用
+ *
+ * Android/iOS 差异处理：
+ *   stop() 后加 500ms 延迟才允许下一次 start()，
+ *   否则安卓会覆盖上一段 / start 不执行。
+ */
+
+// 抖音小游戏全局 API（非抖音环境下不存在）
+declare const tt: any;
+
+type StartCallback = () => void;
+type StopCallback = (videoPath: string) => void;
+type ErrorCallback = (err: any) => void;
+
+export class RecorderManager {
+    // ── 单例 ──────────────────────────────────
+    private static _instance: RecorderManager | null = null;
+
+    public static getInstance(): RecorderManager {
+        if (!RecorderManager._instance) {
+            RecorderManager._instance = new RecorderManager();
+        }
+        return RecorderManager._instance;
+    }
+
+    // ── 录屏实例 ──────────────────────────────
+    private recorder: any = null;
+
+    // ── 状态 ──────────────────────────────────
+    private isRecording = false;
+
+    /** stop() 后的冷却期，防止安卓立刻 start 覆盖上一段 */
+    private coolingDown = false;
+    private static readonly COOLDOWN_MS = 500;
+
+    // ── 回调 ──────────────────────────────────
+    private _onStart: StartCallback | null = null;
+    private _onStop: StopCallback | null = null;
+    private _onError: ErrorCallback | null = null;
+
+    // ── 最后一次录屏的 videoPath ──────────────
+    private _lastVideoPath: string | null = null;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  构造（私有，单例）
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private constructor() {
+        this.initRecorder();
+    }
+
+    /**
+     * 初始化录屏实例。
+     * 仅在「抖音环境 + API 可用」时创建，否则保持 null（降级模式）。
+     */
+    private initRecorder(): void {
+        // ── 降级检查 1：tt 不存在 ──
+        if (typeof tt === 'undefined') {
+            console.log('[Recorder] tt 不存在（非抖音环境），降级跳过');
+            return;
+        }
+
+        // ── 降级检查 2：getGameRecorderManager 不可用 ──
+        if (typeof tt.getGameRecorderManager !== 'function') {
+            console.log('[Recorder] tt.getGameRecorderManager 不可用，降级跳过');
+            return;
+        }
+
+        try {
+            this.recorder = tt.getGameRecorderManager();
+
+            // 录屏开始
+            this.recorder.onStart(() => {
+                console.log('[Recorder] onStart — 录屏已开始');
+                this.isRecording = true;
+                if (this._onStart) this._onStart();
+            });
+
+            // 录屏结束（拿到 videoPath）
+            this.recorder.onStop((res: any) => {
+                console.log('[Recorder] onStop — 录屏已结束:', JSON.stringify(res));
+                this.isRecording = false;
+
+                const videoPath = (res && typeof res.videoPath === 'string') ? res.videoPath : '';
+                if (videoPath) {
+                    this._lastVideoPath = videoPath;
+                    console.log('[Recorder] videoPath:', videoPath);
+                }
+
+                // 进入冷却期（安卓需要延迟才能下一次 start）
+                this.startCooldown();
+
+                if (this._onStop) this._onStop(videoPath);
+            });
+
+            // 录屏错误
+            this.recorder.onError((err: any) => {
+                console.error('[Recorder] onError:', JSON.stringify(err));
+                this.isRecording = false;
+                this.startCooldown();
+                if (this._onError) this._onError(err);
+            });
+
+            console.log('[Recorder] 录屏实例创建成功');
+        } catch (e) {
+            console.error('[Recorder] 创建录屏实例异常:', e);
+            this.recorder = null;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  公开接口
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * 开始录屏。
+     * @param duration 录屏时长（秒），抖音最大 300 秒
+     */
+    public start(duration: number = 300): void {
+        if (!this.recorder) {
+            console.log('[Recorder] 降级模式，start 跳过');
+            return;
+        }
+
+        if (this.isRecording) {
+            console.warn('[Recorder] 正在录屏中，忽略重复 start');
+            return;
+        }
+
+        if (this.coolingDown) {
+            console.warn('[Recorder] 冷却期内，忽略 start（安卓需要 500ms 间隔）');
+            return;
+        }
+
+        try {
+            console.log(`[Recorder] start() duration=${duration}s`);
+            this.recorder.start({ duration });
+        } catch (e) {
+            console.error('[Recorder] start 异常:', e);
+        }
+    }
+
+    /** 停止录屏，onStop 回调中拿到 videoPath */
+    public stop(): void {
+        if (!this.recorder) {
+            console.log('[Recorder] 降级模式，stop 跳过');
+            return;
+        }
+
+        if (!this.isRecording) {
+            console.warn('[Recorder] 未在录屏，忽略 stop');
+            return;
+        }
+
+        try {
+            console.log('[Recorder] stop()');
+            this.recorder.stop();
+        } catch (e) {
+            console.error('[Recorder] stop 异常:', e);
+            this.isRecording = false;
+            this.startCooldown();
+        }
+    }
+
+    /**
+     * 设置回调。
+     * @param opts.onStart  录屏开始时调用
+     * @param opts.onStop   录屏结束时调用，参数为 videoPath
+     * @param opts.onError  录屏出错时调用
+     */
+    public on(opts: {
+        onStart?: StartCallback;
+        onStop?: StopCallback;
+        onError?: ErrorCallback;
+    }): void {
+        if (opts.onStart !== undefined) this._onStart = opts.onStart;
+        if (opts.onStop !== undefined) this._onStop = opts.onStop;
+        if (opts.onError !== undefined) this._onError = opts.onError;
+    }
+
+    /** 是否正在录屏 */
+    public get recording(): boolean {
+        return this.isRecording;
+    }
+
+    /** 录屏实例是否可用 */
+    public get isAvailable(): boolean {
+        return this.recorder !== null;
+    }
+
+    /** 获取最后一次录屏的 videoPath */
+    public get lastVideoPath(): string | null {
+        return this._lastVideoPath;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  内部
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** 启动冷却计时器（安卓 stop 后立刻 start 会出问题） */
+    private startCooldown(): void {
+        this.coolingDown = true;
+        setTimeout(() => {
+            this.coolingDown = false;
+            console.log('[Recorder] 冷却期结束，可以 start');
+        }, RecorderManager.COOLDOWN_MS);
+    }
+}
+```
+
+## File: assets/scripts/TileGesture.ts
+```typescript
+import { _decorator, Component, Node, EventTouch, Vec2 } from 'cc';
+
+const { ccclass } = _decorator;
+
+/**
+ * 方块手势组件 —— 挂在每一个方块节点上。
+ * 点击 + 滑动都在这里，零坐标反算，只认本方块自己的 row / col。
+ */
+@ccclass('TileGesture')
+export class TileGesture extends Component {
+
+    /** 本方块行号（由 Board 在创建/移动时同步） */
+    public row: number = 0;
+    /** 本方块列号（由 Board 在创建/移动时同步） */
+    public col: number = 0;
+
+    /** Board 组件引用（onLoad 时通过父节点链查找） */
+    private _board: any = null;
+
+    private _startPos: Vec2 | null = null;
+    private _swiped = false;
+
+    onLoad(): void {
+        // 向上查找 Board 组件：tileNode.parent = Board 节点
+        this._board = this.node.parent?.getComponent('Board');
+    }
+
+    onEnable(): void {
+        this.node.on(Node.EventType.TOUCH_START, this.onStart, this);
+        this.node.on(Node.EventType.TOUCH_MOVE, this.onMove, this);
+        this.node.on(Node.EventType.TOUCH_END, this.onEnd, this);
+        this.node.on(Node.EventType.TOUCH_CANCEL, this.onEnd, this);
+    }
+
+    onDisable(): void {
+        this.node.off(Node.EventType.TOUCH_START, this.onStart, this);
+        this.node.off(Node.EventType.TOUCH_MOVE, this.onMove, this);
+        this.node.off(Node.EventType.TOUCH_END, this.onEnd, this);
+        this.node.off(Node.EventType.TOUCH_CANCEL, this.onEnd, this);
+    }
+
+    private onStart(e: EventTouch): void {
+        this._swiped = false;
+        this._startPos = e.getUILocation().clone();
+        console.log('HIT', this.node.name, 'cell', this.row, this.col, 'pos', this.node.worldPosition);
+    }
+
+    private onMove(e: EventTouch): void {
+        if (this._swiped || !this._startPos) return;
+        const ui = e.getUILocation();
+        const dx = ui.x - this._startPos.x;
+        const dy = ui.y - this._startPos.y;
+        if (!isFinite(dx) || !isFinite(dy)) return;
+
+        const TH = 20;
+        if (Math.abs(dx) < TH && Math.abs(dy) < TH) return;
+
+        this._swiped = true;
+
+        let dr = 0, dc = 0;
+        if (Math.abs(dx) > Math.abs(dy)) {
+            dc = dx > 0 ? 1 : -1;   // 左右
+        } else {
+            dr = dy > 0 ? -1 : 1;   // 上滑 dy>0 → 行号 -1
+        }
+
+        console.log('SWIPE_DIR', this.row, this.col, { dx, dy }, '->', this.row + dr, this.col + dc);
+        this._board?.trySwapByDir(this.row, this.col, dr, dc);
+    }
+
+    private onEnd(): void {
+        if (!this._swiped) {
+            this._board?.onCellClick(this.row, this.col);
+        }
+        this._startPos = null;
+    }
+}
+```
+
+## File: assets/scripts/VibrateManager.ts
+```typescript
+import { _decorator, Component } from 'cc';
+const { ccclass, property } = _decorator;
+
+type HapticLevel = 'light' | 'medium' | 'heavy';
+
+@ccclass('VibrateManager')
+export class VibrateManager extends Component {
+    private static _inst: VibrateManager | null = null;
+    public static get inst() { return VibrateManager._inst; }
+
+    @property vibrateEnabled: boolean = true;   // 总开关（接设置里的"震动"选项，避开 Component.enabled 撞名）
+    @property cooldownMs: number = 80;   // 节流：两次震动最小间隔，防连锁狂震
+
+    private _last = 0;
+    private _wx: any = (globalThis as any).wx || null;
+    private _tt: any = (globalThis as any).tt || null;
+
+    onLoad() { VibrateManager._inst = this; }
+    onDestroy() { if (VibrateManager._inst === this) VibrateManager._inst = null; }
+
+    setVibrateEnabled(on: boolean) { this.vibrateEnabled = on; }
+    getVibrateEnabled() { return this.vibrateEnabled; }
+
+    private _canFire(): boolean {
+        if (!this.vibrateEnabled) return false;
+        const now = Date.now();
+        if (now - this._last < this.cooldownMs) return false;
+        this._last = now;
+        return true;
+    }
+
+    // 短震：type 控制强弱（iOS 明显，部分安卓忽略 type 只出固定短震）
+    short(level: HapticLevel = 'light') {
+        if (!this._canFire()) return;
+        try {
+            if (this._wx?.vibrateShort) this._wx.vibrateShort({ type: level });
+            else if (this._tt?.vibrateShort) this._tt.vibrateShort({ type: level });
+        } catch (e) { /* 真机不支持则静默，不报错 */ }
+    }
+
+    // 长震：约 400ms，用于过关/失败等重反馈
+    long() {
+        if (!this._canFire()) return;
+        try {
+            if (this._wx?.vibrateLong) this._wx.vibrateLong({});
+            else if (this._tt?.vibrateLong) this._tt.vibrateLong({});
+        } catch (e) { /* no-op */ }
+    }
+
+    // 语义化封装
+    light()  { this.short('light'); }
+    medium() { this.short('medium'); }
+    heavy()  { this.short('heavy'); }
+}
+```
+
+## File: assets/scripts/AudioManager.ts
+```typescript
+import { _decorator, Component, AudioClip, AudioSource, resources } from 'cc';
+import { SaveManager } from './SaveManager';
+const { ccclass } = _decorator;
+
+// 微信小游戏全局 API
+declare const wx: any;
+
+@ccclass('AudioManager')
+export class AudioManager extends Component {
+    private static _inst: AudioManager | null = null;
+    public static get inst(): AudioManager | null { return AudioManager._inst; }
+
+    volume: number = 0.8;
+    private _src!: AudioSource;
+    private _clips: Record<string, AudioClip | null> = {
+        click: null, swap: null, match: null, fall: null, win: null, lose: null,
+        fx_line: null, fx_bomb: null, fx_colorbomb: null,
+    };
+    private _combo: (AudioClip | null)[] = [null, null, null, null, null, null]; // 下标 1..5
+
+    // 微信原生 InnerAudioContext（每个音效一个，复用）
+    private _wxCtxs: Record<string, any> = {};
+    private _wxCtxCombo: any[] = [null, null, null, null, null, null];
+    private _isWeChat = false;
+
+    // R1: 静音总开关
+    private _enabled = true;
+
+    onLoad() {
+        AudioManager._inst = this;
+        this._isWeChat = typeof wx !== 'undefined' && typeof wx.createInnerAudioContext === 'function';
+
+        // R1: 从存档读取音效开关
+        try {
+            this._enabled = SaveManager.inst.getSoundEnabled();
+        } catch (e) {
+            this._enabled = true; // 读不到就默认开
+        }
+
+        // 非微信环境才用 Cocos AudioSource
+        if (!this._isWeChat) {
+            this._src = this.getComponent(AudioSource) || this.addComponent(AudioSource);
+            this._src.loop = false;
+        }
+
+        for (const name of Object.keys(this._clips)) {
+            resources.load(`audio/${name}`, AudioClip, (e, c) => {
+                if (!e && c) {
+                    this._clips[name] = c;
+                    if (this._isWeChat) this._createWxCtx(name, c);
+                }
+            });
+        }
+        for (let i = 1; i <= 5; i++) {
+            resources.load(`audio/combo${i}`, AudioClip, (e, c) => {
+                if (!e && c) {
+                    this._combo[i] = c;
+                    if (this._isWeChat) this._createWxCtxCombo(i, c);
+                }
+            });
+        }
+    }
+
+    /** 用 AudioClip 的 nativeUrl 创建微信 InnerAudioContext */
+    private _createWxCtx(name: string, clip: AudioClip): void {
+        const src = clip.nativeUrl;
+        if (!src) { console.warn(`[Audio] nativeUrl 为空: ${name}`); return; }
+        const ctx = wx.createInnerAudioContext();
+        ctx.src = src;
+        ctx.volume = this.volume;
+        ctx.obeyMuteSwitch = false; // 关键：iOS 静音模式下也能播放
+        ctx.onError((r: any) => console.error('AUDIO_ERR', name, r.errCode, r.errMsg));
+        this._wxCtxs[name] = ctx;
+        console.log(`[Audio] wx ctx created: ${name} -> ${src}`);
+    }
+
+    private _createWxCtxCombo(idx: number, clip: AudioClip): void {
+        const src = clip.nativeUrl;
+        if (!src) { console.warn(`[Audio] nativeUrl 为空: combo${idx}`); return; }
+        const ctx = wx.createInnerAudioContext();
+        ctx.src = src;
+        ctx.volume = this.volume;
+        ctx.obeyMuteSwitch = false;
+        ctx.onError((r: any) => console.error('AUDIO_ERR', `combo${idx}`, r.errCode, r.errMsg));
+        this._wxCtxCombo[idx] = ctx;
+        console.log(`[Audio] wx ctx created: combo${idx} -> ${src}`);
+    }
+
+    onDestroy() {
+        if (AudioManager._inst === this) AudioManager._inst = null;
+        if (this._isWeChat) {
+            for (const k in this._wxCtxs) { try { this._wxCtxs[k]?.destroy(); } catch (e) { /* ignore */ } }
+            for (let i = 1; i <= 5; i++) { try { this._wxCtxCombo[i]?.destroy(); } catch (e) { /* ignore */ } }
+        }
+    }
+
+    private _play(name: string): void {
+        if (!this._enabled) return; // R1: 静音守卫
+        const clip = this._clips[name];
+        if (!clip) return;
+
+        if (this._isWeChat && this._wxCtxs[name]) {
+            // 微信原生播放
+            const ctx = this._wxCtxs[name];
+            ctx.stop();
+            ctx.volume = this.volume;
+            ctx.play();
+        } else if (this._src) {
+            // Cocos AudioSource 播放（开发者工具/浏览器）
+            this._src.clip = clip;
+            this._src.volume = this.volume;
+            this._src.play();
+        }
+    }
+
+    /** T2: 带音量加成的播放（特效音用，volMult>1 提升音量） */
+    private _playVol(name: string, volMult: number): void {
+        if (!this._enabled) return;
+        const clip = this._clips[name];
+        if (!clip) return;
+        const vol = Math.min(1, this.volume * volMult);
+        if (this._isWeChat && this._wxCtxs[name]) {
+            const ctx = this._wxCtxs[name];
+            ctx.stop();
+            ctx.volume = vol;
+            ctx.play();
+        } else if (this._src) {
+            this._src.clip = clip;
+            this._src.volume = vol;
+            this._src.play();
+        }
+    }
+
+    playClick() { this._play('click'); }
+    playSwap()  { this._play('swap'); }
+    playMatch() { this._play('match'); }
+    playFall()  { this._play('fall'); }
+    playWin()   { this._play('win'); }
+    playLose()  { this._play('lose'); }
+
+    // T2: 特效音效——专属 clip 优先 → 差异化降级（比普通消除更重/更亮） → match/win 兜底
+    playSpecialLine(): void {
+        try {
+            if (this._clips['fx_line']) { this._playVol('fx_line', 1.15); return; }
+            // 降级：combo3 单发（比普通 match 高一档）
+            if (this._playComboClipVol(3, 1.15)) return;
+            this._play('match'); // 最终兜底
+        } catch (e) { try { this._play('match'); } catch (_) { /* ignore */ } }
+    }
+    playSpecialBomb(): void {
+        if (!this._enabled) return;
+        try {
+            if (this._clips['fx_bomb']) { this._playVol('fx_bomb', 1.2); return; }
+            // 降级：微信环境叠播 match+win 制造「轰」感；非微信走 combo1 低音
+            if (this._isWeChat) {
+                let played = false;
+                if (this._wxCtxs['match']) {
+                    try { this._wxCtxs['match'].stop(); this._wxCtxs['match'].volume = Math.min(1, this.volume * 1.2); this._wxCtxs['match'].play(); } catch (_) { /* ignore */ }
+                    played = true;
+                }
+                if (this._wxCtxs['win']) {
+                    try { this._wxCtxs['win'].stop(); this._wxCtxs['win'].volume = Math.min(1, this.volume * 1.2); this._wxCtxs['win'].play(); } catch (_) { /* ignore */ }
+                    played = true;
+                }
+                if (played) return;
+            }
+            // 非微信或无 match/win：combo1 最低音
+            if (this._playComboClipVol(1, 1.2)) return;
+            this._play('match'); // 最终兜底
+        } catch (e) { try { this._play('match'); } catch (_) { /* ignore */ } }
+    }
+    playSpecialColorBomb(): void {
+        if (!this._enabled) return;
+        try {
+            if (this._clips['fx_colorbomb']) { this._playVol('fx_colorbomb', 1.2); return; }
+            // 降级：combo1→3→5 上行三连音（拉开气势）
+            if (this._isWeChat) {
+                let any = false;
+                [1, 3, 5].forEach((idx, i) => {
+                    if (this._wxCtxCombo[idx]) {
+                        any = true;
+                        this.scheduleOnce(() => {
+                            try {
+                                this._wxCtxCombo[idx]?.stop();
+                                this._wxCtxCombo[idx].volume = Math.min(1, this.volume * 1.2);
+                                this._wxCtxCombo[idx]?.play();
+                            } catch (_) { /* ignore */ }
+                        }, i * 0.08);
+                    }
+                });
+                if (any) return;
+            } else {
+                // 非微信：单 AudioSource 只能播一个，取最高 combo 模拟华丽感
+                for (let i = 5; i >= 1; i--) {
+                    if (this._combo[i]) { this._playComboClipVol(i, 1.2); return; }
+                }
+            }
+            this._play('win'); // 最终兜底
+        } catch (e) { try { this._play('win'); } catch (_) { /* ignore */ } }
+    }
+
+    /** 播放 combo 音效（按下标 1..5），返回是否成功播放 */
+    private _playComboClip(idx: number): boolean {
+        if (!this._enabled) return false; // R1: 静音守卫
+        if (this._isWeChat && this._wxCtxCombo[idx]) {
+            try { this._wxCtxCombo[idx].stop(); this._wxCtxCombo[idx].volume = this.volume; this._wxCtxCombo[idx].play(); } catch (e) { return false; }
+            return true;
+        }
+        if (!this._isWeChat && this._combo[idx] && this._src) {
+            this._src.clip = this._combo[idx];
+            this._src.volume = this.volume;
+            this._src.play();
+            return true;
+        }
+        return false;
+    }
+
+    /** T2: 带音量加成的 combo 播放 */
+    private _playComboClipVol(idx: number, volMult: number): boolean {
+        if (!this._enabled) return false;
+        const vol = Math.min(1, this.volume * volMult);
+        if (this._isWeChat && this._wxCtxCombo[idx]) {
+            try { this._wxCtxCombo[idx].stop(); this._wxCtxCombo[idx].volume = vol; this._wxCtxCombo[idx].play(); } catch (e) { return false; }
+            return true;
+        }
+        if (!this._isWeChat && this._combo[idx] && this._src) {
+            this._src.clip = this._combo[idx];
+            this._src.volume = vol;
+            this._src.play();
+            return true;
+        }
+        return false;
+    }
+
+    // 连击第 n 段（n 从 1 起）：音调随 n 升高；缺档往下取最近，全缺退回 match
+    playCombo(n: number): void {
+        if (!this._enabled) return; // R1: 静音守卫
+        const idx = Math.min(Math.max(n, 1), 5);
+
+        if (this._isWeChat) {
+            let ctx: any = null;
+            for (let i = idx; i >= 1; i--) {
+                if (this._wxCtxCombo[i]) { ctx = this._wxCtxCombo[i]; break; }
+            }
+            if (!ctx) ctx = this._wxCtxs['match'];
+            if (ctx) {
+                ctx.stop();
+                ctx.play();
+            }
+        } else {
+            let clip: AudioClip | null = null;
+            for (let i = idx; i >= 1; i--) { if (this._combo[i]) { clip = this._combo[i]; break; } }
+            if (!clip) clip = this._clips['match'];
+            if (clip && this._src) {
+                this._src.clip = clip;
+                this._src.volume = this.volume;
+                this._src.play();
+            }
+        }
+    }
+
+    // ── R1: 静音总开关 ─────────────────────────────
+
+    /** 设置静音开关；关闭时停掉正在播放的音频 */
+    setEnabled(on: boolean): void {
+        this._enabled = (on === true);
+        if (!this._enabled) {
+            // 停掉正在播放的音频
+            try {
+                if (this._isWeChat) {
+                    for (const k in this._wxCtxs) {
+                        try { this._wxCtxs[k]?.stop(); } catch (e) { /* ignore */ }
+                    }
+                    for (let i = 1; i <= 5; i++) {
+                        try { this._wxCtxCombo[i]?.stop(); } catch (e) { /* ignore */ }
+                    }
+                } else if (this._src) {
+                    this._src.stop();
+                }
+            } catch (e) { /* ignore */ }
+        }
+        // 写入存档
+        try { SaveManager.inst.setSoundEnabled(this._enabled); } catch (e) { /* ignore */ }
+    }
+
+    /** 获取当前静音开关状态 */
+    getEnabled(): boolean {
+        return this._enabled;
+    }
+}
+```
+
+## File: assets/scripts/GameClubEntry.ts
+```typescript
+/**
+ * GameClubEntry — 微信游戏圈入口按钮
+ *
+ * 封装 wx.createGameClubButton，在主界面 / 结算页显示游戏圈入口。
+ * 非微信环境（浏览器预览、wx 或 API 不存在）降级：不创建、不报错。
+ *
+ * 坐标系说明：
+ *   wx.createGameClubButton 的 style.left/top 使用屏幕逻辑像素，
+ *   需要从 Cocos 设计分辨率换算。
+ */
+
+// WeChat mini-game 全局 API（非微信环境下不存在）
+declare const wx: any;
+
+export class GameClubEntry {
+    // ── 广告实例 ──────────────────────────────
+    private button: any = null;
+
+    // ── 当前可见状态 ──────────────────────────
+    private _visible = false;
+
+    // ── 布局参数（设计分辨率） ────────────────
+    private canvasW: number;
+    private canvasH: number;
+    private topInset: number;
+    private hudHeight: number;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  构造
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * @param canvasW   设计分辨率宽（如 720）
+     * @param canvasH   设计分辨率高（如 1280）
+     * @param topInset  顶部安全边距（设计坐标，含胶囊避让）
+     * @param hudHeight HUD 高度（设计坐标）
+     */
+    constructor(canvasW: number, canvasH: number, topInset: number, hudHeight: number) {
+        this.canvasW = canvasW;
+        this.canvasH = canvasH;
+        this.topInset = topInset;
+        this.hudHeight = hudHeight;
+        this.createButton();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  创建按钮
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private createButton(): void {
+        // ── 降级检查 1：wx 不存在 ──
+        if (typeof wx === 'undefined') {
+            console.log('[GameClub] 非微信环境，跳过');
+            return;
+        }
+
+        // ── 降级检查 2：createGameClubButton 不可用 ──
+        if (typeof wx.createGameClubButton !== 'function') {
+            console.log('[GameClub] wx.createGameClubButton 不可用，跳过');
+            return;
+        }
+
+        try {
+            // ── 获取窗口尺寸（屏幕逻辑像素） ──
+            let winW = 0;
+            let winH = 0;
+            try {
+                if (wx.getWindowInfo) {
+                    const info = wx.getWindowInfo();
+                    winW = info.windowWidth;
+                    winH = info.windowHeight;
+                } else if (wx.getSystemInfoSync) {
+                    const info = wx.getSystemInfoSync();
+                    winW = info.windowWidth;
+                    winH = info.windowHeight;
+                }
+            } catch (e) {
+                // ignore
+            }
+
+            winW = this.safeNum(winW, 0);
+            winH = this.safeNum(winH, 0);
+            if (winW <= 0 || winH <= 0) {
+                console.warn('[GameClub] 无法获取窗口尺寸，跳过');
+                return;
+            }
+
+            // ── 设计分辨率 → 屏幕逻辑像素 换算 ──
+            const designW = this.safeNum(this.canvasW, 720);
+            const designH = this.safeNum(this.canvasH, 1280);
+            const scaleY = winH / designH;
+
+            // ── 按钮尺寸（屏幕逻辑像素） ──
+            const btnWidth = 90;
+            const btnHeight = 34;
+            const gap = 10; // HUD 底部到按钮的间距（设计坐标）
+
+            // ── 位置计算 ──
+            // top: topInset + HUD_HEIGHT + gap（设计坐标）→ 换算到屏幕像素
+            const designTop = this.safeNum(this.topInset, 100) + this.safeNum(this.hudHeight, 64) + gap;
+            const screenTop = designTop * scaleY;
+
+            // right: 距右边缘 16px（屏幕像素）
+            const rightMargin = 16;
+            const screenLeft = winW - btnWidth - rightMargin;
+
+            // ── NaN 最终保护 ──
+            if (!this.isValidNum(screenTop) || !this.isValidNum(screenLeft)) {
+                console.warn('[GameClub] 坐标计算异常，跳过', { screenTop, screenLeft });
+                return;
+            }
+
+            console.log(
+                `[GameClub] 创建按钮: screenLeft=${screenLeft.toFixed(1)}, ` +
+                `screenTop=${screenTop.toFixed(1)}, ` +
+                `winW=${winW}, winH=${winH}, scaleY=${scaleY.toFixed(3)}`,
+            );
+
+            this.button = wx.createGameClubButton({
+                type: 'text',
+                text: '游戏圈',
+                style: {
+                    left: screenLeft,
+                    top: screenTop,
+                    width: btnWidth,
+                    height: btnHeight,
+                    color: '#ffffff',
+                    textAlign: 'center',
+                    fontSize: 15,
+                    borderRadius: 17,
+                    backgroundColor: '#2ecc71',
+                    borderColor: '#27ae60',
+                    borderWidth: 1,
+                    lineHeight: btnHeight,
+                },
+            });
+
+            // 按钮创建后默认可见，先隐藏（等待 GameManager 控制显隐）
+            this.button.hide();
+            this._visible = false;
+
+            // 点击回调（微信会自动跳转游戏圈，这里仅做日志）
+            this.button.onTap(() => {
+                console.log('[GameClub] 游戏圈按钮被点击');
+            });
+
+            console.log('[GameClub] 游戏圈按钮创建成功');
+        } catch (e) {
+            console.error('[GameClub] 创建按钮异常:', e);
+            this.button = null;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  公开接口
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** 显示游戏圈按钮 */
+    public show(): void {
+        if (!this.button) return;
+        if (this._visible) return; // 已可见，不重复
+        this.button.show();
+        this._visible = true;
+        console.log('[GameClub] show()');
+    }
+
+    /** 隐藏游戏圈按钮 */
+    public hide(): void {
+        if (!this.button) return;
+        if (!this._visible) return; // 已隐藏，不重复
+        this.button.hide();
+        this._visible = false;
+        console.log('[GameClub] hide()');
+    }
+
+    /** 销毁按钮 */
+    public destroy(): void {
+        if (this.button) {
+            try {
+                this.button.destroy();
+            } catch (e) {
+                // ignore
+            }
+            this.button = null;
+            this._visible = false;
+        }
+    }
+
+    /**
+     * 窗口尺寸变化时重新定位（销毁旧按钮、用新尺寸重建）。
+     * @param canvasW   新的设计分辨率宽
+     * @param canvasH   新的设计分辨率高
+     * @param topInset  新的顶部安全边距
+     * @param hudHeight HUD 高度
+     */
+    public reposition(canvasW: number, canvasH: number, topInset: number, hudHeight: number): void {
+        this.canvasW = canvasW;
+        this.canvasH = canvasH;
+        this.topInset = topInset;
+        this.hudHeight = hudHeight;
+
+        // 记录旧状态，重建后恢复
+        const wasVisible = this._visible;
+        this.destroy();
+        this.createButton();
+        if (wasVisible) {
+            this.show();
+        }
+    }
+
+    /** 按钮是否已成功创建 */
+    public get isAvailable(): boolean {
+        return this.button !== null;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  NaN 安全工具
+    // ══════════════════════════════════════════════════════════════════════════
+
+    private isValidNum(v: number): boolean {
+        return typeof v === 'number' && !isNaN(v) && isFinite(v);
+    }
+
+    private safeNum(v: number, fallback: number): number {
+        return this.isValidNum(v) ? v : fallback;
+    }
+}
+```
+
+## File: assets/scripts/SaveManager.ts
+```typescript
+/**
+ * SaveManager — 进度存档持久化单例（纯数据，非 Component）
+ *
+ * 三级存储策略：
+ *   1. wx.setStorageSync / getStorageSync（微信小游戏）
+ *   2. localStorage（浏览器 / 开发者工具）
+ *   3. 内存对象兜底（以上都不可用时）
+ *
+ * 所有异常 try/catch 吞掉，绝不抛错。
+ */
+
+// 微信小游戏全局 API
+declare const wx: any;
+
+// ── 道具类型（Y1） ─────────────────────────────
+
+export type BoosterType =
+    | 'hammer'
+    | 'shuffle'
+    | 'addSteps';
+
+export interface BoosterInventory {
+    hammer: number;
+    shuffle: number;
+    addSteps: number;
+}
+
+// ── 存档结构 ────────────────────────────────
+
+interface LevelRecord {
+    cleared: boolean;
+    bestScore: number;
+}
+
+/** 怪物收藏记录（monId 0-5：0兔/1熊/2象/3鹿/4龙/5狐） */
+interface MonsterRecord {
+    count: number;  // 拥有数量
+    star: number;   // 星级 1-5
+}
+
+interface SaveData {
+    maxUnlockedLevel: number;
+    levelRecords: { [level: number]: LevelRecord };
+    gachaCoins: number;                          // 扭蛋币余额（E0）
+    collection: { [monId: number]: MonsterRecord }; // 怪物收藏（E0）
+    // Q0: 装扮系统字段
+    equippedTheme: number;                       // 当前装备的主题 id（默认 0）
+    ownedThemes: number[];                       // 已拥有的主题列表（默认 [0]）
+    equippedAccessory: number;                   // 当前装备的配饰 id（-1=无）
+    ownedAccessories: number[];                  // 已拥有的配饰列表（默认 []）
+    // R0: 设置 + 签到字段
+    soundEnabled: boolean;                       // 音效开关（默认 true）
+    vibrateEnabled: boolean;                     // 震动开关（默认 true）
+    signStreak: number;                          // 连续签到天数（默认 0）
+    lastSignDate: string;                        // 上次签到日期 YYYY-MM-DD（默认 ''）
+    signedTotal: number;                         // 累计签到天数（默认 0）
+    // Y1: 道具库存
+    boosters: BoosterInventory;                  // 持久化道具库存
+}
+
+// ── 常量 ────────────────────────────────────
+
+const SAVE_KEY = 'mxmh_save_v1';
+
+function createDefaultSave(): SaveData {
+    return {
+        maxUnlockedLevel: 1,
+        levelRecords: {},
+        gachaCoins: 0,
+        collection: {},
+        equippedTheme: 0,
+        ownedThemes: [0],
+        equippedAccessory: -1,
+        ownedAccessories: [],
+        soundEnabled: true,
+        vibrateEnabled: true,
+        signStreak: 0,
+        lastSignDate: '',
+        signedTotal: 0,
+        boosters: {
+            hammer: 2,
+            shuffle: 2,
+            addSteps: 2,
+        },
+    };
+}
+
+// ── 单例 ────────────────────────────────────
+
+export class SaveManager {
+    private static _inst: SaveManager | null = null;
+    static get inst(): SaveManager {
+        if (!SaveManager._inst) SaveManager._inst = new SaveManager();
+        return SaveManager._inst;
+    }
+
+    private _data: SaveData = createDefaultSave();
+    private _loaded = false;
+
+    // 存储后端类型（诊断用）
+    private _backend: 'wx' | 'localStorage' | 'memory' = 'memory';
+
+    private constructor() {
+        this.load();
+    }
+
+    // ── 底层读写 ────────────────────────────────
+
+    private _readRaw(): string | null {
+        // 1. 微信
+        try {
+            if (typeof wx !== 'undefined' && typeof wx.getStorageSync === 'function') {
+                this._backend = 'wx';
+                const val = wx.getStorageSync(SAVE_KEY);
+                // wx 返回 '' 表示无数据
+                if (val !== '' && val !== undefined && val !== null) return String(val);
+                return null;
+            }
+        } catch (e) { /* swallow */ }
+
+        // 2. localStorage
+        try {
+            if (typeof localStorage !== 'undefined') {
+                this._backend = 'localStorage';
+                const val = localStorage.getItem(SAVE_KEY);
+                return val;
+            }
+        } catch (e) { /* swallow */ }
+
+        // 3. 内存
+        this._backend = 'memory';
+        return null;
+    }
+
+    private _writeRaw(str: string): void {
+        // 1. 微信
+        try {
+            if (typeof wx !== 'undefined' && typeof wx.setStorageSync === 'function') {
+                wx.setStorageSync(SAVE_KEY, str);
+                return;
+            }
+        } catch (e) { /* swallow */ }
+
+        // 2. localStorage
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem(SAVE_KEY, str);
+                return;
+            }
+        } catch (e) { /* swallow */ }
+
+        // 3. 内存（写回 _data 即可，下次读内存里的）
+    }
+
+    // ── 公开 API ────────────────────────────────
+
+    /** 读取存档并缓存到内存（缺失/脏数据回退默认） */
+    load(): SaveData {
+        if (this._loaded) return this._data;
+        this._loaded = true;
+
+        const raw = this._readRaw();
+        if (!raw) {
+            this._data = createDefaultSave();
+            console.log(`[SaveManager] 无存档，使用默认值 (backend=${this._backend})`);
+            return this._data;
+        }
+
+        try {
+            const parsed = JSON.parse(raw) as Partial<SaveData>;
+            this._data = this._sanitize(parsed);
+            console.log(
+                `[SaveManager] 存档已加载 (backend=${this._backend}): ` +
+                `maxUnlocked=${this._data.maxUnlockedLevel}, ` +
+                `records=${Object.keys(this._data.levelRecords).length} 关, ` +
+                `coins=${this._data.gachaCoins}, ` +
+                `collection=${Object.keys(this._data.collection).length} 种`,
+            );
+        } catch (e) {
+            console.warn('[SaveManager] 存档解析失败，回退默认:', e);
+            this._data = createDefaultSave();
+        }
+
+        return this._data;
+    }
+
+    /** 数据清洗：脏数据/NaN 一律回退默认 */
+    private _sanitize(parsed: Partial<SaveData>): SaveData {
+        const result = createDefaultSave();
+
+        // maxUnlockedLevel
+        const mul = parsed.maxUnlockedLevel;
+        if (typeof mul === 'number' && !isNaN(mul) && isFinite(mul) && mul >= 1) {
+            result.maxUnlockedLevel = Math.floor(mul);
+        }
+
+        // levelRecords
+        if (parsed.levelRecords && typeof parsed.levelRecords === 'object') {
+            for (const key of Object.keys(parsed.levelRecords)) {
+                const levelNum = parseInt(key, 10);
+                if (isNaN(levelNum) || levelNum < 1) continue;
+
+                const rec = parsed.levelRecords[key];
+                if (!rec || typeof rec !== 'object') continue;
+
+                const cleared = rec.cleared === true;
+                const bestScore = (typeof rec.bestScore === 'number' && !isNaN(rec.bestScore) && isFinite(rec.bestScore))
+                    ? Math.max(0, Math.floor(rec.bestScore))
+                    : 0;
+
+                result.levelRecords[levelNum] = { cleared, bestScore };
+            }
+        }
+
+        // gachaCoins（E0：向后兼容，老存档无此字段则默认 0）
+        const coins = parsed.gachaCoins;
+        if (typeof coins === 'number' && !isNaN(coins) && isFinite(coins) && coins >= 0) {
+            result.gachaCoins = Math.floor(coins);
+        }
+
+        // collection（E0：向后兼容，老存档无此字段则默认空）
+        if (parsed.collection && typeof parsed.collection === 'object') {
+            for (const key of Object.keys(parsed.collection)) {
+                const monId = parseInt(key, 10);
+                if (isNaN(monId) || monId < 0 || monId > 5) continue;
+
+                const rec = parsed.collection[key];
+                if (!rec || typeof rec !== 'object') continue;
+
+                const count = (typeof rec.count === 'number' && !isNaN(rec.count) && isFinite(rec.count) && rec.count >= 0)
+                    ? Math.floor(rec.count) : 0;
+                const star = (typeof rec.star === 'number' && !isNaN(rec.star) && isFinite(rec.star) && rec.star >= 1 && rec.star <= 5)
+                    ? Math.floor(rec.star) : 1;
+
+                // count > 0 才记录（count=0 不入库，getMonster 会返回默认）
+                if (count > 0) {
+                    result.collection[monId] = { count, star };
+                }
+            }
+        }
+
+        // Q0: 装扮系统字段（向后兼容，老存档无则补默认）
+        const equippedTheme = (typeof parsed.equippedTheme === 'number' && !isNaN(parsed.equippedTheme) && isFinite(parsed.equippedTheme))
+            ? Math.floor(parsed.equippedTheme) : 0;
+        const ownedThemes = (Array.isArray(parsed.ownedThemes))
+            ? parsed.ownedThemes.filter((t: any) => typeof t === 'number' && !isNaN(t) && isFinite(t)).map((t: number) => Math.floor(t))
+            : [0];
+        // equippedTheme 必须在 ownedThemes 内，否则回退 0
+        result.equippedTheme = ownedThemes.includes(equippedTheme) ? equippedTheme : 0;
+        // 确保 ownedThemes 至少含 0
+        if (!ownedThemes.includes(0)) ownedThemes.push(0);
+        result.ownedThemes = ownedThemes;
+
+        const equippedAccessory = (typeof parsed.equippedAccessory === 'number' && !isNaN(parsed.equippedAccessory) && isFinite(parsed.equippedAccessory))
+            ? Math.floor(parsed.equippedAccessory) : -1;
+        const ownedAccessories = (Array.isArray(parsed.ownedAccessories))
+            ? parsed.ownedAccessories.filter((a: any) => typeof a === 'number' && !isNaN(a) && isFinite(a)).map((a: number) => Math.floor(a))
+            : [];
+        // equippedAccessory 必须在 ownedAccessories 内（-1 表示无配饰，永远合法）
+        result.equippedAccessory = (equippedAccessory === -1 || ownedAccessories.includes(equippedAccessory)) ? equippedAccessory : -1;
+        result.ownedAccessories = ownedAccessories;
+
+        // R0: 设置 + 签到字段（向后兼容，老存档无则补默认）
+        result.soundEnabled = (typeof parsed.soundEnabled === 'boolean') ? parsed.soundEnabled : true;
+        result.vibrateEnabled = (typeof parsed.vibrateEnabled === 'boolean') ? parsed.vibrateEnabled : true;
+
+        // signStreak: 非数/NaN → 0，越界 clamp 0-7
+        const rawStreak = parsed.signStreak;
+        if (typeof rawStreak === 'number' && !isNaN(rawStreak) && isFinite(rawStreak)) {
+            result.signStreak = Math.max(0, Math.min(7, Math.floor(rawStreak)));
+        } else {
+            result.signStreak = 0;
+        }
+
+        // lastSignDate: 非字符串 → ''
+        result.lastSignDate = (typeof parsed.lastSignDate === 'string') ? parsed.lastSignDate : '';
+
+        // signedTotal: 负/NaN/非数 → 0
+        const rawTotal = parsed.signedTotal;
+        if (typeof rawTotal === 'number' && !isNaN(rawTotal) && isFinite(rawTotal) && rawTotal >= 0) {
+            result.signedTotal = Math.floor(rawTotal);
+        } else {
+            result.signedTotal = 0;
+        }
+
+        // Y1: 道具库存清洗（向后兼容，老存档无则补默认 {2,2,2}）
+        const rawBoosters =
+            parsed.boosters &&
+            typeof parsed.boosters === 'object'
+                ? parsed.boosters
+                : null;
+
+        if (rawBoosters) {
+            result.boosters = {
+                hammer: this._sanitizeBoosterCount(
+                    (rawBoosters as any).hammer,
+                    2,
+                ),
+                shuffle: this._sanitizeBoosterCount(
+                    (rawBoosters as any).shuffle,
+                    2,
+                ),
+                addSteps: this._sanitizeBoosterCount(
+                    (rawBoosters as any).addSteps,
+                    2,
+                ),
+            };
+        }
+
+        return result;
+    }
+
+    /** Y1: 道具数量清洗 — NaN/Infinity 回退，clamp 0-99 */
+    private _sanitizeBoosterCount(
+        value: unknown,
+        fallback: number,
+    ): number {
+        if (
+            typeof value !== 'number' ||
+            !isFinite(value) ||
+            isNaN(value)
+        ) {
+            return fallback;
+        }
+
+        return Math.max(
+            0,
+            Math.min(99, Math.floor(value)),
+        );
+    }
+
+    /** 获取当前最大已解锁关卡（至少为 1） */
+    getMaxUnlocked(): number {
+        this.load();
+        return Math.max(1, this._data.maxUnlockedLevel);
+    }
+
+    /** 判断某关是否已通关 */
+    isCleared(level: number): boolean {
+        this.load();
+        const rec = this._data.levelRecords[level];
+        return rec ? rec.cleared : false;
+    }
+
+    /** 获取某关最高分（未通关返回 0） */
+    getBestScore(level: number): number {
+        this.load();
+        const rec = this._data.levelRecords[level];
+        return rec ? rec.bestScore : 0;
+    }
+
+    /**
+     * 标记某关已通关，更新最高分，解锁下一关，立即写盘。
+     * @param level  关卡编号（1~N）
+     * @param score  本关得分
+     */
+    markCleared(level: number, score: number): void {
+        this.load();
+
+        // 防护
+        const safeLevel = (typeof level === 'number' && !isNaN(level) && isFinite(level) && level >= 1)
+            ? Math.floor(level) : 1;
+        const safeScore = (typeof score === 'number' && !isNaN(score) && isFinite(score))
+            ? Math.max(0, Math.floor(score)) : 0;
+
+        // 更新通关记录
+        const existing = this._data.levelRecords[safeLevel] ?? { cleared: false, bestScore: 0 };
+        existing.cleared = true;
+        existing.bestScore = Math.max(existing.bestScore, safeScore);
+        this._data.levelRecords[safeLevel] = existing;
+
+        // 解锁下一关
+        const nextLevel = safeLevel + 1;
+        if (nextLevel > this._data.maxUnlockedLevel) {
+            this._data.maxUnlockedLevel = nextLevel;
+        }
+
+        // 立即写盘
+        this._flush();
+
+        console.log(
+            `[SaveManager] markCleared: level=${safeLevel} score=${safeScore} ` +
+            `→ maxUnlocked=${this._data.maxUnlockedLevel} ` +
+            `best=${existing.bestScore} cleared=${existing.cleared}`,
+        );
+    }
+
+    // ── 扭蛋币 API（E0） ─────────────────────────
+
+    /** 获取扭蛋币余额 */
+    getCoins(): number {
+        this.load();
+        return Math.max(0, this._data.gachaCoins);
+    }
+
+    /** 增加扭蛋币 */
+    addCoins(n: number): void {
+        this.load();
+        const safeN = (typeof n === 'number' && !isNaN(n) && isFinite(n))
+            ? Math.max(0, Math.floor(n)) : 0;
+        if (safeN <= 0) return;
+        this._data.gachaCoins += safeN;
+        this._flush();
+        console.log(`[SaveManager] addCoins(+${safeN}) → 余额=${this._data.gachaCoins}`);
+    }
+
+    /** 消费扭蛋币（不足返回 false 不扣） */
+    spendCoins(n: number): boolean {
+        this.load();
+        const safeN = (typeof n === 'number' && !isNaN(n) && isFinite(n))
+            ? Math.max(0, Math.floor(n)) : 0;
+        if (safeN <= 0) return true;
+        if (this._data.gachaCoins < safeN) return false;
+        this._data.gachaCoins -= safeN;
+        this._flush();
+        console.log(`[SaveManager] spendCoins(-${safeN}) → 余额=${this._data.gachaCoins}`);
+        return true;
+    }
+
+    // ── 怪物收藏 API（E0） ────────────────────────
+
+    /** 获取整个收藏表（只读引用，外部不应修改） */
+    getCollection(): { [monId: number]: MonsterRecord } {
+        this.load();
+        return this._data.collection;
+    }
+
+    /** 获取某怪物记录（未拥有返回 {count:0, star:0}） */
+    getMonster(id: number): MonsterRecord {
+        this.load();
+        const safeId = this._safeMonId(id);
+        const rec = this._data.collection[safeId];
+        return rec ? { count: rec.count, star: rec.star } : { count: 0, star: 0 };
+    }
+
+    /** 增加一个怪物（count+1，首次获得 star 置 1，立即写盘） */
+    addMonster(id: number): void {
+        this.load();
+        const safeId = this._safeMonId(id);
+        const existing = this._data.collection[safeId];
+        if (existing) {
+            existing.count += 1;
+        } else {
+            this._data.collection[safeId] = { count: 1, star: 1 };
+        }
+        this._flush();
+        const rec = this._data.collection[safeId];
+        console.log(`[SaveManager] addMonster(id=${safeId}) → count=${rec.count} star=${rec.star}`);
+    }
+
+    /** 升星（count>=3 时 count-=3、star+1(上限5)、写盘返回 true，否则 false） */
+    upgradeStar(id: number): boolean {
+        this.load();
+        const safeId = this._safeMonId(id);
+        const rec = this._data.collection[safeId];
+        if (!rec || rec.count < 3) return false;
+        if (rec.star >= 5) return false;
+        rec.count -= 3;
+        rec.star += 1;
+        // count 降到 0 时不删除记录（保留 star 信息）
+        this._flush();
+        console.log(`[SaveManager] upgradeStar(id=${safeId}) → count=${rec.count} star=${rec.star}`);
+        return true;
+    }
+
+    // ── 收藏内部工具 ──────────────────────────────
+
+    /** monId 安全校验（0-5，非法回退 0） */
+    private _safeMonId(id: number): number {
+        if (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 5) {
+            return Math.floor(id);
+        }
+        return 0;
+    }
+
+    /** 仅更新最高分（不改变通关状态/解锁），用于失败时也记录 bestScore */
+    updateBestScore(level: number, score: number): void {
+        this.load();
+
+        const safeLevel = (typeof level === 'number' && !isNaN(level) && isFinite(level) && level >= 1)
+            ? Math.floor(level) : 1;
+        const safeScore = (typeof score === 'number' && !isNaN(score) && isFinite(score))
+            ? Math.max(0, Math.floor(score)) : 0;
+
+        const existing = this._data.levelRecords[safeLevel] ?? { cleared: false, bestScore: 0 };
+        if (safeScore > existing.bestScore) {
+            existing.bestScore = safeScore;
+            this._data.levelRecords[safeLevel] = existing;
+            this._flush();
+        }
+    }
+
+    /** 调试用：清空所有存档 */
+    resetAll(): void {
+        this._data = createDefaultSave();
+        this._flush();
+        console.log('[SaveManager] 存档已清空');
+    }
+
+    // ── 装扮系统 API（Q0） ───────────────────────
+
+    /** 获取当前装备的主题 id */
+    getEquippedTheme(): number {
+        this.load();
+        return this._data.equippedTheme;
+    }
+
+    /** 设置当前装备的主题 id（必须已拥有，每次写盘） */
+    setEquippedTheme(id: number): void {
+        this.load();
+        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 3) ? Math.floor(id) : 0;
+        if (!this._data.ownedThemes.includes(safeId)) return;
+        this._data.equippedTheme = safeId;
+        this._flush();
+    }
+
+    /** 获取已拥有的主题列表 */
+    getOwnedThemes(): number[] {
+        this.load();
+        return [...this._data.ownedThemes];
+    }
+
+    /** 拥有某主题（加入列表并写盘） */
+    ownTheme(id: number): void {
+        this.load();
+        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 3) ? Math.floor(id) : 0;
+        if (!this._data.ownedThemes.includes(safeId)) {
+            this._data.ownedThemes.push(safeId);
+            this._flush();
+        }
+    }
+
+    /** 获取当前装备的配饰 id（-1=无） */
+    getEquippedAccessory(): number {
+        this.load();
+        return this._data.equippedAccessory;
+    }
+
+    /** 设置当前装备的配饰 id（必须已拥有，-1 表示取下，每次写盘） */
+    setEquippedAccessory(id: number): void {
+        this.load();
+        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= -1 && id <= 2) ? Math.floor(id) : -1;
+        if (safeId !== -1 && !this._data.ownedAccessories.includes(safeId)) return;
+        this._data.equippedAccessory = safeId;
+        this._flush();
+    }
+
+    /** 获取已拥有的配饰列表 */
+    getOwnedAccessories(): number[] {
+        this.load();
+        return [...this._data.ownedAccessories];
+    }
+
+    /** 拥有某配饰（加入列表并写盘） */
+    ownAccessory(id: number): void {
+        this.load();
+        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 2) ? Math.floor(id) : 0;
+        if (!this._data.ownedAccessories.includes(safeId)) {
+            this._data.ownedAccessories.push(safeId);
+            this._flush();
+        }
+    }
+
+    // ── 设置 + 签到 API（R0） ─────────────────────
+
+    /** 获取音效开关 */
+    getSoundEnabled(): boolean {
+        this.load();
+        return this._data.soundEnabled;
+    }
+
+    /** 设置音效开关并写盘 */
+    setSoundEnabled(enabled: boolean): void {
+        this.load();
+        this._data.soundEnabled = (enabled === true);
+        this._flush();
+    }
+
+    /** 获取震动开关 */
+    getVibrateEnabled(): boolean {
+        this.load();
+        return this._data.vibrateEnabled;
+    }
+
+    /** 设置震动开关并写盘 */
+    setVibrateEnabled(enabled: boolean): void {
+        this.load();
+        this._data.vibrateEnabled = (enabled === true);
+        this._flush();
+    }
+
+    /** 获取签到数据 */
+    getSignData(): { streak: number; lastDate: string; total: number } {
+        this.load();
+        return {
+            streak: this._data.signStreak,
+            lastDate: this._data.lastSignDate,
+            total: this._data.signedTotal,
+        };
+    }
+
+    /** 写入签到数据并写盘 */
+    writeSignData(streak: number, dateStr: string, total: number): void {
+        this.load();
+        // streak clamp 0-7
+        this._data.signStreak = (typeof streak === 'number' && !isNaN(streak) && isFinite(streak))
+            ? Math.max(0, Math.min(7, Math.floor(streak))) : 0;
+        // dateStr 必须是字符串
+        this._data.lastSignDate = (typeof dateStr === 'string') ? dateStr : '';
+        // total 非负整数
+        this._data.signedTotal = (typeof total === 'number' && !isNaN(total) && isFinite(total) && total >= 0)
+            ? Math.floor(total) : 0;
+        this._flush();
+    }
+
+    // ── 道具库存 API（Y1） ───────────────────────
+
+    /** 获取道具库存副本（不暴露内部引用） */
+    getBoosterInventory(): BoosterInventory {
+        this.load();
+        return {
+            hammer: this._data.boosters.hammer,
+            shuffle: this._data.boosters.shuffle,
+            addSteps: this._data.boosters.addSteps,
+        };
+    }
+
+    /** 获取指定道具数量 */
+    getBoosterCount(type: BoosterType): number {
+        this.load();
+        switch (type) {
+            case 'hammer': return this._data.boosters.hammer;
+            case 'shuffle': return this._data.boosters.shuffle;
+            case 'addSteps': return this._data.boosters.addSteps;
+            default: return 0;
+        }
+    }
+
+    /** 增加道具（clamp 到 99，立即写盘） */
+    addBooster(type: BoosterType, amount: number = 1): void {
+        this.load();
+        if (typeof amount !== 'number' || !isFinite(amount) || isNaN(amount) || amount <= 0) return;
+        const add = Math.floor(amount);
+        if (add <= 0) return;
+
+        switch (type) {
+            case 'hammer':
+                this._data.boosters.hammer = Math.min(99, this._data.boosters.hammer + add);
+                break;
+            case 'shuffle':
+                this._data.boosters.shuffle = Math.min(99, this._data.boosters.shuffle + add);
+                break;
+            case 'addSteps':
+                this._data.boosters.addSteps = Math.min(99, this._data.boosters.addSteps + add);
+                break;
+            default:
+                return;
+        }
+        this._flush();
+        console.log(`[SaveManager] addBooster(${type},+${add}) → ${this.getBoosterCount(type)}`);
+    }
+
+    /** 消耗道具（不足返回 false 不扣，成功返回 true） */
+    spendBooster(type: BoosterType, amount: number = 1): boolean {
+        this.load();
+        if (typeof amount !== 'number' || !isFinite(amount) || isNaN(amount) || amount <= 0) return false;
+        const cost = Math.floor(amount);
+        if (cost <= 0) return false;
+
+        const current = this.getBoosterCount(type);
+        if (current < cost) return false;
+
+        switch (type) {
+            case 'hammer':
+                this._data.boosters.hammer = Math.max(0, this._data.boosters.hammer - cost);
+                break;
+            case 'shuffle':
+                this._data.boosters.shuffle = Math.max(0, this._data.boosters.shuffle - cost);
+                break;
+            case 'addSteps':
+                this._data.boosters.addSteps = Math.max(0, this._data.boosters.addSteps - cost);
+                break;
+            default:
+                return false;
+        }
+        this._flush();
+        console.log(`[SaveManager] spendBooster(${type},-${cost}) → ${this.getBoosterCount(type)}`);
+        return true;
+    }
+
+    // ── 内部 ────────────────────────────────────
+
+    private _flush(): void {
+        try {
+            const str = JSON.stringify(this._data);
+            this._writeRaw(str);
+        } catch (e) {
+            console.warn('[SaveManager] 写盘失败:', e);
+        }
+    }
+}
+```
+
+## File: assets/scripts/Board.ts
+```typescript
 import {
     _decorator,
     Component,
@@ -4672,12 +6507,10 @@ return { cells, waveSeeds, isFullBoardClear: false };
             .start();
     }
 }
+```
 
-</file>
-
-<file path="assets/scripts/GameManager.ts">
-(7107 lines)
-
+## File: assets/scripts/GameManager.ts
+```typescript
 import {
     _decorator,
     Component,
@@ -11393,11 +13226,11 @@ export class GameManager extends Component {
     /** R3: 每日签到奖励表（7天） */
     private static readonly SIGN_REWARDS: { coins: number; booster?: BoosterType; extra: string }[] = [
         { coins: 20, extra: '' },
-        { coins: 30, booster: 'hammer', extra: '+🔨锤子' },
+        { coins: 30, booster: 'hammer', extra: '🔨×1' },
         { coins: 40, extra: '' },
-        { coins: 50, booster: 'shuffle', extra: '+🔀洗牌' },
+        { coins: 50, booster: 'shuffle', extra: '🔀×1' },
         { coins: 60, extra: '' },
-        { coins: 80, booster: 'addSteps', extra: '+👣+3步' },
+        { coins: 80, booster: 'addSteps', extra: '👣+3×1' },
         { coins: 100, extra: '+🎁免费抽' },
     ];
 
@@ -11767,7 +13600,9 @@ export class GameManager extends Component {
         // Y1: 第2/4/6天额外发道具
         if (reward.booster) {
             SaveManager.inst.addBooster(reward.booster, 1);
-            console.log(`[Sign] 道具奖励: +1 ${reward.booster}`);
+            this.syncBoosterInventory();
+            this.updateBoosterUI();
+            console.log(`[DailySign] 获得道具 ${reward.booster} ×1`);
         }
 
         // 第7天额外发等值金币占位（100币 = 1次抽卡券等值）
@@ -11785,1809 +13620,4 @@ export class GameManager extends Component {
         this.refreshDailySignPanel();
     }
 }
-
-</file>
-
-<file path="assets/scripts/AudioManager.ts">
-(290 lines)
-
-import { _decorator, Component, AudioClip, AudioSource, resources } from 'cc';
-import { SaveManager } from './SaveManager';
-const { ccclass } = _decorator;
-
-// 微信小游戏全局 API
-declare const wx: any;
-
-@ccclass('AudioManager')
-export class AudioManager extends Component {
-    private static _inst: AudioManager | null = null;
-    public static get inst(): AudioManager | null { return AudioManager._inst; }
-
-    volume: number = 0.8;
-    private _src!: AudioSource;
-    private _clips: Record<string, AudioClip | null> = {
-        click: null, swap: null, match: null, fall: null, win: null, lose: null,
-        fx_line: null, fx_bomb: null, fx_colorbomb: null,
-    };
-    private _combo: (AudioClip | null)[] = [null, null, null, null, null, null]; // 下标 1..5
-
-    // 微信原生 InnerAudioContext（每个音效一个，复用）
-    private _wxCtxs: Record<string, any> = {};
-    private _wxCtxCombo: any[] = [null, null, null, null, null, null];
-    private _isWeChat = false;
-
-    // R1: 静音总开关
-    private _enabled = true;
-
-    onLoad() {
-        AudioManager._inst = this;
-        this._isWeChat = typeof wx !== 'undefined' && typeof wx.createInnerAudioContext === 'function';
-
-        // R1: 从存档读取音效开关
-        try {
-            this._enabled = SaveManager.inst.getSoundEnabled();
-        } catch (e) {
-            this._enabled = true; // 读不到就默认开
-        }
-
-        // 非微信环境才用 Cocos AudioSource
-        if (!this._isWeChat) {
-            this._src = this.getComponent(AudioSource) || this.addComponent(AudioSource);
-            this._src.loop = false;
-        }
-
-        for (const name of Object.keys(this._clips)) {
-            resources.load(`audio/${name}`, AudioClip, (e, c) => {
-                if (!e && c) {
-                    this._clips[name] = c;
-                    if (this._isWeChat) this._createWxCtx(name, c);
-                }
-            });
-        }
-        for (let i = 1; i <= 5; i++) {
-            resources.load(`audio/combo${i}`, AudioClip, (e, c) => {
-                if (!e && c) {
-                    this._combo[i] = c;
-                    if (this._isWeChat) this._createWxCtxCombo(i, c);
-                }
-            });
-        }
-    }
-
-    /** 用 AudioClip 的 nativeUrl 创建微信 InnerAudioContext */
-    private _createWxCtx(name: string, clip: AudioClip): void {
-        const src = clip.nativeUrl;
-        if (!src) { console.warn(`[Audio] nativeUrl 为空: ${name}`); return; }
-        const ctx = wx.createInnerAudioContext();
-        ctx.src = src;
-        ctx.volume = this.volume;
-        ctx.obeyMuteSwitch = false; // 关键：iOS 静音模式下也能播放
-        ctx.onError((r: any) => console.error('AUDIO_ERR', name, r.errCode, r.errMsg));
-        this._wxCtxs[name] = ctx;
-        console.log(`[Audio] wx ctx created: ${name} -> ${src}`);
-    }
-
-    private _createWxCtxCombo(idx: number, clip: AudioClip): void {
-        const src = clip.nativeUrl;
-        if (!src) { console.warn(`[Audio] nativeUrl 为空: combo${idx}`); return; }
-        const ctx = wx.createInnerAudioContext();
-        ctx.src = src;
-        ctx.volume = this.volume;
-        ctx.obeyMuteSwitch = false;
-        ctx.onError((r: any) => console.error('AUDIO_ERR', `combo${idx}`, r.errCode, r.errMsg));
-        this._wxCtxCombo[idx] = ctx;
-        console.log(`[Audio] wx ctx created: combo${idx} -> ${src}`);
-    }
-
-    onDestroy() {
-        if (AudioManager._inst === this) AudioManager._inst = null;
-        if (this._isWeChat) {
-            for (const k in this._wxCtxs) { try { this._wxCtxs[k]?.destroy(); } catch (e) { /* ignore */ } }
-            for (let i = 1; i <= 5; i++) { try { this._wxCtxCombo[i]?.destroy(); } catch (e) { /* ignore */ } }
-        }
-    }
-
-    private _play(name: string): void {
-        if (!this._enabled) return; // R1: 静音守卫
-        const clip = this._clips[name];
-        if (!clip) return;
-
-        if (this._isWeChat && this._wxCtxs[name]) {
-            // 微信原生播放
-            const ctx = this._wxCtxs[name];
-            ctx.stop();
-            ctx.volume = this.volume;
-            ctx.play();
-        } else if (this._src) {
-            // Cocos AudioSource 播放（开发者工具/浏览器）
-            this._src.clip = clip;
-            this._src.volume = this.volume;
-            this._src.play();
-        }
-    }
-
-    /** T2: 带音量加成的播放（特效音用，volMult>1 提升音量） */
-    private _playVol(name: string, volMult: number): void {
-        if (!this._enabled) return;
-        const clip = this._clips[name];
-        if (!clip) return;
-        const vol = Math.min(1, this.volume * volMult);
-        if (this._isWeChat && this._wxCtxs[name]) {
-            const ctx = this._wxCtxs[name];
-            ctx.stop();
-            ctx.volume = vol;
-            ctx.play();
-        } else if (this._src) {
-            this._src.clip = clip;
-            this._src.volume = vol;
-            this._src.play();
-        }
-    }
-
-    playClick() { this._play('click'); }
-    playSwap()  { this._play('swap'); }
-    playMatch() { this._play('match'); }
-    playFall()  { this._play('fall'); }
-    playWin()   { this._play('win'); }
-    playLose()  { this._play('lose'); }
-
-    // T2: 特效音效——专属 clip 优先 → 差异化降级（比普通消除更重/更亮） → match/win 兜底
-    playSpecialLine(): void {
-        try {
-            if (this._clips['fx_line']) { this._playVol('fx_line', 1.15); return; }
-            // 降级：combo3 单发（比普通 match 高一档）
-            if (this._playComboClipVol(3, 1.15)) return;
-            this._play('match'); // 最终兜底
-        } catch (e) { try { this._play('match'); } catch (_) { /* ignore */ } }
-    }
-    playSpecialBomb(): void {
-        if (!this._enabled) return;
-        try {
-            if (this._clips['fx_bomb']) { this._playVol('fx_bomb', 1.2); return; }
-            // 降级：微信环境叠播 match+win 制造「轰」感；非微信走 combo1 低音
-            if (this._isWeChat) {
-                let played = false;
-                if (this._wxCtxs['match']) {
-                    try { this._wxCtxs['match'].stop(); this._wxCtxs['match'].volume = Math.min(1, this.volume * 1.2); this._wxCtxs['match'].play(); } catch (_) { /* ignore */ }
-                    played = true;
-                }
-                if (this._wxCtxs['win']) {
-                    try { this._wxCtxs['win'].stop(); this._wxCtxs['win'].volume = Math.min(1, this.volume * 1.2); this._wxCtxs['win'].play(); } catch (_) { /* ignore */ }
-                    played = true;
-                }
-                if (played) return;
-            }
-            // 非微信或无 match/win：combo1 最低音
-            if (this._playComboClipVol(1, 1.2)) return;
-            this._play('match'); // 最终兜底
-        } catch (e) { try { this._play('match'); } catch (_) { /* ignore */ } }
-    }
-    playSpecialColorBomb(): void {
-        if (!this._enabled) return;
-        try {
-            if (this._clips['fx_colorbomb']) { this._playVol('fx_colorbomb', 1.2); return; }
-            // 降级：combo1→3→5 上行三连音（拉开气势）
-            if (this._isWeChat) {
-                let any = false;
-                [1, 3, 5].forEach((idx, i) => {
-                    if (this._wxCtxCombo[idx]) {
-                        any = true;
-                        this.scheduleOnce(() => {
-                            try {
-                                this._wxCtxCombo[idx]?.stop();
-                                this._wxCtxCombo[idx].volume = Math.min(1, this.volume * 1.2);
-                                this._wxCtxCombo[idx]?.play();
-                            } catch (_) { /* ignore */ }
-                        }, i * 0.08);
-                    }
-                });
-                if (any) return;
-            } else {
-                // 非微信：单 AudioSource 只能播一个，取最高 combo 模拟华丽感
-                for (let i = 5; i >= 1; i--) {
-                    if (this._combo[i]) { this._playComboClipVol(i, 1.2); return; }
-                }
-            }
-            this._play('win'); // 最终兜底
-        } catch (e) { try { this._play('win'); } catch (_) { /* ignore */ } }
-    }
-
-    /** 播放 combo 音效（按下标 1..5），返回是否成功播放 */
-    private _playComboClip(idx: number): boolean {
-        if (!this._enabled) return false; // R1: 静音守卫
-        if (this._isWeChat && this._wxCtxCombo[idx]) {
-            try { this._wxCtxCombo[idx].stop(); this._wxCtxCombo[idx].volume = this.volume; this._wxCtxCombo[idx].play(); } catch (e) { return false; }
-            return true;
-        }
-        if (!this._isWeChat && this._combo[idx] && this._src) {
-            this._src.clip = this._combo[idx];
-            this._src.volume = this.volume;
-            this._src.play();
-            return true;
-        }
-        return false;
-    }
-
-    /** T2: 带音量加成的 combo 播放 */
-    private _playComboClipVol(idx: number, volMult: number): boolean {
-        if (!this._enabled) return false;
-        const vol = Math.min(1, this.volume * volMult);
-        if (this._isWeChat && this._wxCtxCombo[idx]) {
-            try { this._wxCtxCombo[idx].stop(); this._wxCtxCombo[idx].volume = vol; this._wxCtxCombo[idx].play(); } catch (e) { return false; }
-            return true;
-        }
-        if (!this._isWeChat && this._combo[idx] && this._src) {
-            this._src.clip = this._combo[idx];
-            this._src.volume = vol;
-            this._src.play();
-            return true;
-        }
-        return false;
-    }
-
-    // 连击第 n 段（n 从 1 起）：音调随 n 升高；缺档往下取最近，全缺退回 match
-    playCombo(n: number): void {
-        if (!this._enabled) return; // R1: 静音守卫
-        const idx = Math.min(Math.max(n, 1), 5);
-
-        if (this._isWeChat) {
-            let ctx: any = null;
-            for (let i = idx; i >= 1; i--) {
-                if (this._wxCtxCombo[i]) { ctx = this._wxCtxCombo[i]; break; }
-            }
-            if (!ctx) ctx = this._wxCtxs['match'];
-            if (ctx) {
-                ctx.stop();
-                ctx.play();
-            }
-        } else {
-            let clip: AudioClip | null = null;
-            for (let i = idx; i >= 1; i--) { if (this._combo[i]) { clip = this._combo[i]; break; } }
-            if (!clip) clip = this._clips['match'];
-            if (clip && this._src) {
-                this._src.clip = clip;
-                this._src.volume = this.volume;
-                this._src.play();
-            }
-        }
-    }
-
-    // ── R1: 静音总开关 ─────────────────────────────
-
-    /** 设置静音开关；关闭时停掉正在播放的音频 */
-    setEnabled(on: boolean): void {
-        this._enabled = (on === true);
-        if (!this._enabled) {
-            // 停掉正在播放的音频
-            try {
-                if (this._isWeChat) {
-                    for (const k in this._wxCtxs) {
-                        try { this._wxCtxs[k]?.stop(); } catch (e) { /* ignore */ }
-                    }
-                    for (let i = 1; i <= 5; i++) {
-                        try { this._wxCtxCombo[i]?.stop(); } catch (e) { /* ignore */ }
-                    }
-                } else if (this._src) {
-                    this._src.stop();
-                }
-            } catch (e) { /* ignore */ }
-        }
-        // 写入存档
-        try { SaveManager.inst.setSoundEnabled(this._enabled); } catch (e) { /* ignore */ }
-    }
-
-    /** 获取当前静音开关状态 */
-    getEnabled(): boolean {
-        return this._enabled;
-    }
-}
-
-</file>
-
-<file path="assets/scripts/SaveManager.ts">
-(701 lines)
-
-/**
- * SaveManager — 进度存档持久化单例（纯数据，非 Component）
- *
- * 三级存储策略：
- *   1. wx.setStorageSync / getStorageSync（微信小游戏）
- *   2. localStorage（浏览器 / 开发者工具）
- *   3. 内存对象兜底（以上都不可用时）
- *
- * 所有异常 try/catch 吞掉，绝不抛错。
- */
-
-// 微信小游戏全局 API
-declare const wx: any;
-
-// ── 道具类型（Y1） ─────────────────────────────
-
-export type BoosterType =
-    | 'hammer'
-    | 'shuffle'
-    | 'addSteps';
-
-export interface BoosterInventory {
-    hammer: number;
-    shuffle: number;
-    addSteps: number;
-}
-
-// ── 存档结构 ────────────────────────────────
-
-interface LevelRecord {
-    cleared: boolean;
-    bestScore: number;
-}
-
-/** 怪物收藏记录（monId 0-5：0兔/1熊/2象/3鹿/4龙/5狐） */
-interface MonsterRecord {
-    count: number;  // 拥有数量
-    star: number;   // 星级 1-5
-}
-
-interface SaveData {
-    maxUnlockedLevel: number;
-    levelRecords: { [level: number]: LevelRecord };
-    gachaCoins: number;                          // 扭蛋币余额（E0）
-    collection: { [monId: number]: MonsterRecord }; // 怪物收藏（E0）
-    // Q0: 装扮系统字段
-    equippedTheme: number;                       // 当前装备的主题 id（默认 0）
-    ownedThemes: number[];                       // 已拥有的主题列表（默认 [0]）
-    equippedAccessory: number;                   // 当前装备的配饰 id（-1=无）
-    ownedAccessories: number[];                  // 已拥有的配饰列表（默认 []）
-    // R0: 设置 + 签到字段
-    soundEnabled: boolean;                       // 音效开关（默认 true）
-    vibrateEnabled: boolean;                     // 震动开关（默认 true）
-    signStreak: number;                          // 连续签到天数（默认 0）
-    lastSignDate: string;                        // 上次签到日期 YYYY-MM-DD（默认 ''）
-    signedTotal: number;                         // 累计签到天数（默认 0）
-    // Y1: 道具库存
-    boosters: BoosterInventory;                  // 持久化道具库存
-}
-
-// ── 常量 ────────────────────────────────────
-
-const SAVE_KEY = 'mxmh_save_v1';
-
-function createDefaultSave(): SaveData {
-    return {
-        maxUnlockedLevel: 1,
-        levelRecords: {},
-        gachaCoins: 0,
-        collection: {},
-        equippedTheme: 0,
-        ownedThemes: [0],
-        equippedAccessory: -1,
-        ownedAccessories: [],
-        soundEnabled: true,
-        vibrateEnabled: true,
-        signStreak: 0,
-        lastSignDate: '',
-        signedTotal: 0,
-        boosters: {
-            hammer: 2,
-            shuffle: 2,
-            addSteps: 2,
-        },
-    };
-}
-
-// ── 单例 ────────────────────────────────────
-
-export class SaveManager {
-    private static _inst: SaveManager | null = null;
-    static get inst(): SaveManager {
-        if (!SaveManager._inst) SaveManager._inst = new SaveManager();
-        return SaveManager._inst;
-    }
-
-    private _data: SaveData = createDefaultSave();
-    private _loaded = false;
-
-    // 存储后端类型（诊断用）
-    private _backend: 'wx' | 'localStorage' | 'memory' = 'memory';
-
-    private constructor() {
-        this.load();
-    }
-
-    // ── 底层读写 ────────────────────────────────
-
-    private _readRaw(): string | null {
-        // 1. 微信
-        try {
-            if (typeof wx !== 'undefined' && typeof wx.getStorageSync === 'function') {
-                this._backend = 'wx';
-                const val = wx.getStorageSync(SAVE_KEY);
-                // wx 返回 '' 表示无数据
-                if (val !== '' && val !== undefined && val !== null) return String(val);
-                return null;
-            }
-        } catch (e) { /* swallow */ }
-
-        // 2. localStorage
-        try {
-            if (typeof localStorage !== 'undefined') {
-                this._backend = 'localStorage';
-                const val = localStorage.getItem(SAVE_KEY);
-                return val;
-            }
-        } catch (e) { /* swallow */ }
-
-        // 3. 内存
-        this._backend = 'memory';
-        return null;
-    }
-
-    private _writeRaw(str: string): void {
-        // 1. 微信
-        try {
-            if (typeof wx !== 'undefined' && typeof wx.setStorageSync === 'function') {
-                wx.setStorageSync(SAVE_KEY, str);
-                return;
-            }
-        } catch (e) { /* swallow */ }
-
-        // 2. localStorage
-        try {
-            if (typeof localStorage !== 'undefined') {
-                localStorage.setItem(SAVE_KEY, str);
-                return;
-            }
-        } catch (e) { /* swallow */ }
-
-        // 3. 内存（写回 _data 即可，下次读内存里的）
-    }
-
-    // ── 公开 API ────────────────────────────────
-
-    /** 读取存档并缓存到内存（缺失/脏数据回退默认） */
-    load(): SaveData {
-        if (this._loaded) return this._data;
-        this._loaded = true;
-
-        const raw = this._readRaw();
-        if (!raw) {
-            this._data = createDefaultSave();
-            console.log(`[SaveManager] 无存档，使用默认值 (backend=${this._backend})`);
-            return this._data;
-        }
-
-        try {
-            const parsed = JSON.parse(raw) as Partial<SaveData>;
-            this._data = this._sanitize(parsed);
-            console.log(
-                `[SaveManager] 存档已加载 (backend=${this._backend}): ` +
-                `maxUnlocked=${this._data.maxUnlockedLevel}, ` +
-                `records=${Object.keys(this._data.levelRecords).length} 关, ` +
-                `coins=${this._data.gachaCoins}, ` +
-                `collection=${Object.keys(this._data.collection).length} 种`,
-            );
-        } catch (e) {
-            console.warn('[SaveManager] 存档解析失败，回退默认:', e);
-            this._data = createDefaultSave();
-        }
-
-        return this._data;
-    }
-
-    /** 数据清洗：脏数据/NaN 一律回退默认 */
-    private _sanitize(parsed: Partial<SaveData>): SaveData {
-        const result = createDefaultSave();
-
-        // maxUnlockedLevel
-        const mul = parsed.maxUnlockedLevel;
-        if (typeof mul === 'number' && !isNaN(mul) && isFinite(mul) && mul >= 1) {
-            result.maxUnlockedLevel = Math.floor(mul);
-        }
-
-        // levelRecords
-        if (parsed.levelRecords && typeof parsed.levelRecords === 'object') {
-            for (const key of Object.keys(parsed.levelRecords)) {
-                const levelNum = parseInt(key, 10);
-                if (isNaN(levelNum) || levelNum < 1) continue;
-
-                const rec = parsed.levelRecords[key];
-                if (!rec || typeof rec !== 'object') continue;
-
-                const cleared = rec.cleared === true;
-                const bestScore = (typeof rec.bestScore === 'number' && !isNaN(rec.bestScore) && isFinite(rec.bestScore))
-                    ? Math.max(0, Math.floor(rec.bestScore))
-                    : 0;
-
-                result.levelRecords[levelNum] = { cleared, bestScore };
-            }
-        }
-
-        // gachaCoins（E0：向后兼容，老存档无此字段则默认 0）
-        const coins = parsed.gachaCoins;
-        if (typeof coins === 'number' && !isNaN(coins) && isFinite(coins) && coins >= 0) {
-            result.gachaCoins = Math.floor(coins);
-        }
-
-        // collection（E0：向后兼容，老存档无此字段则默认空）
-        if (parsed.collection && typeof parsed.collection === 'object') {
-            for (const key of Object.keys(parsed.collection)) {
-                const monId = parseInt(key, 10);
-                if (isNaN(monId) || monId < 0 || monId > 5) continue;
-
-                const rec = parsed.collection[key];
-                if (!rec || typeof rec !== 'object') continue;
-
-                const count = (typeof rec.count === 'number' && !isNaN(rec.count) && isFinite(rec.count) && rec.count >= 0)
-                    ? Math.floor(rec.count) : 0;
-                const star = (typeof rec.star === 'number' && !isNaN(rec.star) && isFinite(rec.star) && rec.star >= 1 && rec.star <= 5)
-                    ? Math.floor(rec.star) : 1;
-
-                // count > 0 才记录（count=0 不入库，getMonster 会返回默认）
-                if (count > 0) {
-                    result.collection[monId] = { count, star };
-                }
-            }
-        }
-
-        // Q0: 装扮系统字段（向后兼容，老存档无则补默认）
-        const equippedTheme = (typeof parsed.equippedTheme === 'number' && !isNaN(parsed.equippedTheme) && isFinite(parsed.equippedTheme))
-            ? Math.floor(parsed.equippedTheme) : 0;
-        const ownedThemes = (Array.isArray(parsed.ownedThemes))
-            ? parsed.ownedThemes.filter((t: any) => typeof t === 'number' && !isNaN(t) && isFinite(t)).map((t: number) => Math.floor(t))
-            : [0];
-        // equippedTheme 必须在 ownedThemes 内，否则回退 0
-        result.equippedTheme = ownedThemes.includes(equippedTheme) ? equippedTheme : 0;
-        // 确保 ownedThemes 至少含 0
-        if (!ownedThemes.includes(0)) ownedThemes.push(0);
-        result.ownedThemes = ownedThemes;
-
-        const equippedAccessory = (typeof parsed.equippedAccessory === 'number' && !isNaN(parsed.equippedAccessory) && isFinite(parsed.equippedAccessory))
-            ? Math.floor(parsed.equippedAccessory) : -1;
-        const ownedAccessories = (Array.isArray(parsed.ownedAccessories))
-            ? parsed.ownedAccessories.filter((a: any) => typeof a === 'number' && !isNaN(a) && isFinite(a)).map((a: number) => Math.floor(a))
-            : [];
-        // equippedAccessory 必须在 ownedAccessories 内（-1 表示无配饰，永远合法）
-        result.equippedAccessory = (equippedAccessory === -1 || ownedAccessories.includes(equippedAccessory)) ? equippedAccessory : -1;
-        result.ownedAccessories = ownedAccessories;
-
-        // R0: 设置 + 签到字段（向后兼容，老存档无则补默认）
-        result.soundEnabled = (typeof parsed.soundEnabled === 'boolean') ? parsed.soundEnabled : true;
-        result.vibrateEnabled = (typeof parsed.vibrateEnabled === 'boolean') ? parsed.vibrateEnabled : true;
-
-        // signStreak: 非数/NaN → 0，越界 clamp 0-7
-        const rawStreak = parsed.signStreak;
-        if (typeof rawStreak === 'number' && !isNaN(rawStreak) && isFinite(rawStreak)) {
-            result.signStreak = Math.max(0, Math.min(7, Math.floor(rawStreak)));
-        } else {
-            result.signStreak = 0;
-        }
-
-        // lastSignDate: 非字符串 → ''
-        result.lastSignDate = (typeof parsed.lastSignDate === 'string') ? parsed.lastSignDate : '';
-
-        // signedTotal: 负/NaN/非数 → 0
-        const rawTotal = parsed.signedTotal;
-        if (typeof rawTotal === 'number' && !isNaN(rawTotal) && isFinite(rawTotal) && rawTotal >= 0) {
-            result.signedTotal = Math.floor(rawTotal);
-        } else {
-            result.signedTotal = 0;
-        }
-
-        // Y1: 道具库存清洗（向后兼容，老存档无则补默认 {2,2,2}）
-        const rawBoosters =
-            parsed.boosters &&
-            typeof parsed.boosters === 'object'
-                ? parsed.boosters
-                : null;
-
-        if (rawBoosters) {
-            result.boosters = {
-                hammer: this._sanitizeBoosterCount(
-                    (rawBoosters as any).hammer,
-                    2,
-                ),
-                shuffle: this._sanitizeBoosterCount(
-                    (rawBoosters as any).shuffle,
-                    2,
-                ),
-                addSteps: this._sanitizeBoosterCount(
-                    (rawBoosters as any).addSteps,
-                    2,
-                ),
-            };
-        }
-
-        return result;
-    }
-
-    /** Y1: 道具数量清洗 — NaN/Infinity 回退，clamp 0-99 */
-    private _sanitizeBoosterCount(
-        value: unknown,
-        fallback: number,
-    ): number {
-        if (
-            typeof value !== 'number' ||
-            !isFinite(value) ||
-            isNaN(value)
-        ) {
-            return fallback;
-        }
-
-        return Math.max(
-            0,
-            Math.min(99, Math.floor(value)),
-        );
-    }
-
-    /** 获取当前最大已解锁关卡（至少为 1） */
-    getMaxUnlocked(): number {
-        this.load();
-        return Math.max(1, this._data.maxUnlockedLevel);
-    }
-
-    /** 判断某关是否已通关 */
-    isCleared(level: number): boolean {
-        this.load();
-        const rec = this._data.levelRecords[level];
-        return rec ? rec.cleared : false;
-    }
-
-    /** 获取某关最高分（未通关返回 0） */
-    getBestScore(level: number): number {
-        this.load();
-        const rec = this._data.levelRecords[level];
-        return rec ? rec.bestScore : 0;
-    }
-
-    /**
-     * 标记某关已通关，更新最高分，解锁下一关，立即写盘。
-     * @param level  关卡编号（1~N）
-     * @param score  本关得分
-     */
-    markCleared(level: number, score: number): void {
-        this.load();
-
-        // 防护
-        const safeLevel = (typeof level === 'number' && !isNaN(level) && isFinite(level) && level >= 1)
-            ? Math.floor(level) : 1;
-        const safeScore = (typeof score === 'number' && !isNaN(score) && isFinite(score))
-            ? Math.max(0, Math.floor(score)) : 0;
-
-        // 更新通关记录
-        const existing = this._data.levelRecords[safeLevel] ?? { cleared: false, bestScore: 0 };
-        existing.cleared = true;
-        existing.bestScore = Math.max(existing.bestScore, safeScore);
-        this._data.levelRecords[safeLevel] = existing;
-
-        // 解锁下一关
-        const nextLevel = safeLevel + 1;
-        if (nextLevel > this._data.maxUnlockedLevel) {
-            this._data.maxUnlockedLevel = nextLevel;
-        }
-
-        // 立即写盘
-        this._flush();
-
-        console.log(
-            `[SaveManager] markCleared: level=${safeLevel} score=${safeScore} ` +
-            `→ maxUnlocked=${this._data.maxUnlockedLevel} ` +
-            `best=${existing.bestScore} cleared=${existing.cleared}`,
-        );
-    }
-
-    // ── 扭蛋币 API（E0） ─────────────────────────
-
-    /** 获取扭蛋币余额 */
-    getCoins(): number {
-        this.load();
-        return Math.max(0, this._data.gachaCoins);
-    }
-
-    /** 增加扭蛋币 */
-    addCoins(n: number): void {
-        this.load();
-        const safeN = (typeof n === 'number' && !isNaN(n) && isFinite(n))
-            ? Math.max(0, Math.floor(n)) : 0;
-        if (safeN <= 0) return;
-        this._data.gachaCoins += safeN;
-        this._flush();
-        console.log(`[SaveManager] addCoins(+${safeN}) → 余额=${this._data.gachaCoins}`);
-    }
-
-    /** 消费扭蛋币（不足返回 false 不扣） */
-    spendCoins(n: number): boolean {
-        this.load();
-        const safeN = (typeof n === 'number' && !isNaN(n) && isFinite(n))
-            ? Math.max(0, Math.floor(n)) : 0;
-        if (safeN <= 0) return true;
-        if (this._data.gachaCoins < safeN) return false;
-        this._data.gachaCoins -= safeN;
-        this._flush();
-        console.log(`[SaveManager] spendCoins(-${safeN}) → 余额=${this._data.gachaCoins}`);
-        return true;
-    }
-
-    // ── 怪物收藏 API（E0） ────────────────────────
-
-    /** 获取整个收藏表（只读引用，外部不应修改） */
-    getCollection(): { [monId: number]: MonsterRecord } {
-        this.load();
-        return this._data.collection;
-    }
-
-    /** 获取某怪物记录（未拥有返回 {count:0, star:0}） */
-    getMonster(id: number): MonsterRecord {
-        this.load();
-        const safeId = this._safeMonId(id);
-        const rec = this._data.collection[safeId];
-        return rec ? { count: rec.count, star: rec.star } : { count: 0, star: 0 };
-    }
-
-    /** 增加一个怪物（count+1，首次获得 star 置 1，立即写盘） */
-    addMonster(id: number): void {
-        this.load();
-        const safeId = this._safeMonId(id);
-        const existing = this._data.collection[safeId];
-        if (existing) {
-            existing.count += 1;
-        } else {
-            this._data.collection[safeId] = { count: 1, star: 1 };
-        }
-        this._flush();
-        const rec = this._data.collection[safeId];
-        console.log(`[SaveManager] addMonster(id=${safeId}) → count=${rec.count} star=${rec.star}`);
-    }
-
-    /** 升星（count>=3 时 count-=3、star+1(上限5)、写盘返回 true，否则 false） */
-    upgradeStar(id: number): boolean {
-        this.load();
-        const safeId = this._safeMonId(id);
-        const rec = this._data.collection[safeId];
-        if (!rec || rec.count < 3) return false;
-        if (rec.star >= 5) return false;
-        rec.count -= 3;
-        rec.star += 1;
-        // count 降到 0 时不删除记录（保留 star 信息）
-        this._flush();
-        console.log(`[SaveManager] upgradeStar(id=${safeId}) → count=${rec.count} star=${rec.star}`);
-        return true;
-    }
-
-    // ── 收藏内部工具 ──────────────────────────────
-
-    /** monId 安全校验（0-5，非法回退 0） */
-    private _safeMonId(id: number): number {
-        if (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 5) {
-            return Math.floor(id);
-        }
-        return 0;
-    }
-
-    /** 仅更新最高分（不改变通关状态/解锁），用于失败时也记录 bestScore */
-    updateBestScore(level: number, score: number): void {
-        this.load();
-
-        const safeLevel = (typeof level === 'number' && !isNaN(level) && isFinite(level) && level >= 1)
-            ? Math.floor(level) : 1;
-        const safeScore = (typeof score === 'number' && !isNaN(score) && isFinite(score))
-            ? Math.max(0, Math.floor(score)) : 0;
-
-        const existing = this._data.levelRecords[safeLevel] ?? { cleared: false, bestScore: 0 };
-        if (safeScore > existing.bestScore) {
-            existing.bestScore = safeScore;
-            this._data.levelRecords[safeLevel] = existing;
-            this._flush();
-        }
-    }
-
-    /** 调试用：清空所有存档 */
-    resetAll(): void {
-        this._data = createDefaultSave();
-        this._flush();
-        console.log('[SaveManager] 存档已清空');
-    }
-
-    // ── 装扮系统 API（Q0） ───────────────────────
-
-    /** 获取当前装备的主题 id */
-    getEquippedTheme(): number {
-        this.load();
-        return this._data.equippedTheme;
-    }
-
-    /** 设置当前装备的主题 id（必须已拥有，每次写盘） */
-    setEquippedTheme(id: number): void {
-        this.load();
-        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 3) ? Math.floor(id) : 0;
-        if (!this._data.ownedThemes.includes(safeId)) return;
-        this._data.equippedTheme = safeId;
-        this._flush();
-    }
-
-    /** 获取已拥有的主题列表 */
-    getOwnedThemes(): number[] {
-        this.load();
-        return [...this._data.ownedThemes];
-    }
-
-    /** 拥有某主题（加入列表并写盘） */
-    ownTheme(id: number): void {
-        this.load();
-        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 3) ? Math.floor(id) : 0;
-        if (!this._data.ownedThemes.includes(safeId)) {
-            this._data.ownedThemes.push(safeId);
-            this._flush();
-        }
-    }
-
-    /** 获取当前装备的配饰 id（-1=无） */
-    getEquippedAccessory(): number {
-        this.load();
-        return this._data.equippedAccessory;
-    }
-
-    /** 设置当前装备的配饰 id（必须已拥有，-1 表示取下，每次写盘） */
-    setEquippedAccessory(id: number): void {
-        this.load();
-        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= -1 && id <= 2) ? Math.floor(id) : -1;
-        if (safeId !== -1 && !this._data.ownedAccessories.includes(safeId)) return;
-        this._data.equippedAccessory = safeId;
-        this._flush();
-    }
-
-    /** 获取已拥有的配饰列表 */
-    getOwnedAccessories(): number[] {
-        this.load();
-        return [...this._data.ownedAccessories];
-    }
-
-    /** 拥有某配饰（加入列表并写盘） */
-    ownAccessory(id: number): void {
-        this.load();
-        const safeId = (typeof id === 'number' && !isNaN(id) && isFinite(id) && id >= 0 && id <= 2) ? Math.floor(id) : 0;
-        if (!this._data.ownedAccessories.includes(safeId)) {
-            this._data.ownedAccessories.push(safeId);
-            this._flush();
-        }
-    }
-
-    // ── 设置 + 签到 API（R0） ─────────────────────
-
-    /** 获取音效开关 */
-    getSoundEnabled(): boolean {
-        this.load();
-        return this._data.soundEnabled;
-    }
-
-    /** 设置音效开关并写盘 */
-    setSoundEnabled(enabled: boolean): void {
-        this.load();
-        this._data.soundEnabled = (enabled === true);
-        this._flush();
-    }
-
-    /** 获取震动开关 */
-    getVibrateEnabled(): boolean {
-        this.load();
-        return this._data.vibrateEnabled;
-    }
-
-    /** 设置震动开关并写盘 */
-    setVibrateEnabled(enabled: boolean): void {
-        this.load();
-        this._data.vibrateEnabled = (enabled === true);
-        this._flush();
-    }
-
-    /** 获取签到数据 */
-    getSignData(): { streak: number; lastDate: string; total: number } {
-        this.load();
-        return {
-            streak: this._data.signStreak,
-            lastDate: this._data.lastSignDate,
-            total: this._data.signedTotal,
-        };
-    }
-
-    /** 写入签到数据并写盘 */
-    writeSignData(streak: number, dateStr: string, total: number): void {
-        this.load();
-        // streak clamp 0-7
-        this._data.signStreak = (typeof streak === 'number' && !isNaN(streak) && isFinite(streak))
-            ? Math.max(0, Math.min(7, Math.floor(streak))) : 0;
-        // dateStr 必须是字符串
-        this._data.lastSignDate = (typeof dateStr === 'string') ? dateStr : '';
-        // total 非负整数
-        this._data.signedTotal = (typeof total === 'number' && !isNaN(total) && isFinite(total) && total >= 0)
-            ? Math.floor(total) : 0;
-        this._flush();
-    }
-
-    // ── 道具库存 API（Y1） ───────────────────────
-
-    /** 获取道具库存副本（不暴露内部引用） */
-    getBoosterInventory(): BoosterInventory {
-        this.load();
-        return {
-            hammer: this._data.boosters.hammer,
-            shuffle: this._data.boosters.shuffle,
-            addSteps: this._data.boosters.addSteps,
-        };
-    }
-
-    /** 获取指定道具数量 */
-    getBoosterCount(type: BoosterType): number {
-        this.load();
-        switch (type) {
-            case 'hammer': return this._data.boosters.hammer;
-            case 'shuffle': return this._data.boosters.shuffle;
-            case 'addSteps': return this._data.boosters.addSteps;
-            default: return 0;
-        }
-    }
-
-    /** 增加道具（clamp 到 99，立即写盘） */
-    addBooster(type: BoosterType, amount: number = 1): void {
-        this.load();
-        if (typeof amount !== 'number' || !isFinite(amount) || isNaN(amount) || amount <= 0) return;
-        const add = Math.floor(amount);
-        if (add <= 0) return;
-
-        switch (type) {
-            case 'hammer':
-                this._data.boosters.hammer = Math.min(99, this._data.boosters.hammer + add);
-                break;
-            case 'shuffle':
-                this._data.boosters.shuffle = Math.min(99, this._data.boosters.shuffle + add);
-                break;
-            case 'addSteps':
-                this._data.boosters.addSteps = Math.min(99, this._data.boosters.addSteps + add);
-                break;
-            default:
-                return;
-        }
-        this._flush();
-        console.log(`[SaveManager] addBooster(${type},+${add}) → ${this.getBoosterCount(type)}`);
-    }
-
-    /** 消耗道具（不足返回 false 不扣，成功返回 true） */
-    spendBooster(type: BoosterType, amount: number = 1): boolean {
-        this.load();
-        if (typeof amount !== 'number' || !isFinite(amount) || isNaN(amount) || amount <= 0) return false;
-        const cost = Math.floor(amount);
-        if (cost <= 0) return false;
-
-        const current = this.getBoosterCount(type);
-        if (current < cost) return false;
-
-        switch (type) {
-            case 'hammer':
-                this._data.boosters.hammer = Math.max(0, this._data.boosters.hammer - cost);
-                break;
-            case 'shuffle':
-                this._data.boosters.shuffle = Math.max(0, this._data.boosters.shuffle - cost);
-                break;
-            case 'addSteps':
-                this._data.boosters.addSteps = Math.max(0, this._data.boosters.addSteps - cost);
-                break;
-            default:
-                return false;
-        }
-        this._flush();
-        console.log(`[SaveManager] spendBooster(${type},-${cost}) → ${this.getBoosterCount(type)}`);
-        return true;
-    }
-
-    // ── 内部 ────────────────────────────────────
-
-    private _flush(): void {
-        try {
-            const str = JSON.stringify(this._data);
-            this._writeRaw(str);
-        } catch (e) {
-            console.warn('[SaveManager] 写盘失败:', e);
-        }
-    }
-}
-
-</file>
-
-<file path="assets/scripts/TileGesture.ts">
-(77 lines)
-
-import { _decorator, Component, Node, EventTouch, Vec2 } from 'cc';
-
-const { ccclass } = _decorator;
-
-/**
- * 方块手势组件 —— 挂在每一个方块节点上。
- * 点击 + 滑动都在这里，零坐标反算，只认本方块自己的 row / col。
- */
-@ccclass('TileGesture')
-export class TileGesture extends Component {
-
-    /** 本方块行号（由 Board 在创建/移动时同步） */
-    public row: number = 0;
-    /** 本方块列号（由 Board 在创建/移动时同步） */
-    public col: number = 0;
-
-    /** Board 组件引用（onLoad 时通过父节点链查找） */
-    private _board: any = null;
-
-    private _startPos: Vec2 | null = null;
-    private _swiped = false;
-
-    onLoad(): void {
-        // 向上查找 Board 组件：tileNode.parent = Board 节点
-        this._board = this.node.parent?.getComponent('Board');
-    }
-
-    onEnable(): void {
-        this.node.on(Node.EventType.TOUCH_START, this.onStart, this);
-        this.node.on(Node.EventType.TOUCH_MOVE, this.onMove, this);
-        this.node.on(Node.EventType.TOUCH_END, this.onEnd, this);
-        this.node.on(Node.EventType.TOUCH_CANCEL, this.onEnd, this);
-    }
-
-    onDisable(): void {
-        this.node.off(Node.EventType.TOUCH_START, this.onStart, this);
-        this.node.off(Node.EventType.TOUCH_MOVE, this.onMove, this);
-        this.node.off(Node.EventType.TOUCH_END, this.onEnd, this);
-        this.node.off(Node.EventType.TOUCH_CANCEL, this.onEnd, this);
-    }
-
-    private onStart(e: EventTouch): void {
-        this._swiped = false;
-        this._startPos = e.getUILocation().clone();
-        console.log('HIT', this.node.name, 'cell', this.row, this.col, 'pos', this.node.worldPosition);
-    }
-
-    private onMove(e: EventTouch): void {
-        if (this._swiped || !this._startPos) return;
-        const ui = e.getUILocation();
-        const dx = ui.x - this._startPos.x;
-        const dy = ui.y - this._startPos.y;
-        if (!isFinite(dx) || !isFinite(dy)) return;
-
-        const TH = 20;
-        if (Math.abs(dx) < TH && Math.abs(dy) < TH) return;
-
-        this._swiped = true;
-
-        let dr = 0, dc = 0;
-        if (Math.abs(dx) > Math.abs(dy)) {
-            dc = dx > 0 ? 1 : -1;   // 左右
-        } else {
-            dr = dy > 0 ? -1 : 1;   // 上滑 dy>0 → 行号 -1
-        }
-
-        console.log('SWIPE_DIR', this.row, this.col, { dx, dy }, '->', this.row + dr, this.col + dc);
-        this._board?.trySwapByDir(this.row, this.col, dr, dc);
-    }
-
-    private onEnd(): void {
-        if (!this._swiped) {
-            this._board?.onCellClick(this.row, this.col);
-        }
-        this._startPos = null;
-    }
-}
-
-</file>
-
-<file path="assets/scripts/AdManager.ts">
-(196 lines)
-
-/**
- * AdManager — 微信激励视频广告单例
- *
- * 封装 wx.createRewardedVideoAd，提供 showRewardedAd(onReward, onFail?)。
- *
- * 降级策略（保证流程永远不卡）：
- *   以下任一情况 → 直接调用 onReward 发奖，并打印 '[Ad] 降级发奖'：
- *   1. wx 不存在（浏览器预览）
- *   2. wx.createRewardedVideoAd 不可用
- *   3. 广告 onError
- *   4. adUnitId 仍为占位值 'TODO_REPLACE_广告位ID'
- */
-
-// WeChat mini-game 全局 API（非微信环境下不存在）
-declare const wx: any;
-
-export class AdManager {
-    // ── 单例 ──────────────────────────────────
-    private static _instance: AdManager | null = null;
-
-    public static getInstance(): AdManager {
-        if (!AdManager._instance) {
-            AdManager._instance = new AdManager();
-        }
-        return AdManager._instance;
-    }
-
-    // ── 广告位 ID ─────────────────────────────
-    /**
-     * ⚠️ 上线前替换为真实广告位 ID
-     * 目前为占位值，所有广告请求将走降级逻辑（直接发奖）。
-     */
-    private static readonly ADUNIT_ID = 'TODO_REPLACE_广告位ID';
-
-    // ── 广告实例 ──────────────────────────────
-    private videoAd: any = null;
-
-    // ── 当前请求的回调 ────────────────────────
-    private currentOnReward: (() => void) | null = null;
-    private currentOnFail: (() => void) | null = null;
-
-    // ── 是否有进行中的广告请求（防止重复触发） ──
-    private pending = false;
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  构造（私有，单例）
-    // ══════════════════════════════════════════════════════════════════════════
-
-    private constructor() {
-        this.initAd();
-    }
-
-    /**
-     * 初始化广告实例。
-     * 仅在「微信环境 + API 可用 + adUnitId 非占位」时创建，否则保持 null（降级模式）。
-     * onLoad / onError / onClose 只绑定一次，通过成员变量传递回调，避免重复触发。
-     */
-    private initAd(): void {
-        // ── 降级检查 1：wx 不存在（浏览器预览） ──
-        if (typeof wx === 'undefined') {
-            console.log('[Ad] wx 不存在（浏览器预览），降级模式');
-            return;
-        }
-
-        // ── 降级检查 2：createRewardedVideoAd 不可用 ──
-        if (typeof wx.createRewardedVideoAd !== 'function') {
-            console.log('[Ad] createRewardedVideoAd 不可用，降级模式');
-            return;
-        }
-
-        // ── 降级检查 3：adUnitId 仍为占位值 ──
-        if (AdManager.ADUNIT_ID === 'TODO_REPLACE_广告位ID') {
-            console.log('[Ad] adUnitId 仍为占位值，降级模式');
-            return;
-        }
-
-        try {
-            this.videoAd = wx.createRewardedVideoAd({ adUnitId: AdManager.ADUNIT_ID });
-
-            // 广告加载成功
-            this.videoAd.onLoad(() => {
-                console.log('[Ad] 广告加载成功 (onLoad)');
-            });
-
-            // 广告加载/展示失败 → 降级发奖
-            this.videoAd.onError((err: any) => {
-                console.error('[Ad] 广告 onError:', JSON.stringify(err));
-                this.degrade();
-            });
-
-            // 广告关闭 → 判断是否完整观看
-            this.videoAd.onClose((res: any) => {
-                console.log('[Ad] 广告 onClose:', JSON.stringify(res));
-                if (res && res.isEnded === true) {
-                    // 完整看完 → 发奖
-                    this.doReward();
-                } else {
-                    // 中途关闭 → 不发奖，走 onFail
-                    this.doFail();
-                }
-            });
-
-            console.log('[Ad] 广告实例创建成功，adUnitId =', AdManager.ADUNIT_ID);
-        } catch (e) {
-            console.error('[Ad] 创建广告实例异常:', e);
-            this.videoAd = null;
-        }
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  公开接口
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * 展示激励视频广告。
-     *
-     * - 玩家【完整看完】(onClose res.isEnded === true) → 调用 onReward 发奖
-     * - 玩家【中途关闭】→ 调用 onFail（可选）
-     * - 降级情况（wx 不存在 / API 不可用 / onError / adUnitId 占位）→ 直接调用 onReward
-     *
-     * @param onReward 完整看完或降级时的发奖回调
-     * @param onFail   中途关闭时的回调（可选，不传则什么都不做）
-     */
-    public showRewardedAd(onReward: () => void, onFail?: () => void): void {
-        // 防止重复调用（广告展示期间用户无法再次触发）
-        if (this.pending) {
-            console.warn('[Ad] 已有广告请求进行中，忽略本次调用');
-            return;
-        }
-
-        this.pending = true;
-        this.currentOnReward = onReward;
-        this.currentOnFail = onFail ?? null;
-
-        // ── 降级检查：广告实例不存在 ──
-        // （wx 不存在 / API 不可用 / adUnitId 占位 / 创建异常 都会导致 videoAd 为 null）
-        if (!this.videoAd) {
-            this.degrade();
-            return;
-        }
-
-        // ── 展示广告 ──
-        console.log('[Ad] 调用 show()');
-        this.videoAd.show().catch((err: any) => {
-            // show 失败（通常是广告尚未加载完成），尝试 load 后再 show
-            console.warn('[Ad] show 失败，尝试 load 后重试:', JSON.stringify(err));
-            this.videoAd
-                .load()
-                .then(() => {
-                    console.log('[Ad] load 成功，再次 show');
-                    return this.videoAd.show();
-                })
-                .catch((err2: any) => {
-                    console.error('[Ad] load + show 均失败:', JSON.stringify(err2));
-                    this.degrade();
-                });
-        });
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  内部结算（pending 标志保证只触发一次）
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /** 发奖（完整观看） */
-    private doReward(): void {
-        if (!this.pending) return;
-        this.pending = false;
-        console.log('[Ad] ✓ 发奖（完整观看）');
-        const cb = this.currentOnReward;
-        this.currentOnReward = null;
-        this.currentOnFail = null;
-        if (cb) cb();
-    }
-
-    /** 不发奖（中途关闭） */
-    private doFail(): void {
-        if (!this.pending) return;
-        this.pending = false;
-        console.log('[Ad] ✗ 未看完，不发奖');
-        const cb = this.currentOnFail;
-        this.currentOnReward = null;
-        this.currentOnFail = null;
-        if (cb) cb();
-    }
-
-    /** 降级发奖（直接调用 onReward） */
-    private degrade(): void {
-        if (!this.pending) return;
-        this.pending = false;
-        console.log('[Ad] 降级发奖');
-        const cb = this.currentOnReward;
-        this.currentOnReward = null;
-        this.currentOnFail = null;
-        if (cb) cb();
-    }
-}
-
-</file>
-
-<file path="assets/scripts/GameClubEntry.ts">
-(227 lines)
-
-/**
- * GameClubEntry — 微信游戏圈入口按钮
- *
- * 封装 wx.createGameClubButton，在主界面 / 结算页显示游戏圈入口。
- * 非微信环境（浏览器预览、wx 或 API 不存在）降级：不创建、不报错。
- *
- * 坐标系说明：
- *   wx.createGameClubButton 的 style.left/top 使用屏幕逻辑像素，
- *   需要从 Cocos 设计分辨率换算。
- */
-
-// WeChat mini-game 全局 API（非微信环境下不存在）
-declare const wx: any;
-
-export class GameClubEntry {
-    // ── 广告实例 ──────────────────────────────
-    private button: any = null;
-
-    // ── 当前可见状态 ──────────────────────────
-    private _visible = false;
-
-    // ── 布局参数（设计分辨率） ────────────────
-    private canvasW: number;
-    private canvasH: number;
-    private topInset: number;
-    private hudHeight: number;
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  构造
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @param canvasW   设计分辨率宽（如 720）
-     * @param canvasH   设计分辨率高（如 1280）
-     * @param topInset  顶部安全边距（设计坐标，含胶囊避让）
-     * @param hudHeight HUD 高度（设计坐标）
-     */
-    constructor(canvasW: number, canvasH: number, topInset: number, hudHeight: number) {
-        this.canvasW = canvasW;
-        this.canvasH = canvasH;
-        this.topInset = topInset;
-        this.hudHeight = hudHeight;
-        this.createButton();
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  创建按钮
-    // ══════════════════════════════════════════════════════════════════════════
-
-    private createButton(): void {
-        // ── 降级检查 1：wx 不存在 ──
-        if (typeof wx === 'undefined') {
-            console.log('[GameClub] 非微信环境，跳过');
-            return;
-        }
-
-        // ── 降级检查 2：createGameClubButton 不可用 ──
-        if (typeof wx.createGameClubButton !== 'function') {
-            console.log('[GameClub] wx.createGameClubButton 不可用，跳过');
-            return;
-        }
-
-        try {
-            // ── 获取窗口尺寸（屏幕逻辑像素） ──
-            let winW = 0;
-            let winH = 0;
-            try {
-                if (wx.getWindowInfo) {
-                    const info = wx.getWindowInfo();
-                    winW = info.windowWidth;
-                    winH = info.windowHeight;
-                } else if (wx.getSystemInfoSync) {
-                    const info = wx.getSystemInfoSync();
-                    winW = info.windowWidth;
-                    winH = info.windowHeight;
-                }
-            } catch (e) {
-                // ignore
-            }
-
-            winW = this.safeNum(winW, 0);
-            winH = this.safeNum(winH, 0);
-            if (winW <= 0 || winH <= 0) {
-                console.warn('[GameClub] 无法获取窗口尺寸，跳过');
-                return;
-            }
-
-            // ── 设计分辨率 → 屏幕逻辑像素 换算 ──
-            const designW = this.safeNum(this.canvasW, 720);
-            const designH = this.safeNum(this.canvasH, 1280);
-            const scaleY = winH / designH;
-
-            // ── 按钮尺寸（屏幕逻辑像素） ──
-            const btnWidth = 90;
-            const btnHeight = 34;
-            const gap = 10; // HUD 底部到按钮的间距（设计坐标）
-
-            // ── 位置计算 ──
-            // top: topInset + HUD_HEIGHT + gap（设计坐标）→ 换算到屏幕像素
-            const designTop = this.safeNum(this.topInset, 100) + this.safeNum(this.hudHeight, 64) + gap;
-            const screenTop = designTop * scaleY;
-
-            // right: 距右边缘 16px（屏幕像素）
-            const rightMargin = 16;
-            const screenLeft = winW - btnWidth - rightMargin;
-
-            // ── NaN 最终保护 ──
-            if (!this.isValidNum(screenTop) || !this.isValidNum(screenLeft)) {
-                console.warn('[GameClub] 坐标计算异常，跳过', { screenTop, screenLeft });
-                return;
-            }
-
-            console.log(
-                `[GameClub] 创建按钮: screenLeft=${screenLeft.toFixed(1)}, ` +
-                `screenTop=${screenTop.toFixed(1)}, ` +
-                `winW=${winW}, winH=${winH}, scaleY=${scaleY.toFixed(3)}`,
-            );
-
-            this.button = wx.createGameClubButton({
-                type: 'text',
-                text: '游戏圈',
-                style: {
-                    left: screenLeft,
-                    top: screenTop,
-                    width: btnWidth,
-                    height: btnHeight,
-                    color: '#ffffff',
-                    textAlign: 'center',
-                    fontSize: 15,
-                    borderRadius: 17,
-                    backgroundColor: '#2ecc71',
-                    borderColor: '#27ae60',
-                    borderWidth: 1,
-                    lineHeight: btnHeight,
-                },
-            });
-
-            // 按钮创建后默认可见，先隐藏（等待 GameManager 控制显隐）
-            this.button.hide();
-            this._visible = false;
-
-            // 点击回调（微信会自动跳转游戏圈，这里仅做日志）
-            this.button.onTap(() => {
-                console.log('[GameClub] 游戏圈按钮被点击');
-            });
-
-            console.log('[GameClub] 游戏圈按钮创建成功');
-        } catch (e) {
-            console.error('[GameClub] 创建按钮异常:', e);
-            this.button = null;
-        }
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  公开接口
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /** 显示游戏圈按钮 */
-    public show(): void {
-        if (!this.button) return;
-        if (this._visible) return; // 已可见，不重复
-        this.button.show();
-        this._visible = true;
-        console.log('[GameClub] show()');
-    }
-
-    /** 隐藏游戏圈按钮 */
-    public hide(): void {
-        if (!this.button) return;
-        if (!this._visible) return; // 已隐藏，不重复
-        this.button.hide();
-        this._visible = false;
-        console.log('[GameClub] hide()');
-    }
-
-    /** 销毁按钮 */
-    public destroy(): void {
-        if (this.button) {
-            try {
-                this.button.destroy();
-            } catch (e) {
-                // ignore
-            }
-            this.button = null;
-            this._visible = false;
-        }
-    }
-
-    /**
-     * 窗口尺寸变化时重新定位（销毁旧按钮、用新尺寸重建）。
-     * @param canvasW   新的设计分辨率宽
-     * @param canvasH   新的设计分辨率高
-     * @param topInset  新的顶部安全边距
-     * @param hudHeight HUD 高度
-     */
-    public reposition(canvasW: number, canvasH: number, topInset: number, hudHeight: number): void {
-        this.canvasW = canvasW;
-        this.canvasH = canvasH;
-        this.topInset = topInset;
-        this.hudHeight = hudHeight;
-
-        // 记录旧状态，重建后恢复
-        const wasVisible = this._visible;
-        this.destroy();
-        this.createButton();
-        if (wasVisible) {
-            this.show();
-        }
-    }
-
-    /** 按钮是否已成功创建 */
-    public get isAvailable(): boolean {
-        return this.button !== null;
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  NaN 安全工具
-    // ══════════════════════════════════════════════════════════════════════════
-
-    private isValidNum(v: number): boolean {
-        return typeof v === 'number' && !isNaN(v) && isFinite(v);
-    }
-
-    private safeNum(v: number, fallback: number): number {
-        return this.isValidNum(v) ? v : fallback;
-    }
-}
-
-</file>
-
-<file path="assets/scripts/VibrateManager.ts">
-(54 lines)
-
-import { _decorator, Component } from 'cc';
-const { ccclass, property } = _decorator;
-
-type HapticLevel = 'light' | 'medium' | 'heavy';
-
-@ccclass('VibrateManager')
-export class VibrateManager extends Component {
-    private static _inst: VibrateManager | null = null;
-    public static get inst() { return VibrateManager._inst; }
-
-    @property vibrateEnabled: boolean = true;   // 总开关（接设置里的"震动"选项，避开 Component.enabled 撞名）
-    @property cooldownMs: number = 80;   // 节流：两次震动最小间隔，防连锁狂震
-
-    private _last = 0;
-    private _wx: any = (globalThis as any).wx || null;
-    private _tt: any = (globalThis as any).tt || null;
-
-    onLoad() { VibrateManager._inst = this; }
-    onDestroy() { if (VibrateManager._inst === this) VibrateManager._inst = null; }
-
-    setVibrateEnabled(on: boolean) { this.vibrateEnabled = on; }
-    getVibrateEnabled() { return this.vibrateEnabled; }
-
-    private _canFire(): boolean {
-        if (!this.vibrateEnabled) return false;
-        const now = Date.now();
-        if (now - this._last < this.cooldownMs) return false;
-        this._last = now;
-        return true;
-    }
-
-    // 短震：type 控制强弱（iOS 明显，部分安卓忽略 type 只出固定短震）
-    short(level: HapticLevel = 'light') {
-        if (!this._canFire()) return;
-        try {
-            if (this._wx?.vibrateShort) this._wx.vibrateShort({ type: level });
-            else if (this._tt?.vibrateShort) this._tt.vibrateShort({ type: level });
-        } catch (e) { /* 真机不支持则静默，不报错 */ }
-    }
-
-    // 长震：约 400ms，用于过关/失败等重反馈
-    long() {
-        if (!this._canFire()) return;
-        try {
-            if (this._wx?.vibrateLong) this._wx.vibrateLong({});
-            else if (this._tt?.vibrateLong) this._tt.vibrateLong({});
-        } catch (e) { /* no-op */ }
-    }
-
-    // 语义化封装
-    light()  { this.short('light'); }
-    medium() { this.short('medium'); }
-    heavy()  { this.short('heavy'); }
-}
-
-</file>
-
-<file path="assets/scripts/RecorderManager.ts">
-(216 lines)
-
-/**
- * RecorderManager — 抖音录屏单例
- *
- * 封装 tt.getGameRecorderManager()，提供 start/stop/onStart/onStop。
- *
- * 降级策略（和 AdManager 一致，保证流程不卡）：
- *   以下任一情况 → 降级跳过，不报错：
- *   1. tt 不存在（浏览器 / 微信预览）
- *   2. tt.getGameRecorderManager 不可用
- *
- * Android/iOS 差异处理：
- *   stop() 后加 500ms 延迟才允许下一次 start()，
- *   否则安卓会覆盖上一段 / start 不执行。
- */
-
-// 抖音小游戏全局 API（非抖音环境下不存在）
-declare const tt: any;
-
-type StartCallback = () => void;
-type StopCallback = (videoPath: string) => void;
-type ErrorCallback = (err: any) => void;
-
-export class RecorderManager {
-    // ── 单例 ──────────────────────────────────
-    private static _instance: RecorderManager | null = null;
-
-    public static getInstance(): RecorderManager {
-        if (!RecorderManager._instance) {
-            RecorderManager._instance = new RecorderManager();
-        }
-        return RecorderManager._instance;
-    }
-
-    // ── 录屏实例 ──────────────────────────────
-    private recorder: any = null;
-
-    // ── 状态 ──────────────────────────────────
-    private isRecording = false;
-
-    /** stop() 后的冷却期，防止安卓立刻 start 覆盖上一段 */
-    private coolingDown = false;
-    private static readonly COOLDOWN_MS = 500;
-
-    // ── 回调 ──────────────────────────────────
-    private _onStart: StartCallback | null = null;
-    private _onStop: StopCallback | null = null;
-    private _onError: ErrorCallback | null = null;
-
-    // ── 最后一次录屏的 videoPath ──────────────
-    private _lastVideoPath: string | null = null;
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  构造（私有，单例）
-    // ══════════════════════════════════════════════════════════════════════════
-
-    private constructor() {
-        this.initRecorder();
-    }
-
-    /**
-     * 初始化录屏实例。
-     * 仅在「抖音环境 + API 可用」时创建，否则保持 null（降级模式）。
-     */
-    private initRecorder(): void {
-        // ── 降级检查 1：tt 不存在 ──
-        if (typeof tt === 'undefined') {
-            console.log('[Recorder] tt 不存在（非抖音环境），降级跳过');
-            return;
-        }
-
-        // ── 降级检查 2：getGameRecorderManager 不可用 ──
-        if (typeof tt.getGameRecorderManager !== 'function') {
-            console.log('[Recorder] tt.getGameRecorderManager 不可用，降级跳过');
-            return;
-        }
-
-        try {
-            this.recorder = tt.getGameRecorderManager();
-
-            // 录屏开始
-            this.recorder.onStart(() => {
-                console.log('[Recorder] onStart — 录屏已开始');
-                this.isRecording = true;
-                if (this._onStart) this._onStart();
-            });
-
-            // 录屏结束（拿到 videoPath）
-            this.recorder.onStop((res: any) => {
-                console.log('[Recorder] onStop — 录屏已结束:', JSON.stringify(res));
-                this.isRecording = false;
-
-                const videoPath = (res && typeof res.videoPath === 'string') ? res.videoPath : '';
-                if (videoPath) {
-                    this._lastVideoPath = videoPath;
-                    console.log('[Recorder] videoPath:', videoPath);
-                }
-
-                // 进入冷却期（安卓需要延迟才能下一次 start）
-                this.startCooldown();
-
-                if (this._onStop) this._onStop(videoPath);
-            });
-
-            // 录屏错误
-            this.recorder.onError((err: any) => {
-                console.error('[Recorder] onError:', JSON.stringify(err));
-                this.isRecording = false;
-                this.startCooldown();
-                if (this._onError) this._onError(err);
-            });
-
-            console.log('[Recorder] 录屏实例创建成功');
-        } catch (e) {
-            console.error('[Recorder] 创建录屏实例异常:', e);
-            this.recorder = null;
-        }
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  公开接口
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * 开始录屏。
-     * @param duration 录屏时长（秒），抖音最大 300 秒
-     */
-    public start(duration: number = 300): void {
-        if (!this.recorder) {
-            console.log('[Recorder] 降级模式，start 跳过');
-            return;
-        }
-
-        if (this.isRecording) {
-            console.warn('[Recorder] 正在录屏中，忽略重复 start');
-            return;
-        }
-
-        if (this.coolingDown) {
-            console.warn('[Recorder] 冷却期内，忽略 start（安卓需要 500ms 间隔）');
-            return;
-        }
-
-        try {
-            console.log(`[Recorder] start() duration=${duration}s`);
-            this.recorder.start({ duration });
-        } catch (e) {
-            console.error('[Recorder] start 异常:', e);
-        }
-    }
-
-    /** 停止录屏，onStop 回调中拿到 videoPath */
-    public stop(): void {
-        if (!this.recorder) {
-            console.log('[Recorder] 降级模式，stop 跳过');
-            return;
-        }
-
-        if (!this.isRecording) {
-            console.warn('[Recorder] 未在录屏，忽略 stop');
-            return;
-        }
-
-        try {
-            console.log('[Recorder] stop()');
-            this.recorder.stop();
-        } catch (e) {
-            console.error('[Recorder] stop 异常:', e);
-            this.isRecording = false;
-            this.startCooldown();
-        }
-    }
-
-    /**
-     * 设置回调。
-     * @param opts.onStart  录屏开始时调用
-     * @param opts.onStop   录屏结束时调用，参数为 videoPath
-     * @param opts.onError  录屏出错时调用
-     */
-    public on(opts: {
-        onStart?: StartCallback;
-        onStop?: StopCallback;
-        onError?: ErrorCallback;
-    }): void {
-        if (opts.onStart !== undefined) this._onStart = opts.onStart;
-        if (opts.onStop !== undefined) this._onStop = opts.onStop;
-        if (opts.onError !== undefined) this._onError = opts.onError;
-    }
-
-    /** 是否正在录屏 */
-    public get recording(): boolean {
-        return this.isRecording;
-    }
-
-    /** 录屏实例是否可用 */
-    public get isAvailable(): boolean {
-        return this.recorder !== null;
-    }
-
-    /** 获取最后一次录屏的 videoPath */
-    public get lastVideoPath(): string | null {
-        return this._lastVideoPath;
-    }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    //  内部
-    // ══════════════════════════════════════════════════════════════════════════
-
-    /** 启动冷却计时器（安卓 stop 后立刻 start 会出问题） */
-    private startCooldown(): void {
-        this.coolingDown = true;
-        setTimeout(() => {
-            this.coolingDown = false;
-            console.log('[Recorder] 冷却期结束，可以 start');
-        }, RecorderManager.COOLDOWN_MS);
-    }
-}
-
-</file>
-
+```
