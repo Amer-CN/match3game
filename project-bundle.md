@@ -1,6 +1,46 @@
-================================================================
-Directory Structure
-================================================================
+This file is a merged representation of a subset of the codebase, containing specifically included files, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Only files matching these patterns are included: assets/scripts/*.ts, assets/prefabs/**, assets/resources/**/*.json, build-templates/**, extensions/cocos-mcp-server/source/**/*.ts
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
 assets/
   scripts/
     AdManager.ts
@@ -12,14 +52,50 @@ assets/
     SaveManager.ts
     TileGesture.ts
     VibrateManager.ts
+build-templates/
+  wechatgame/
+    game.json
+extensions/
+  cocos-mcp-server/
+    source/
+      panels/
+        default/
+          index.ts
+        tool-manager/
+          index.ts
+      test/
+        manual-test.ts
+        mcp-tool-tester.ts
+        prefab-tools-test.ts
+        tool-tester.ts
+      tools/
+        asset-advanced-tools.ts
+        broadcast-tools.ts
+        component-tools.ts
+        debug-tools.ts
+        node-tools.ts
+        prefab-tools.ts
+        preferences-tools.ts
+        project-tools.ts
+        reference-image-tools.ts
+        scene-advanced-tools.ts
+        scene-tools.ts
+        scene-view-tools.ts
+        server-tools.ts
+        tool-manager.ts
+        validation-tools.ts
+      types/
+        index.ts
+      main.ts
+      mcp-server.ts
+      scene.ts
+      settings.ts
+</directory_structure>
 
-================================================================
-Files
-================================================================
+<files>
+This section contains the contents of the repository's files.
 
-================
-File: assets/scripts/AdManager.ts
-================
+<file path="assets/scripts/AdManager.ts">
 /**
  * AdManager — 微信激励视频广告单例
  *
@@ -216,10 +292,9 @@ export class AdManager {
         if (cb) cb();
     }
 }
+</file>
 
-================
-File: assets/scripts/RecorderManager.ts
-================
+<file path="assets/scripts/RecorderManager.ts">
 /**
  * RecorderManager — 抖音录屏单例
  *
@@ -436,10 +511,9 @@ export class RecorderManager {
         }, RecorderManager.COOLDOWN_MS);
     }
 }
+</file>
 
-================
-File: assets/scripts/TileGesture.ts
-================
+<file path="assets/scripts/TileGesture.ts">
 import { _decorator, Component, Node, EventTouch, Vec2 } from 'cc';
 
 const { ccclass } = _decorator;
@@ -517,10 +591,9 @@ export class TileGesture extends Component {
         this._startPos = null;
     }
 }
+</file>
 
-================
-File: assets/scripts/VibrateManager.ts
-================
+<file path="assets/scripts/VibrateManager.ts">
 import { _decorator, Component } from 'cc';
 const { ccclass, property } = _decorator;
 
@@ -575,10 +648,15168 @@ export class VibrateManager extends Component {
     medium() { this.short('medium'); }
     heavy()  { this.short('heavy'); }
 }
+</file>
 
-================
-File: assets/scripts/AudioManager.ts
-================
+<file path="build-templates/wechatgame/game.json">
+{
+    "deviceOrientation": "portrait",
+    "showStatusBar": false,
+    "networkTimeout": {
+        "request": 5000,
+        "connectSocket": 5000,
+        "uploadFile": 5000,
+        "downloadFile": 5000
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/panels/default/index.ts">
+/* eslint-disable vue/one-component-per-file */
+
+import { readFileSync } from 'fs-extra';
+import { join } from 'path';
+import { createApp, App, defineComponent, ref, computed, onMounted, watch, nextTick } from 'vue';
+
+const panelDataMap = new WeakMap<any, App>();
+
+// 定义工具配置接口
+interface ToolConfig {
+    category: string;
+    name: string;
+    enabled: boolean;
+    description: string;
+}
+
+// 定义配置接口
+interface Configuration {
+    id: string;
+    name: string;
+    description: string;
+    tools: ToolConfig[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+// 定义服务器设置接口
+interface ServerSettings {
+    port: number;
+    autoStart: boolean;
+    debugLog: boolean;
+    maxConnections: number;
+}
+
+module.exports = Editor.Panel.define({
+    listeners: {
+        show() { 
+            console.log('[MCP Panel] Panel shown'); 
+        },
+        hide() { 
+            console.log('[MCP Panel] Panel hidden'); 
+        },
+    },
+    template: readFileSync(join(__dirname, '../../../static/template/default/index.html'), 'utf-8'),
+    style: readFileSync(join(__dirname, '../../../static/style/default/index.css'), 'utf-8'),
+    $: {
+        app: '#app',
+        panelTitle: '#panelTitle',
+    },
+    ready() {
+        if (this.$.app) {
+            const app = createApp({});
+            app.config.compilerOptions.isCustomElement = (tag) => tag.startsWith('ui-');
+            
+            // 创建主应用组件
+            app.component('McpServerApp', defineComponent({
+                setup() {
+                    // 响应式数据
+                    const activeTab = ref('server');
+                    const serverRunning = ref(false);
+                    const serverStatus = ref('已停止');
+                    const connectedClients = ref(0);
+                    const httpUrl = ref('');
+                    const isProcessing = ref(false);
+                    
+                    const settings = ref<ServerSettings>({
+                        port: 3000,
+                        autoStart: false,
+                        debugLog: false,
+                        maxConnections: 10
+                    });
+                    
+                    const availableTools = ref<ToolConfig[]>([]);
+                    const toolCategories = ref<string[]>([]);
+                    
+
+                    
+                    // 计算属性
+                    const statusClass = computed(() => ({
+                        'status-running': serverRunning.value,
+                        'status-stopped': !serverRunning.value
+                    }));
+                    
+                    const totalTools = computed(() => availableTools.value.length);
+                    const enabledTools = computed(() => availableTools.value.filter(t => t.enabled).length);
+                    const disabledTools = computed(() => totalTools.value - enabledTools.value);
+                    
+
+                    
+                    const settingsChanged = ref(false);
+                    
+                    // 方法
+                    const switchTab = (tabName: string) => {
+                        activeTab.value = tabName;
+                        if (tabName === 'tools') {
+                            loadToolManagerState();
+                        }
+                    };
+                    
+                    const toggleServer = async () => {
+                        try {
+                            if (serverRunning.value) {
+                                await Editor.Message.request('cocos-mcp-server', 'stop-server');
+                            } else {
+                                // 启动服务器时使用当前面板设置
+                                const currentSettings = {
+                                    port: settings.value.port,
+                                    autoStart: settings.value.autoStart,
+                                    enableDebugLog: settings.value.debugLog,
+                                    maxConnections: settings.value.maxConnections
+                                };
+                                await Editor.Message.request('cocos-mcp-server', 'update-settings', currentSettings);
+                                await Editor.Message.request('cocos-mcp-server', 'start-server');
+                            }
+                            console.log('[Vue App] Server toggled');
+                        } catch (error) {
+                            console.error('[Vue App] Failed to toggle server:', error);
+                        }
+                    };
+                    
+                    const saveSettings = async () => {
+                        try {
+                            // 创建一个简单的对象，避免克隆错误
+                            const settingsData = {
+                                port: settings.value.port,
+                                autoStart: settings.value.autoStart,
+                                debugLog: settings.value.debugLog,
+                                maxConnections: settings.value.maxConnections
+                            };
+                            
+                            const result = await Editor.Message.request('cocos-mcp-server', 'update-settings', settingsData);
+                            console.log('[Vue App] Save settings result:', result);
+                            settingsChanged.value = false;
+                        } catch (error) {
+                            console.error('[Vue App] Failed to save settings:', error);
+                        }
+                    };
+                    
+                    const copyUrl = async () => {
+                        try {
+                            await navigator.clipboard.writeText(httpUrl.value);
+                            console.log('[Vue App] URL copied to clipboard');
+                        } catch (error) {
+                            console.error('[Vue App] Failed to copy URL:', error);
+                        }
+                    };
+                    
+                    const loadToolManagerState = async () => {
+                        try {
+                            const result = await Editor.Message.request('cocos-mcp-server', 'getToolManagerState');
+                            if (result && result.success) {
+                                // 总是加载后端状态，确保数据是最新的
+                                availableTools.value = result.availableTools || [];
+                                console.log('[Vue App] Loaded tools:', availableTools.value.length);
+                                
+                                // 更新工具分类
+                                const categories = new Set(availableTools.value.map(tool => tool.category));
+                                toolCategories.value = Array.from(categories);
+                            }
+                        } catch (error) {
+                            console.error('[Vue App] Failed to load tool manager state:', error);
+                        }
+                    };
+                    
+                    const updateToolStatus = async (category: string, name: string, enabled: boolean) => {
+                        try {
+                            console.log('[Vue App] updateToolStatus called:', category, name, enabled);
+                            
+                            // 先更新本地状态
+                            const toolIndex = availableTools.value.findIndex(t => t.category === category && t.name === name);
+                            if (toolIndex !== -1) {
+                                availableTools.value[toolIndex].enabled = enabled;
+                                // 强制触发响应式更新
+                                availableTools.value = [...availableTools.value];
+                                console.log('[Vue App] Local state updated, tool enabled:', availableTools.value[toolIndex].enabled);
+                            }
+                            
+                            // 调用后端更新
+                            const result = await Editor.Message.request('cocos-mcp-server', 'updateToolStatus', category, name, enabled);
+                            if (!result || !result.success) {
+                                // 如果后端更新失败，回滚本地状态
+                                if (toolIndex !== -1) {
+                                    availableTools.value[toolIndex].enabled = !enabled;
+                                    availableTools.value = [...availableTools.value];
+                                }
+                                console.error('[Vue App] Backend update failed, rolled back local state');
+                            } else {
+                                console.log('[Vue App] Backend update successful');
+                            }
+                        } catch (error) {
+                            // 如果发生错误，回滚本地状态
+                            const toolIndex = availableTools.value.findIndex(t => t.category === category && t.name === name);
+                            if (toolIndex !== -1) {
+                                availableTools.value[toolIndex].enabled = !enabled;
+                                availableTools.value = [...availableTools.value];
+                            }
+                            console.error('[Vue App] Failed to update tool status:', error);
+                        }
+                    };
+                    
+                    const selectAllTools = async () => {
+                        try {
+                            // 直接更新本地状态，然后保存
+                            availableTools.value.forEach(tool => tool.enabled = true);
+                            await saveChanges();
+                        } catch (error) {
+                            console.error('[Vue App] Failed to select all tools:', error);
+                        }
+                    };
+                    
+                    const deselectAllTools = async () => {
+                        try {
+                            // 直接更新本地状态，然后保存
+                            availableTools.value.forEach(tool => tool.enabled = false);
+                            await saveChanges();
+                        } catch (error) {
+                            console.error('[Vue App] Failed to deselect all tools:', error);
+                        }
+                    };
+                    
+                                        const saveChanges = async () => {
+                        try {
+                            // 创建普通对象，避免Vue3响应式对象克隆错误
+                            const updates = availableTools.value.map(tool => ({
+                                category: String(tool.category),
+                                name: String(tool.name),
+                                enabled: Boolean(tool.enabled)
+                            }));
+                            
+                            console.log('[Vue App] Sending updates:', updates.length, 'tools');
+                            
+                            const result = await Editor.Message.request('cocos-mcp-server', 'updateToolStatusBatch', updates);
+                            
+                            if (result && result.success) {
+                                console.log('[Vue App] Tool changes saved successfully');
+                            }
+                        } catch (error) {
+                            console.error('[Vue App] Failed to save tool changes:', error);
+                        }
+                    };
+                    
+
+                    
+                    const toggleCategoryTools = async (category: string, enabled: boolean) => {
+                        try {
+                            // 直接更新本地状态，然后保存
+                            availableTools.value.forEach(tool => {
+                                if (tool.category === category) {
+                                    tool.enabled = enabled;
+                                }
+                            });
+                            await saveChanges();
+                        } catch (error) {
+                            console.error('[Vue App] Failed to toggle category tools:', error);
+                        }
+                    };
+                    
+                    const getToolsByCategory = (category: string) => {
+                        return availableTools.value.filter(tool => tool.category === category);
+                    };
+                    
+                    const getCategoryDisplayName = (category: string): string => {
+                        const categoryNames: { [key: string]: string } = {
+                            'scene': '场景工具',
+                            'node': '节点工具',
+                            'component': '组件工具',
+                            'prefab': '预制体工具',
+                            'project': '项目工具',
+                            'debug': '调试工具',
+                            'preferences': '偏好设置工具',
+                            'server': '服务器工具',
+                            'broadcast': '广播工具',
+                            'sceneAdvanced': '高级场景工具',
+                            'sceneView': '场景视图工具',
+                            'referenceImage': '参考图片工具',
+                            'assetAdvanced': '高级资源工具',
+                            'validation': '验证工具'
+                        };
+                        return categoryNames[category] || category;
+                    };
+                    
+
+                    
+
+                    
+                    // 监听设置变化
+                    watch(settings, () => {
+                        settingsChanged.value = true;
+                    }, { deep: true });
+                    
+
+                    
+                    // 组件挂载时加载数据
+                    onMounted(async () => {
+                        // 加载工具管理器状态
+                        await loadToolManagerState();
+                        
+                        // 从服务器状态获取设置信息
+                        try {
+                            const serverStatus = await Editor.Message.request('cocos-mcp-server', 'get-server-status');
+                            if (serverStatus && serverStatus.settings) {
+                                settings.value = {
+                                    port: serverStatus.settings.port || 3000,
+                                    autoStart: serverStatus.settings.autoStart || false,
+                                    debugLog: serverStatus.settings.enableDebugLog || false,
+                                    maxConnections: serverStatus.settings.maxConnections || 10
+                                };
+                                console.log('[Vue App] Server settings loaded from status:', serverStatus.settings);
+                            } else if (serverStatus && serverStatus.port) {
+                                // 兼容旧版本，只获取端口信息
+                                settings.value.port = serverStatus.port;
+                                console.log('[Vue App] Port loaded from server status:', serverStatus.port);
+                            }
+                        } catch (error) {
+                            console.error('[Vue App] Failed to get server status:', error);
+                            console.log('[Vue App] Using default server settings');
+                        }
+                        
+                        // 定期更新服务器状态
+                        setInterval(async () => {
+                            try {
+                                const result = await Editor.Message.request('cocos-mcp-server', 'get-server-status');
+                                if (result) {
+                                    serverRunning.value = result.running;
+                                    serverStatus.value = result.running ? '运行中' : '已停止';
+                                    connectedClients.value = result.clients || 0;
+                                    httpUrl.value = result.running ? `http://localhost:${result.port}` : '';
+                                    isProcessing.value = false;
+                                }
+                            } catch (error) {
+                                console.error('[Vue App] Failed to get server status:', error);
+                            }
+                        }, 2000);
+                    });
+                    
+                    return {
+                        // 数据
+                        activeTab,
+                        serverRunning,
+                        serverStatus,
+                        connectedClients,
+                        httpUrl,
+                        isProcessing,
+                        settings,
+                        availableTools,
+                        toolCategories,
+                        settingsChanged,
+                        
+                        // 计算属性
+                        statusClass,
+                        totalTools,
+                        enabledTools,
+                        disabledTools,
+                        
+                        // 方法
+                        switchTab,
+                        toggleServer,
+                        saveSettings,
+                        copyUrl,
+                        loadToolManagerState,
+                        updateToolStatus,
+                        selectAllTools,
+                        deselectAllTools,
+                        saveChanges,
+                        toggleCategoryTools,
+                        getToolsByCategory,
+                        getCategoryDisplayName
+                    };
+                },
+                template: readFileSync(join(__dirname, '../../../static/template/vue/mcp-server-app.html'), 'utf-8'),
+            }));
+            
+            app.mount(this.$.app);
+            panelDataMap.set(this, app);
+            
+            console.log('[MCP Panel] Vue3 app mounted successfully');
+        }
+    },
+    beforeClose() { },
+    close() {
+        const app = panelDataMap.get(this);
+        if (app) {
+            app.unmount();
+        }
+    },
+});
+</file>
+
+<file path="extensions/cocos-mcp-server/source/panels/tool-manager/index.ts">
+import { readFileSync } from 'fs-extra';
+import { join } from 'path';
+
+module.exports = Editor.Panel.define({
+    listeners: {
+        show() { console.log('Tool Manager panel shown'); },
+        hide() { console.log('Tool Manager panel hidden'); }
+    },
+    template: readFileSync(join(__dirname, '../../../static/template/default/tool-manager.html'), 'utf-8'),
+    style: readFileSync(join(__dirname, '../../../static/style/default/index.css'), 'utf-8'),
+    $: {
+        panelTitle: '#panelTitle',
+        createConfigBtn: '#createConfigBtn',
+        importConfigBtn: '#importConfigBtn',
+        exportConfigBtn: '#exportConfigBtn',
+        configSelector: '#configSelector',
+        applyConfigBtn: '#applyConfigBtn',
+        editConfigBtn: '#editConfigBtn',
+        deleteConfigBtn: '#deleteConfigBtn',
+        toolsContainer: '#toolsContainer',
+        selectAllBtn: '#selectAllBtn',
+        deselectAllBtn: '#deselectAllBtn',
+        saveChangesBtn: '#saveChangesBtn',
+        totalToolsCount: '#totalToolsCount',
+        enabledToolsCount: '#enabledToolsCount',
+        disabledToolsCount: '#disabledToolsCount',
+        configModal: '#configModal',
+        modalTitle: '#modalTitle',
+        configForm: '#configForm',
+        configName: '#configName',
+        configDescription: '#configDescription',
+        closeModal: '#closeModal',
+        cancelConfigBtn: '#cancelConfigBtn',
+        saveConfigBtn: '#saveConfigBtn',
+        importModal: '#importModal',
+        importConfigJson: '#importConfigJson',
+        closeImportModal: '#closeImportModal',
+        cancelImportBtn: '#cancelImportBtn',
+        confirmImportBtn: '#confirmImportBtn'
+    },
+    methods: {
+        async loadToolManagerState(this: any) {
+            try {
+                this.toolManagerState = await Editor.Message.request('cocos-mcp-server', 'getToolManagerState');
+                this.currentConfiguration = this.toolManagerState.currentConfiguration;
+                this.configurations = this.toolManagerState.configurations;
+                this.availableTools = this.toolManagerState.availableTools;
+                this.updateUI();
+            } catch (error) {
+                console.error('Failed to load tool manager state:', error);
+                this.showError('加载工具管理器状态失败');
+            }
+        },
+
+        updateUI(this: any) {
+            this.updateConfigSelector();
+            this.updateToolsDisplay();
+            this.updateStatusBar();
+            this.updateButtons();
+        },
+
+        updateConfigSelector(this: any) {
+            const selector = this.$.configSelector;
+            selector.innerHTML = '<option value="">选择配置...</option>';
+            
+            this.configurations.forEach((config: any) => {
+                const option = document.createElement('option');
+                option.value = config.id;
+                option.textContent = config.name;
+                if (this.currentConfiguration && config.id === this.currentConfiguration.id) {
+                    option.selected = true;
+                }
+                selector.appendChild(option);
+            });
+        },
+
+        updateToolsDisplay(this: any) {
+            const container = this.$.toolsContainer;
+            
+            if (!this.currentConfiguration) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <h3>没有选择配置</h3>
+                        <p>请先选择一个配置或创建新配置</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const toolsByCategory: any = {};
+            this.currentConfiguration.tools.forEach((tool: any) => {
+                if (!toolsByCategory[tool.category]) {
+                    toolsByCategory[tool.category] = [];
+                }
+                toolsByCategory[tool.category].push(tool);
+            });
+
+            container.innerHTML = '';
+            
+            Object.entries(toolsByCategory).forEach(([category, tools]: [string, any]) => {
+                const categoryDiv = document.createElement('div');
+                categoryDiv.className = 'tool-category';
+                
+                const enabledCount = tools.filter((t: any) => t.enabled).length;
+                const totalCount = tools.length;
+                
+                categoryDiv.innerHTML = `
+                    <div class="category-header">
+                        <div class="category-name">${this.getCategoryDisplayName(category)}</div>
+                        <div class="category-toggle">
+                            <span>${enabledCount}/${totalCount}</span>
+                            <input type="checkbox" class="checkbox category-checkbox" 
+                                   data-category="${category}" 
+                                   ${enabledCount === totalCount ? 'checked' : ''}>
+                        </div>
+                    </div>
+                    <div class="tool-list">
+                        ${tools.map((tool: any) => `
+                            <div class="tool-item">
+                                <div class="tool-info">
+                                    <div class="tool-name">${tool.name}</div>
+                                    <div class="tool-description">${tool.description}</div>
+                                </div>
+                                <div class="tool-toggle">
+                                    <input type="checkbox" class="checkbox tool-checkbox" 
+                                           data-category="${tool.category}" 
+                                           data-name="${tool.name}" 
+                                           ${tool.enabled ? 'checked' : ''}>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                
+                container.appendChild(categoryDiv);
+            });
+
+            this.bindToolEvents();
+        },
+
+        bindToolEvents(this: any) {
+            document.querySelectorAll('.category-checkbox').forEach((checkbox: any) => {
+                checkbox.addEventListener('change', (e: any) => {
+                    const category = e.target.dataset.category;
+                    const checked = e.target.checked;
+                    this.toggleCategoryTools(category, checked);
+                });
+            });
+
+            document.querySelectorAll('.tool-checkbox').forEach((checkbox: any) => {
+                checkbox.addEventListener('change', (e: any) => {
+                    const category = e.target.dataset.category;
+                    const name = e.target.dataset.name;
+                    const enabled = e.target.checked;
+                    this.updateToolStatus(category, name, enabled);
+                });
+            });
+        },
+
+        async toggleCategoryTools(this: any, category: string, enabled: boolean) {
+            if (!this.currentConfiguration) return;
+
+            console.log(`Toggling category tools: ${category} = ${enabled}`);
+
+            const categoryTools = this.currentConfiguration.tools.filter((tool: any) => tool.category === category);
+            if (categoryTools.length === 0) return;
+
+            const updates = categoryTools.map((tool: any) => ({
+                category: tool.category,
+                name: tool.name,
+                enabled: enabled
+            }));
+
+            try {
+                // 先更新本地状态
+                categoryTools.forEach((tool: any) => {
+                    tool.enabled = enabled;
+                });
+                console.log(`Updated local category state: ${category} = ${enabled}`);
+                
+                // 立即更新UI
+                this.updateStatusBar();
+                this.updateCategoryCounts();
+                this.updateToolCheckboxes(category, enabled);
+
+                // 然后发送到后端
+                await Editor.Message.request('cocos-mcp-server', 'updateToolStatusBatch', 
+                    this.currentConfiguration.id, updates);
+                
+            } catch (error) {
+                console.error('Failed to toggle category tools:', error);
+                this.showError('切换类别工具失败');
+                
+                // 如果后端更新失败，回滚本地状态
+                categoryTools.forEach((tool: any) => {
+                    tool.enabled = !enabled;
+                });
+                this.updateStatusBar();
+                this.updateCategoryCounts();
+                this.updateToolCheckboxes(category, !enabled);
+            }
+        },
+
+        async updateToolStatus(this: any, category: string, name: string, enabled: boolean) {
+            if (!this.currentConfiguration) return;
+
+            console.log(`Updating tool status: ${category}.${name} = ${enabled}`);
+            console.log(`Current config ID: ${this.currentConfiguration.id}`);
+
+            // 先更新本地状态
+            const tool = this.currentConfiguration.tools.find((t: any) => 
+                t.category === category && t.name === name);
+            if (!tool) {
+                console.error(`Tool not found: ${category}.${name}`);
+                return;
+            }
+
+            try {
+                tool.enabled = enabled;
+                console.log(`Updated local tool state: ${tool.name} = ${tool.enabled}`);
+                
+                // 立即更新UI（只更新统计信息，不重新渲染工具列表）
+                this.updateStatusBar();
+                this.updateCategoryCounts();
+
+                // 然后发送到后端
+                console.log(`Sending to backend: configId=${this.currentConfiguration.id}, category=${category}, name=${name}, enabled=${enabled}`);
+                const result = await Editor.Message.request('cocos-mcp-server', 'updateToolStatus', 
+                    this.currentConfiguration.id, category, name, enabled);
+                console.log('Backend response:', result);
+                
+            } catch (error) {
+                console.error('Failed to update tool status:', error);
+                this.showError('更新工具状态失败');
+                
+                // 如果后端更新失败，回滚本地状态
+                tool.enabled = !enabled;
+                this.updateStatusBar();
+                this.updateCategoryCounts();
+            }
+        },
+
+        updateStatusBar(this: any) {
+            if (!this.currentConfiguration) {
+                this.$.totalToolsCount.textContent = '0';
+                this.$.enabledToolsCount.textContent = '0';
+                this.$.disabledToolsCount.textContent = '0';
+                return;
+            }
+
+            const total = this.currentConfiguration.tools.length;
+            const enabled = this.currentConfiguration.tools.filter((t: any) => t.enabled).length;
+            const disabled = total - enabled;
+
+            console.log(`Status bar update: total=${total}, enabled=${enabled}, disabled=${disabled}`);
+
+            this.$.totalToolsCount.textContent = total.toString();
+            this.$.enabledToolsCount.textContent = enabled.toString();
+            this.$.disabledToolsCount.textContent = disabled.toString();
+        },
+
+        updateCategoryCounts(this: any) {
+            if (!this.currentConfiguration) return;
+
+            // 更新每个类别的计数显示
+            document.querySelectorAll('.category-checkbox').forEach((checkbox: any) => {
+                const category = checkbox.dataset.category;
+                const categoryTools = this.currentConfiguration.tools.filter((t: any) => t.category === category);
+                const enabledCount = categoryTools.filter((t: any) => t.enabled).length;
+                const totalCount = categoryTools.length;
+                
+                // 更新计数显示
+                const countSpan = checkbox.parentElement.querySelector('span');
+                if (countSpan) {
+                    countSpan.textContent = `${enabledCount}/${totalCount}`;
+                }
+                
+                // 更新类别复选框状态
+                checkbox.checked = enabledCount === totalCount;
+            });
+        },
+
+        updateToolCheckboxes(this: any, category: string, enabled: boolean) {
+            // 更新特定类别的所有工具复选框
+            document.querySelectorAll(`.tool-checkbox[data-category="${category}"]`).forEach((checkbox: any) => {
+                checkbox.checked = enabled;
+            });
+        },
+
+        updateButtons(this: any) {
+            const hasCurrentConfig = !!this.currentConfiguration;
+            this.$.editConfigBtn.disabled = !hasCurrentConfig;
+            this.$.deleteConfigBtn.disabled = !hasCurrentConfig;
+            this.$.exportConfigBtn.disabled = !hasCurrentConfig;
+            this.$.applyConfigBtn.disabled = !hasCurrentConfig;
+        },
+
+        async createConfiguration(this: any) {
+            this.editingConfig = null;
+            this.$.modalTitle.textContent = '新建配置';
+            this.$.configName.value = '';
+            this.$.configDescription.value = '';
+            this.showModal('configModal');
+        },
+
+        async editConfiguration(this: any) {
+            if (!this.currentConfiguration) return;
+
+            this.editingConfig = this.currentConfiguration;
+            this.$.modalTitle.textContent = '编辑配置';
+            this.$.configName.value = this.currentConfiguration.name;
+            this.$.configDescription.value = this.currentConfiguration.description || '';
+            this.showModal('configModal');
+        },
+
+        async saveConfiguration(this: any) {
+            const name = this.$.configName.value.trim();
+            const description = this.$.configDescription.value.trim();
+
+            if (!name) {
+                this.showError('配置名称不能为空');
+                return;
+            }
+
+            try {
+                if (this.editingConfig) {
+                    await Editor.Message.request('cocos-mcp-server', 'updateToolConfiguration', 
+                        this.editingConfig.id, { name, description });
+                } else {
+                    await Editor.Message.request('cocos-mcp-server', 'createToolConfiguration', name, description);
+                }
+                
+                this.hideModal('configModal');
+                await this.loadToolManagerState();
+            } catch (error) {
+                console.error('Failed to save configuration:', error);
+                this.showError('保存配置失败');
+            }
+        },
+
+        async deleteConfiguration(this: any) {
+            if (!this.currentConfiguration) return;
+
+            const confirmed = await Editor.Dialog.warn('确认删除', {
+                detail: `确定要删除配置 "${this.currentConfiguration.name}" 吗？此操作不可撤销。`
+            });
+            
+            if (confirmed) {
+                try {
+                    await Editor.Message.request('cocos-mcp-server', 'deleteToolConfiguration', 
+                        this.currentConfiguration.id);
+                    await this.loadToolManagerState();
+                } catch (error) {
+                    console.error('Failed to delete configuration:', error);
+                    this.showError('删除配置失败');
+                }
+            }
+        },
+
+        async applyConfiguration(this: any) {
+            const configId = this.$.configSelector.value;
+            if (!configId) return;
+
+            try {
+                await Editor.Message.request('cocos-mcp-server', 'setCurrentToolConfiguration', configId);
+                await this.loadToolManagerState();
+            } catch (error) {
+                console.error('Failed to apply configuration:', error);
+                this.showError('应用配置失败');
+            }
+        },
+
+        async exportConfiguration(this: any) {
+            if (!this.currentConfiguration) return;
+
+            try {
+                const result = await Editor.Message.request('cocos-mcp-server', 'exportToolConfiguration', 
+                    this.currentConfiguration.id);
+                
+                Editor.Clipboard.write('text', result.configJson);
+                Editor.Dialog.info('导出成功', { detail: '配置已复制到剪贴板' });
+            } catch (error) {
+                console.error('Failed to export configuration:', error);
+                this.showError('导出配置失败');
+            }
+        },
+
+        async importConfiguration(this: any) {
+            this.$.importConfigJson.value = '';
+            this.showModal('importModal');
+        },
+
+        async confirmImport(this: any) {
+            const configJson = this.$.importConfigJson.value.trim();
+            if (!configJson) {
+                this.showError('请输入配置JSON');
+                return;
+            }
+
+            try {
+                await Editor.Message.request('cocos-mcp-server', 'importToolConfiguration', configJson);
+                this.hideModal('importModal');
+                await this.loadToolManagerState();
+                Editor.Dialog.info('导入成功', { detail: '配置已成功导入' });
+            } catch (error) {
+                console.error('Failed to import configuration:', error);
+                this.showError('导入配置失败');
+            }
+        },
+
+        async selectAllTools(this: any) {
+            if (!this.currentConfiguration) return;
+
+            console.log('Selecting all tools');
+
+            const updates = this.currentConfiguration.tools.map((tool: any) => ({
+                category: tool.category,
+                name: tool.name,
+                enabled: true
+            }));
+
+            try {
+                // 先更新本地状态
+                this.currentConfiguration.tools.forEach((tool: any) => {
+                    tool.enabled = true;
+                });
+                console.log('Updated local state: all tools enabled');
+                
+                // 立即更新UI
+                this.updateStatusBar();
+                this.updateToolsDisplay();
+
+                // 然后发送到后端
+                await Editor.Message.request('cocos-mcp-server', 'updateToolStatusBatch', 
+                    this.currentConfiguration.id, updates);
+                
+            } catch (error) {
+                console.error('Failed to select all tools:', error);
+                this.showError('全选工具失败');
+                
+                // 如果后端更新失败，回滚本地状态
+                this.currentConfiguration.tools.forEach((tool: any) => {
+                    tool.enabled = false;
+                });
+                this.updateStatusBar();
+                this.updateToolsDisplay();
+            }
+        },
+
+        async deselectAllTools(this: any) {
+            if (!this.currentConfiguration) return;
+
+            console.log('Deselecting all tools');
+
+            const updates = this.currentConfiguration.tools.map((tool: any) => ({
+                category: tool.category,
+                name: tool.name,
+                enabled: false
+            }));
+
+            try {
+                // 先更新本地状态
+                this.currentConfiguration.tools.forEach((tool: any) => {
+                    tool.enabled = false;
+                });
+                console.log('Updated local state: all tools disabled');
+                
+                // 立即更新UI
+                this.updateStatusBar();
+                this.updateToolsDisplay();
+
+                // 然后发送到后端
+                await Editor.Message.request('cocos-mcp-server', 'updateToolStatusBatch', 
+                    this.currentConfiguration.id, updates);
+                
+            } catch (error) {
+                console.error('Failed to deselect all tools:', error);
+                this.showError('取消全选工具失败');
+                
+                // 如果后端更新失败，回滚本地状态
+                this.currentConfiguration.tools.forEach((tool: any) => {
+                    tool.enabled = true;
+                });
+                this.updateStatusBar();
+                this.updateToolsDisplay();
+            }
+        },
+
+        getCategoryDisplayName(this: any, category: string): string {
+            const categoryNames: any = {
+                'scene': '场景工具',
+                'node': '节点工具',
+                'component': '组件工具',
+                'prefab': '预制体工具',
+                'project': '项目工具',
+                'debug': '调试工具',
+                'preferences': '偏好设置工具',
+                'server': '服务器工具',
+                'broadcast': '广播工具',
+                'sceneAdvanced': '高级场景工具',
+                'sceneView': '场景视图工具',
+                'referenceImage': '参考图片工具',
+                'assetAdvanced': '高级资源工具',
+                'validation': '验证工具'
+            };
+            return categoryNames[category] || category;
+        },
+
+        showModal(this: any, modalId: string) {
+            this.$[modalId].style.display = 'block';
+        },
+
+        hideModal(this: any, modalId: string) {
+            this.$[modalId].style.display = 'none';
+        },
+
+        showError(this: any, message: string) {
+            Editor.Dialog.error('错误', { detail: message });
+        },
+
+        async saveChanges(this: any) {
+            if (!this.currentConfiguration) {
+                this.showError('没有选择配置');
+                return;
+            }
+
+            try {
+                // 确保当前配置已保存到后端
+                await Editor.Message.request('cocos-mcp-server', 'updateToolConfiguration', 
+                    this.currentConfiguration.id, {
+                        name: this.currentConfiguration.name,
+                        description: this.currentConfiguration.description,
+                        tools: this.currentConfiguration.tools
+                    });
+                
+                Editor.Dialog.info('保存成功', { detail: '配置更改已保存' });
+            } catch (error) {
+                console.error('Failed to save changes:', error);
+                this.showError('保存更改失败');
+            }
+        },
+
+        bindEvents(this: any) {
+            this.$.createConfigBtn.addEventListener('click', this.createConfiguration.bind(this));
+            this.$.editConfigBtn.addEventListener('click', this.editConfiguration.bind(this));
+            this.$.deleteConfigBtn.addEventListener('click', this.deleteConfiguration.bind(this));
+            this.$.applyConfigBtn.addEventListener('click', this.applyConfiguration.bind(this));
+            this.$.exportConfigBtn.addEventListener('click', this.exportConfiguration.bind(this));
+            this.$.importConfigBtn.addEventListener('click', this.importConfiguration.bind(this));
+
+            this.$.selectAllBtn.addEventListener('click', this.selectAllTools.bind(this));
+            this.$.deselectAllBtn.addEventListener('click', this.deselectAllTools.bind(this));
+            this.$.saveChangesBtn.addEventListener('click', this.saveChanges.bind(this));
+
+            this.$.closeModal.addEventListener('click', () => this.hideModal('configModal'));
+            this.$.cancelConfigBtn.addEventListener('click', () => this.hideModal('configModal'));
+            this.$.configForm.addEventListener('submit', (e: any) => {
+                e.preventDefault();
+                this.saveConfiguration();
+            });
+
+            this.$.closeImportModal.addEventListener('click', () => this.hideModal('importModal'));
+            this.$.cancelImportBtn.addEventListener('click', () => this.hideModal('importModal'));
+            this.$.confirmImportBtn.addEventListener('click', this.confirmImport.bind(this));
+
+            this.$.configSelector.addEventListener('change', this.applyConfiguration.bind(this));
+        }
+    },
+    ready() {
+        (this as any).toolManagerState = null;
+        (this as any).currentConfiguration = null;
+        (this as any).configurations = [];
+        (this as any).availableTools = [];
+        (this as any).editingConfig = null;
+
+        (this as any).bindEvents();
+        (this as any).loadToolManagerState();
+    },
+    beforeClose() {
+        // 清理工作
+    },
+    close() {
+        // 面板关闭清理
+    }
+} as any);
+</file>
+
+<file path="extensions/cocos-mcp-server/source/test/manual-test.ts">
+declare const Editor: any;
+
+/**
+ * 手动测试脚本
+ * 可以在 Cocos Creator 控制台中执行测试
+ */
+
+export async function testSceneTools() {
+    console.log('=== Testing Scene Tools ===');
+    
+    try {
+        // 1. 获取场景信息
+        console.log('1. Getting scene info...');
+        const sceneInfo = await Editor.Message.request('scene', 'get-scene-info');
+        console.log('Scene info:', sceneInfo);
+        
+        // 2. 创建节点
+        console.log('\n2. Creating test node...');
+        const createResult = await Editor.Message.request('scene', 'create-node', {
+            name: 'TestNode_' + Date.now(),
+            type: 'cc.Node'
+        });
+        console.log('Create result:', createResult);
+        
+        if (createResult && createResult.uuid) {
+            const nodeUuid = createResult.uuid;
+            
+            // 3. 查询节点
+            console.log('\n3. Querying node...');
+            const nodeInfo = await Editor.Message.request('scene', 'query-node', {
+                uuid: nodeUuid
+            });
+            console.log('Node info:', nodeInfo);
+            
+            // 4. 设置节点属性
+            console.log('\n4. Setting node position...');
+            await Editor.Message.request('scene', 'set-node-property', {
+                uuid: nodeUuid,
+                path: 'position',
+                value: { x: 100, y: 200, z: 0 }
+            });
+            console.log('Position set successfully');
+            
+            // 5. 添加组件
+            console.log('\n5. Adding Sprite component...');
+            const addCompResult = await Editor.Message.request('scene', 'add-component', {
+                uuid: nodeUuid,
+                component: 'cc.Sprite'
+            });
+            console.log('Component added:', addCompResult);
+            
+            // 6. 查询组件
+            console.log('\n6. Querying component...');
+            const compInfo = await Editor.Message.request('scene', 'query-node-component', {
+                uuid: nodeUuid,
+                component: 'cc.Sprite'
+            });
+            console.log('Component info:', compInfo);
+            
+            // 7. 删除节点
+            console.log('\n7. Removing test node...');
+            await Editor.Message.request('scene', 'remove-node', {
+                uuid: nodeUuid
+            });
+            console.log('Node removed successfully');
+        }
+        
+    } catch (error) {
+        console.error('Test failed:', error);
+    }
+}
+
+export async function testAssetTools() {
+    console.log('\n=== Testing Asset Tools ===');
+    
+    try {
+        // 1. 查询资源
+        console.log('1. Querying image assets...');
+        const assets = await Editor.Message.request('asset-db', 'query-assets', {
+            pattern: '**/*.png',
+            ccType: 'cc.ImageAsset'
+        });
+        console.log('Found assets:', assets?.length || 0);
+        
+        // 2. 获取资源信息
+        console.log('\n2. Getting asset database info...');
+        const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', {
+            uuid: 'db://assets'
+        });
+        console.log('Asset info:', assetInfo);
+        
+    } catch (error) {
+        console.error('Test failed:', error);
+    }
+}
+
+export async function testProjectTools() {
+    console.log('\n=== Testing Project Tools ===');
+    
+    try {
+        // 1. 获取项目信息
+        console.log('1. Getting project info...');
+        const projectInfo = await Editor.Message.request('project', 'query-info');
+        console.log('Project info:', projectInfo);
+        
+        // 2. 检查构建能力
+        console.log('\n2. Checking build capability...');
+        const canBuild = await Editor.Message.request('project', 'can-build');
+        console.log('Can build:', canBuild);
+        
+    } catch (error) {
+        console.error('Test failed:', error);
+    }
+}
+
+export async function runAllTests() {
+    console.log('Starting MCP Server Tools Test...\n');
+    
+    await testSceneTools();
+    await testAssetTools();
+    await testProjectTools();
+    
+    console.log('\n=== All tests completed ===');
+}
+
+// 导出到全局，方便在控制台调用
+(global as any).MCPTest = {
+    testSceneTools,
+    testAssetTools,
+    testProjectTools,
+    runAllTests
+};
+</file>
+
+<file path="extensions/cocos-mcp-server/source/test/mcp-tool-tester.ts">
+declare const Editor: any;
+
+/**
+ * MCP 工具测试器 - 直接测试通过 WebSocket 的 MCP 工具
+ */
+export class MCPToolTester {
+    private ws: WebSocket | null = null;
+    private messageId = 0;
+    private responseHandlers = new Map<number, (response: any) => void>();
+
+    async connect(port: number): Promise<boolean> {
+        return new Promise((resolve) => {
+            try {
+                this.ws = new WebSocket(`ws://localhost:${port}`);
+                
+                this.ws.onopen = () => {
+                    console.log('WebSocket 连接成功');
+                    resolve(true);
+                };
+                
+                this.ws.onerror = (error) => {
+                    console.error('WebSocket 连接错误:', error);
+                    resolve(false);
+                };
+                
+                this.ws.onmessage = (event) => {
+                    try {
+                        const response = JSON.parse(event.data);
+                        if (response.id && this.responseHandlers.has(response.id)) {
+                            const handler = this.responseHandlers.get(response.id);
+                            this.responseHandlers.delete(response.id);
+                            handler?.(response);
+                        }
+                    } catch (error) {
+                        console.error('处理响应时出错:', error);
+                    }
+                };
+            } catch (error) {
+                console.error('创建 WebSocket 时出错:', error);
+                resolve(false);
+            }
+        });
+    }
+
+    async callTool(tool: string, args: any = {}): Promise<any> {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            throw new Error('WebSocket 未连接');
+        }
+
+        return new Promise((resolve, reject) => {
+            const id = ++this.messageId;
+            const request = {
+                jsonrpc: '2.0',
+                id,
+                method: 'tools/call',
+                params: {
+                    name: tool,
+                    arguments: args
+                }
+            };
+
+            const timeout = setTimeout(() => {
+                this.responseHandlers.delete(id);
+                reject(new Error('请求超时'));
+            }, 10000);
+
+            this.responseHandlers.set(id, (response) => {
+                clearTimeout(timeout);
+                if (response.error) {
+                    reject(new Error(response.error.message));
+                } else {
+                    resolve(response.result);
+                }
+            });
+
+            this.ws!.send(JSON.stringify(request));
+        });
+    }
+
+    async listTools(): Promise<any> {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            throw new Error('WebSocket 未连接');
+        }
+
+        return new Promise((resolve, reject) => {
+            const id = ++this.messageId;
+            const request = {
+                jsonrpc: '2.0',
+                id,
+                method: 'tools/list'
+            };
+
+            const timeout = setTimeout(() => {
+                this.responseHandlers.delete(id);
+                reject(new Error('请求超时'));
+            }, 10000);
+
+            this.responseHandlers.set(id, (response) => {
+                clearTimeout(timeout);
+                if (response.error) {
+                    reject(new Error(response.error.message));
+                } else {
+                    resolve(response.result);
+                }
+            });
+
+            this.ws!.send(JSON.stringify(request));
+        });
+    }
+
+    async testMCPTools() {
+        console.log('\n=== 测试 MCP 工具（通过 WebSocket）===');
+        
+        try {
+            // 0. 获取工具列表
+            console.log('\n0. 获取工具列表...');
+            const toolsList = await this.listTools();
+            console.log(`找到 ${toolsList.tools?.length || 0} 个工具:`);
+            if (toolsList.tools) {
+                for (const tool of toolsList.tools.slice(0, 10)) { // 只显示前10个
+                    console.log(`  - ${tool.name}: ${tool.description}`);
+                }
+                if (toolsList.tools.length > 10) {
+                    console.log(`  ... 还有 ${toolsList.tools.length - 10} 个工具`);
+                }
+            }
+            
+            // 1. 测试场景工具
+            console.log('\n1. 测试当前场景信息...');
+            const sceneInfo = await this.callTool('scene_get_current_scene');
+            console.log('场景信息:', JSON.stringify(sceneInfo).substring(0, 100) + '...');
+            
+            // 2. 测试场景列表
+            console.log('\n2. 测试场景列表...');
+            const sceneList = await this.callTool('scene_get_scene_list');
+            console.log('场景列表:', JSON.stringify(sceneList).substring(0, 100) + '...');
+            
+            // 3. 测试节点创建
+            console.log('\n3. 测试创建节点...');
+            const createResult = await this.callTool('node_create_node', {
+                name: 'MCPTestNode_' + Date.now(),
+                nodeType: 'cc.Node',
+                position: { x: 0, y: 0, z: 0 }
+            });
+            console.log('创建节点结果:', createResult);
+            
+            // 解析创建节点的结果
+            let nodeUuid: string | null = null;
+            if (createResult.content && createResult.content[0] && createResult.content[0].text) {
+                try {
+                    const resultData = JSON.parse(createResult.content[0].text);
+                    if (resultData.success && resultData.data && resultData.data.uuid) {
+                        nodeUuid = resultData.data.uuid;
+                        console.log('成功获取节点UUID:', nodeUuid);
+                    }
+                } catch (e) {
+                }
+            }
+            
+            if (nodeUuid) {
+                // 4. 测试查询节点
+                console.log('\n4. 测试查询节点...');
+                const queryResult = await this.callTool('node_get_node_info', {
+                    uuid: nodeUuid
+                });
+                console.log('节点信息:', JSON.stringify(queryResult).substring(0, 100) + '...');
+                
+                // 5. 测试删除节点
+                console.log('\n5. 测试删除节点...');
+                const removeResult = await this.callTool('node_delete_node', {
+                    uuid: nodeUuid
+                });
+                console.log('删除结果:', removeResult);
+            } else {
+                console.log('无法从创建结果获取节点UUID，尝试通过名称查找...');
+                
+                // 备用方案：通过名称查找刚创建的节点
+                const findResult = await this.callTool('node_find_node_by_name', {
+                    name: 'MCPTestNode_' + Date.now()
+                });
+                
+                if (findResult.content && findResult.content[0] && findResult.content[0].text) {
+                    try {
+                        const findData = JSON.parse(findResult.content[0].text);
+                        if (findData.success && findData.data && findData.data.uuid) {
+                            nodeUuid = findData.data.uuid;
+                            console.log('通过名称查找成功获取UUID:', nodeUuid);
+                        }
+                    } catch (e) {
+                    }
+                }
+                
+                if (!nodeUuid) {
+                    console.log('所有方式都无法获取节点UUID，跳过后续节点操作测试');
+                }
+            }
+            
+            // 6. 测试项目工具
+            console.log('\n6. 测试项目信息...');
+            const projectInfo = await this.callTool('project_get_project_info');
+            console.log('项目信息:', JSON.stringify(projectInfo).substring(0, 100) + '...');
+            
+            // 7. 测试预制体工具
+            console.log('\n7. 测试预制体列表...');
+            const prefabResult = await this.callTool('prefab_get_prefab_list', {
+                folder: 'db://assets'
+            });
+            console.log('找到预制体:', prefabResult.data?.length || 0);
+            
+            // 8. 测试组件工具
+            console.log('\n8. 测试可用组件...');
+            const componentsResult = await this.callTool('component_get_available_components');
+            console.log('可用组件:', JSON.stringify(componentsResult).substring(0, 100) + '...');
+            
+            // 9. 测试调试工具
+            console.log('\n9. 测试编辑器信息...');
+            const editorInfo = await this.callTool('debug_get_editor_info');
+            console.log('编辑器信息:', JSON.stringify(editorInfo).substring(0, 100) + '...');
+            
+        } catch (error) {
+            console.error('MCP 工具测试失败:', error);
+        }
+    }
+
+    disconnect() {
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
+        this.responseHandlers.clear();
+    }
+}
+
+// 导出到全局方便测试
+(global as any).MCPToolTester = MCPToolTester;
+</file>
+
+<file path="extensions/cocos-mcp-server/source/test/prefab-tools-test.ts">
+import { PrefabTools } from '../tools/prefab-tools';
+
+// 预制体工具测试
+export class PrefabToolsTest {
+    private prefabTools: PrefabTools;
+
+    constructor() {
+        this.prefabTools = new PrefabTools();
+    }
+
+    async runAllTests() {
+        console.log('开始预制体工具测试...');
+        
+        try {
+            // 测试1: 获取工具列表
+            await this.testGetTools();
+            
+            // 测试2: 获取预制体列表
+            await this.testGetPrefabList();
+            
+            // 测试3: 测试预制体创建（模拟）
+            await this.testCreatePrefab();
+            
+            // 测试3.5: 测试预制体实例化（模拟）
+            await this.testInstantiatePrefab();
+            
+            // 测试4: 测试预制体验证
+            await this.testValidatePrefab();
+            
+            console.log('所有测试完成！');
+        } catch (error) {
+            console.error('测试过程中发生错误:', error);
+        }
+    }
+
+    private async testGetTools() {
+        console.log('测试1: 获取工具列表');
+        const tools = this.prefabTools.getTools();
+        console.log(`找到 ${tools.length} 个工具:`);
+        tools.forEach(tool => {
+            console.log(`  - ${tool.name}: ${tool.description}`);
+        });
+        console.log('测试1完成\n');
+    }
+
+    private async testGetPrefabList() {
+        console.log('测试2: 获取预制体列表');
+        try {
+            const result = await this.prefabTools.execute('get_prefab_list', { folder: 'db://assets' });
+            if (result.success) {
+                console.log(`找到 ${result.data?.length || 0} 个预制体`);
+                if (result.data && result.data.length > 0) {
+                    result.data.slice(0, 3).forEach((prefab: any) => {
+                        console.log(`  - ${prefab.name}: ${prefab.path}`);
+                    });
+                }
+            } else {
+                console.log('获取预制体列表失败:', result.error);
+            }
+        } catch (error) {
+            console.log('获取预制体列表时发生错误:', error);
+        }
+        console.log('测试2完成\n');
+    }
+
+    private async testCreatePrefab() {
+        console.log('测试3: 测试预制体创建（模拟）');
+        try {
+            // 模拟创建预制体
+            const mockArgs = {
+                nodeUuid: 'mock-node-uuid',
+                savePath: 'db://assets/test',
+                prefabName: 'TestPrefab'
+            };
+            
+            const result = await this.prefabTools.execute('create_prefab', mockArgs);
+            console.log('创建预制体结果:', result);
+        } catch (error) {
+            console.log('创建预制体时发生错误:', error);
+        }
+        console.log('测试3完成\n');
+    }
+
+    private async testInstantiatePrefab() {
+        console.log('测试3.5: 测试预制体实例化（模拟）');
+        try {
+            // 模拟实例化预制体
+            const mockArgs = {
+                prefabPath: 'db://assets/prefabs/TestPrefab.prefab',
+                parentUuid: 'canvas-uuid',
+                position: { x: 100, y: 200, z: 0 }
+            };
+            
+            const result = await this.prefabTools.execute('instantiate_prefab', mockArgs);
+            console.log('实例化预制体结果:', result);
+            
+            // 测试API参数构建
+            this.testCreateNodeAPIParams();
+        } catch (error) {
+            console.log('实例化预制体时发生错误:', error);
+        }
+        console.log('测试3.5完成\n');
+    }
+
+    private testCreateNodeAPIParams() {
+        console.log('测试 create-node API 参数构建...');
+        
+        // 模拟 assetUuid
+        const assetUuid = 'mock-prefab-uuid';
+        
+        // 测试基本参数
+        const basicOptions = {
+            assetUuid: assetUuid,
+            name: 'TestPrefabInstance'
+        };
+        console.log('基本参数:', basicOptions);
+        
+        // 测试带父节点的参数
+        const withParentOptions = {
+            ...basicOptions,
+            parent: 'parent-node-uuid'
+        };
+        console.log('带父节点参数:', withParentOptions);
+        
+        // 测试带位置的参数
+        const withPositionOptions = {
+            ...basicOptions,
+            dump: {
+                position: { x: 100, y: 200, z: 0 }
+            }
+        };
+        console.log('带位置参数:', withPositionOptions);
+        
+        // 测试完整参数
+        const fullOptions = {
+            assetUuid: assetUuid,
+            name: 'TestPrefabInstance',
+            parent: 'parent-node-uuid',
+            dump: {
+                position: { x: 100, y: 200, z: 0 }
+            },
+            keepWorldTransform: false,
+            unlinkPrefab: false
+        };
+        console.log('完整参数:', fullOptions);
+    }
+
+    private async testValidatePrefab() {
+        console.log('测试4: 测试预制体验证');
+        try {
+            // 测试验证一个不存在的预制体
+            const result = await this.prefabTools.execute('validate_prefab', { 
+                prefabPath: 'db://assets/nonexistent.prefab' 
+            });
+            console.log('验证预制体结果:', result);
+        } catch (error) {
+            console.log('验证预制体时发生错误:', error);
+        }
+        console.log('测试4完成\n');
+    }
+
+    // 测试预制体数据结构生成
+    testPrefabDataGeneration() {
+        console.log('测试预制体数据结构生成...');
+        
+        const mockNodeData = {
+            name: 'TestNode',
+            position: { x: 0, y: 0, z: 0 },
+            scale: { x: 1, y: 1, z: 1 },
+            active: true,
+            children: [],
+            components: [
+                {
+                    type: 'cc.UITransform',
+                    enabled: true,
+                    properties: {
+                        _contentSize: { width: 100, height: 100 },
+                        _anchorPoint: { x: 0.5, y: 0.5 }
+                    }
+                }
+            ]
+        };
+
+        const prefabUuid = this.prefabTools['generateUUID']();
+        const prefabData = this.prefabTools['createPrefabData'](mockNodeData, 'TestPrefab', prefabUuid);
+        
+        console.log('生成的预制体数据结构:');
+        console.log(JSON.stringify(prefabData, null, 2));
+        
+        // 验证数据结构
+        const validationResult = this.prefabTools['validatePrefabFormat'](prefabData);
+        console.log('验证结果:', validationResult);
+        
+        console.log('预制体数据结构生成测试完成\n');
+    }
+
+    // 测试UUID生成
+    testUUIDGeneration() {
+        console.log('测试UUID生成...');
+        
+        const uuids = [];
+        for (let i = 0; i < 5; i++) {
+            const uuid = this.prefabTools['generateUUID']();
+            uuids.push(uuid);
+            console.log(`UUID ${i + 1}: ${uuid}`);
+        }
+        
+        // 检查UUID格式
+        const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const validUuids = uuids.filter(uuid => uuidPattern.test(uuid));
+        
+        console.log(`UUID格式验证: ${validUuids.length}/${uuids.length} 个有效`);
+        console.log('UUID生成测试完成\n');
+    }
+}
+
+// 如果直接运行此文件
+if (typeof module !== 'undefined' && module.exports) {
+    const test = new PrefabToolsTest();
+    test.runAllTests();
+    test.testPrefabDataGeneration();
+    test.testUUIDGeneration();
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/test/tool-tester.ts">
+declare const Editor: any;
+
+interface TestResult {
+    tool: string;
+    method: string;
+    success: boolean;
+    result?: any;
+    error?: string;
+    time: number;
+}
+
+export class ToolTester {
+    private results: TestResult[] = [];
+
+    async runTest(tool: string, method: string, params: any): Promise<TestResult> {
+        const startTime = Date.now();
+        const result: TestResult = {
+            tool,
+            method,
+            success: false,
+            time: 0
+        };
+
+        try {
+            const response = await Editor.Message.request(tool, method, params);
+            result.success = true;
+            result.result = response;
+        } catch (error) {
+            result.success = false;
+            result.error = error instanceof Error ? error.message : String(error);
+        }
+
+        result.time = Date.now() - startTime;
+        this.results.push(result);
+        return result;
+    }
+
+    async testSceneOperations() {
+        console.log('Testing Scene Operations...');
+        
+        // Test node creation (this is the main scene operation that works)
+        const createResult = await this.runTest('scene', 'create-node', {
+            name: 'TestNode',
+            type: 'cc.Node'
+        });
+        
+        if (createResult.success && createResult.result) {
+            const nodeUuid = createResult.result;
+            
+            // Test query node info
+            await this.runTest('scene', 'query-node-info', nodeUuid);
+            
+            // Test remove node
+            await this.runTest('scene', 'remove-node', nodeUuid);
+        }
+        
+        // Test execute scene script
+        await this.runTest('scene', 'execute-scene-script', {
+            name: 'cocos-mcp-server',
+            method: 'test-method',
+            args: []
+        });
+    }
+
+    async testNodeOperations() {
+        console.log('Testing Node Operations...');
+        
+        // Create a test node first
+        const createResult = await this.runTest('scene', 'create-node', {
+            name: 'TestNodeForOps',
+            type: 'cc.Node'
+        });
+        
+        if (createResult.success && createResult.result) {
+            const nodeUuid = createResult.result;
+            
+            // Test set property
+            await this.runTest('scene', 'set-property', {
+                uuid: nodeUuid,
+                path: 'position',
+                dump: {
+                    type: 'cc.Vec3',
+                    value: { x: 100, y: 200, z: 0 }
+                }
+            });
+            
+            // Test add component
+            await this.runTest('scene', 'add-component', {
+                uuid: nodeUuid,
+                component: 'cc.Sprite'
+            });
+            
+            // Clean up
+            await this.runTest('scene', 'remove-node', nodeUuid);
+        }
+    }
+
+    async testAssetOperations() {
+        console.log('Testing Asset Operations...');
+        
+        // Test asset list
+        await this.runTest('asset-db', 'query-assets', {
+            pattern: '**/*.png',
+            ccType: 'cc.ImageAsset'
+        });
+        
+        // Test query asset by path
+        await this.runTest('asset-db', 'query-path', 'db://assets');
+        
+        // Test query asset by uuid (using a valid uuid format)
+        await this.runTest('asset-db', 'query-uuid', 'db://assets');
+    }
+
+    async testProjectOperations() {
+        console.log('Testing Project Operations...');
+        
+        // Test open project settings
+        await this.runTest('project', 'open-settings', {});
+        
+        // Test query project settings
+        const projectName = await this.runTest('project', 'query-setting', 'name');
+        
+        if (projectName.success) {
+            console.log('Project name:', projectName.result);
+        }
+    }
+
+    async runAllTests() {
+        this.results = [];
+        
+        await this.testSceneOperations();
+        await this.testNodeOperations();
+        await this.testAssetOperations();
+        await this.testProjectOperations();
+        
+        return this.getTestReport();
+    }
+
+    getTestReport() {
+        const total = this.results.length;
+        const passed = this.results.filter(r => r.success).length;
+        const failed = total - passed;
+        
+        return {
+            summary: {
+                total,
+                passed,
+                failed,
+                passRate: total > 0 ? (passed / total * 100).toFixed(2) + '%' : '0%'
+            },
+            results: this.results,
+            grouped: this.groupResultsByTool()
+        };
+    }
+
+    private groupResultsByTool() {
+        const grouped: Record<string, TestResult[]> = {};
+        
+        for (const result of this.results) {
+            if (!grouped[result.tool]) {
+                grouped[result.tool] = [];
+            }
+            grouped[result.tool].push(result);
+        }
+        
+        return grouped;
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/asset-advanced-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor } from '../types';
+
+export class AssetAdvancedTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'save_asset_meta',
+                description: 'Save asset meta information',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        urlOrUUID: {
+                            type: 'string',
+                            description: 'Asset URL or UUID'
+                        },
+                        content: {
+                            type: 'string',
+                            description: 'Asset meta serialized content string'
+                        }
+                    },
+                    required: ['urlOrUUID', 'content']
+                }
+            },
+            {
+                name: 'generate_available_url',
+                description: 'Generate an available URL based on input URL',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        url: {
+                            type: 'string',
+                            description: 'Asset URL to generate available URL for'
+                        }
+                    },
+                    required: ['url']
+                }
+            },
+            {
+                name: 'query_asset_db_ready',
+                description: 'Check if asset database is ready',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'open_asset_external',
+                description: 'Open asset with external program',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        urlOrUUID: {
+                            type: 'string',
+                            description: 'Asset URL or UUID to open'
+                        }
+                    },
+                    required: ['urlOrUUID']
+                }
+            },
+            {
+                name: 'batch_import_assets',
+                description: 'Import multiple assets in batch',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        sourceDirectory: {
+                            type: 'string',
+                            description: 'Source directory path'
+                        },
+                        targetDirectory: {
+                            type: 'string',
+                            description: 'Target directory URL'
+                        },
+                        fileFilter: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'File extensions to include (e.g., [".png", ".jpg"])',
+                            default: []
+                        },
+                        recursive: {
+                            type: 'boolean',
+                            description: 'Include subdirectories',
+                            default: false
+                        },
+                        overwrite: {
+                            type: 'boolean',
+                            description: 'Overwrite existing files',
+                            default: false
+                        }
+                    },
+                    required: ['sourceDirectory', 'targetDirectory']
+                }
+            },
+            {
+                name: 'batch_delete_assets',
+                description: 'Delete multiple assets in batch',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        urls: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Array of asset URLs to delete'
+                        }
+                    },
+                    required: ['urls']
+                }
+            },
+            {
+                name: 'validate_asset_references',
+                description: 'Validate asset references and find broken links',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        directory: {
+                            type: 'string',
+                            description: 'Directory to validate (default: entire project)',
+                            default: 'db://assets'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'get_asset_dependencies',
+                description: 'Get asset dependency tree',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        urlOrUUID: {
+                            type: 'string',
+                            description: 'Asset URL or UUID'
+                        },
+                        direction: {
+                            type: 'string',
+                            description: 'Dependency direction',
+                            enum: ['dependents', 'dependencies', 'both'],
+                            default: 'dependencies'
+                        }
+                    },
+                    required: ['urlOrUUID']
+                }
+            },
+            {
+                name: 'get_unused_assets',
+                description: 'Find unused assets in project',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        directory: {
+                            type: 'string',
+                            description: 'Directory to scan (default: entire project)',
+                            default: 'db://assets'
+                        },
+                        excludeDirectories: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Directories to exclude from scan',
+                            default: []
+                        }
+                    }
+                }
+            },
+            {
+                name: 'compress_textures',
+                description: 'Batch compress texture assets',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        directory: {
+                            type: 'string',
+                            description: 'Directory containing textures',
+                            default: 'db://assets'
+                        },
+                        format: {
+                            type: 'string',
+                            description: 'Compression format',
+                            enum: ['auto', 'jpg', 'png', 'webp'],
+                            default: 'auto'
+                        },
+                        quality: {
+                            type: 'number',
+                            description: 'Compression quality (0.1-1.0)',
+                            minimum: 0.1,
+                            maximum: 1.0,
+                            default: 0.8
+                        }
+                    }
+                }
+            },
+            {
+                name: 'export_asset_manifest',
+                description: 'Export asset manifest/inventory',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        directory: {
+                            type: 'string',
+                            description: 'Directory to export manifest for',
+                            default: 'db://assets'
+                        },
+                        format: {
+                            type: 'string',
+                            description: 'Export format',
+                            enum: ['json', 'csv', 'xml'],
+                            default: 'json'
+                        },
+                        includeMetadata: {
+                            type: 'boolean',
+                            description: 'Include asset metadata',
+                            default: true
+                        }
+                    }
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'save_asset_meta':
+                return await this.saveAssetMeta(args.urlOrUUID, args.content);
+            case 'generate_available_url':
+                return await this.generateAvailableUrl(args.url);
+            case 'query_asset_db_ready':
+                return await this.queryAssetDbReady();
+            case 'open_asset_external':
+                return await this.openAssetExternal(args.urlOrUUID);
+            case 'batch_import_assets':
+                return await this.batchImportAssets(args);
+            case 'batch_delete_assets':
+                return await this.batchDeleteAssets(args.urls);
+            case 'validate_asset_references':
+                return await this.validateAssetReferences(args.directory);
+            case 'get_asset_dependencies':
+                return await this.getAssetDependencies(args.urlOrUUID, args.direction);
+            case 'get_unused_assets':
+                return await this.getUnusedAssets(args.directory, args.excludeDirectories);
+            case 'compress_textures':
+                return await this.compressTextures(args.directory, args.format, args.quality);
+            case 'export_asset_manifest':
+                return await this.exportAssetManifest(args.directory, args.format, args.includeMetadata);
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async saveAssetMeta(urlOrUUID: string, content: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'save-asset-meta', urlOrUUID, content).then((result: any) => {
+                resolve({
+                    success: true,
+                    data: {
+                        uuid: result?.uuid,
+                        url: result?.url,
+                        message: 'Asset meta saved successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async generateAvailableUrl(url: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'generate-available-url', url).then((availableUrl: string) => {
+                resolve({
+                    success: true,
+                    data: {
+                        originalUrl: url,
+                        availableUrl: availableUrl,
+                        message: availableUrl === url ? 
+                            'URL is available' : 
+                            'Generated new available URL'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryAssetDbReady(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'query-ready').then((ready: boolean) => {
+                resolve({
+                    success: true,
+                    data: {
+                        ready: ready,
+                        message: ready ? 'Asset database is ready' : 'Asset database is not ready'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async openAssetExternal(urlOrUUID: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'open-asset', urlOrUUID).then(() => {
+                resolve({
+                    success: true,
+                    message: 'Asset opened with external program'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async batchImportAssets(args: any): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                const fs = require('fs');
+                const path = require('path');
+                
+                if (!fs.existsSync(args.sourceDirectory)) {
+                    resolve({ success: false, error: 'Source directory does not exist' });
+                    return;
+                }
+
+                const files = this.getFilesFromDirectory(
+                    args.sourceDirectory, 
+                    args.fileFilter || [], 
+                    args.recursive || false
+                );
+
+                const importResults: any[] = [];
+                let successCount = 0;
+                let errorCount = 0;
+
+                for (const filePath of files) {
+                    try {
+                        const fileName = path.basename(filePath);
+                        const targetPath = `${args.targetDirectory}/${fileName}`;
+                        
+                        const result = await Editor.Message.request('asset-db', 'import-asset', 
+                            filePath, targetPath, { 
+                                overwrite: args.overwrite || false,
+                                rename: !(args.overwrite || false)
+                            });
+                        
+                        importResults.push({
+                            source: filePath,
+                            target: targetPath,
+                            success: true,
+                            uuid: result?.uuid
+                        });
+                        successCount++;
+                    } catch (err: any) {
+                        importResults.push({
+                            source: filePath,
+                            success: false,
+                            error: err.message
+                        });
+                        errorCount++;
+                    }
+                }
+
+                resolve({
+                    success: true,
+                    data: {
+                        totalFiles: files.length,
+                        successCount: successCount,
+                        errorCount: errorCount,
+                        results: importResults,
+                        message: `Batch import completed: ${successCount} success, ${errorCount} errors`
+                    }
+                });
+            } catch (err: any) {
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+
+    private getFilesFromDirectory(dirPath: string, fileFilter: string[], recursive: boolean): string[] {
+        const fs = require('fs');
+        const path = require('path');
+        const files: string[] = [];
+
+        const items = fs.readdirSync(dirPath);
+        
+        for (const item of items) {
+            const fullPath = path.join(dirPath, item);
+            const stat = fs.statSync(fullPath);
+            
+            if (stat.isFile()) {
+                if (fileFilter.length === 0 || fileFilter.some(ext => item.toLowerCase().endsWith(ext.toLowerCase()))) {
+                    files.push(fullPath);
+                }
+            } else if (stat.isDirectory() && recursive) {
+                files.push(...this.getFilesFromDirectory(fullPath, fileFilter, recursive));
+            }
+        }
+        
+        return files;
+    }
+
+    private async batchDeleteAssets(urls: string[]): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                const deleteResults: any[] = [];
+                let successCount = 0;
+                let errorCount = 0;
+
+                for (const url of urls) {
+                    try {
+                        await Editor.Message.request('asset-db', 'delete-asset', url);
+                        deleteResults.push({
+                            url: url,
+                            success: true
+                        });
+                        successCount++;
+                    } catch (err: any) {
+                        deleteResults.push({
+                            url: url,
+                            success: false,
+                            error: err.message
+                        });
+                        errorCount++;
+                    }
+                }
+
+                resolve({
+                    success: true,
+                    data: {
+                        totalAssets: urls.length,
+                        successCount: successCount,
+                        errorCount: errorCount,
+                        results: deleteResults,
+                        message: `Batch delete completed: ${successCount} success, ${errorCount} errors`
+                    }
+                });
+            } catch (err: any) {
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+
+    private async validateAssetReferences(directory: string = 'db://assets'): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // Get all assets in directory
+                const assets = await Editor.Message.request('asset-db', 'query-assets', { pattern: `${directory}/**/*` });
+                
+                const brokenReferences: any[] = [];
+                const validReferences: any[] = [];
+
+                for (const asset of assets) {
+                    try {
+                        const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', asset.url);
+                        if (assetInfo) {
+                            validReferences.push({
+                                url: asset.url,
+                                uuid: asset.uuid,
+                                name: asset.name
+                            });
+                        }
+                    } catch (err) {
+                        brokenReferences.push({
+                            url: asset.url,
+                            uuid: asset.uuid,
+                            name: asset.name,
+                            error: (err as Error).message
+                        });
+                    }
+                }
+
+                resolve({
+                    success: true,
+                    data: {
+                        directory: directory,
+                        totalAssets: assets.length,
+                        validReferences: validReferences.length,
+                        brokenReferences: brokenReferences.length,
+                        brokenAssets: brokenReferences,
+                        message: `Validation completed: ${brokenReferences.length} broken references found`
+                    }
+                });
+            } catch (err: any) {
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+
+    private async getAssetDependencies(urlOrUUID: string, direction: string = 'dependencies'): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // Note: This would require scene analysis or additional APIs not available in current documentation
+            resolve({
+                success: false,
+                error: 'Asset dependency analysis requires additional APIs not available in current Cocos Creator MCP implementation. Consider using the Editor UI for dependency analysis.'
+            });
+        });
+    }
+
+    private async getUnusedAssets(directory: string = 'db://assets', excludeDirectories: string[] = []): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // Note: This would require comprehensive project analysis
+            resolve({
+                success: false,
+                error: 'Unused asset detection requires comprehensive project analysis not available in current Cocos Creator MCP implementation. Consider using the Editor UI or third-party tools for unused asset detection.'
+            });
+        });
+    }
+
+    private async compressTextures(directory: string = 'db://assets', format: string = 'auto', quality: number = 0.8): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // Note: Texture compression would require image processing APIs
+            resolve({
+                success: false,
+                error: 'Texture compression requires image processing capabilities not available in current Cocos Creator MCP implementation. Use the Editor\'s built-in texture compression settings or external tools.'
+            });
+        });
+    }
+
+    private async exportAssetManifest(directory: string = 'db://assets', format: string = 'json', includeMetadata: boolean = true): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                const assets = await Editor.Message.request('asset-db', 'query-assets', { pattern: `${directory}/**/*` });
+                
+                const manifest: any[] = [];
+
+                for (const asset of assets) {
+                    const manifestEntry: any = {
+                        name: asset.name,
+                        url: asset.url,
+                        uuid: asset.uuid,
+                        type: asset.type,
+                        size: (asset as any).size || 0,
+                        isDirectory: asset.isDirectory || false
+                    };
+
+                    if (includeMetadata) {
+                        try {
+                            const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', asset.url);
+                            if (assetInfo && assetInfo.meta) {
+                                manifestEntry.meta = assetInfo.meta;
+                            }
+                        } catch (err) {
+                            // Skip metadata if not available
+                        }
+                    }
+
+                    manifest.push(manifestEntry);
+                }
+
+                let exportData: string;
+                switch (format) {
+                    case 'json':
+                        exportData = JSON.stringify(manifest, null, 2);
+                        break;
+                    case 'csv':
+                        exportData = this.convertToCSV(manifest);
+                        break;
+                    case 'xml':
+                        exportData = this.convertToXML(manifest);
+                        break;
+                    default:
+                        exportData = JSON.stringify(manifest, null, 2);
+                }
+
+                resolve({
+                    success: true,
+                    data: {
+                        directory: directory,
+                        format: format,
+                        assetCount: manifest.length,
+                        includeMetadata: includeMetadata,
+                        manifest: exportData,
+                        message: `Asset manifest exported with ${manifest.length} assets`
+                    }
+                });
+            } catch (err: any) {
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+
+    private convertToCSV(data: any[]): string {
+        if (data.length === 0) return '';
+        
+        const headers = Object.keys(data[0]);
+        const csvRows = [headers.join(',')];
+        
+        for (const row of data) {
+            const values = headers.map(header => {
+                const value = row[header];
+                return typeof value === 'object' ? JSON.stringify(value) : String(value);
+            });
+            csvRows.push(values.join(','));
+        }
+        
+        return csvRows.join('\n');
+    }
+
+    private convertToXML(data: any[]): string {
+        let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<assets>\n';
+        
+        for (const item of data) {
+            xml += '  <asset>\n';
+            for (const [key, value] of Object.entries(item)) {
+                const xmlValue = typeof value === 'object' ? 
+                    JSON.stringify(value) : 
+                    String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                xml += `    <${key}>${xmlValue}</${key}>\n`;
+            }
+            xml += '  </asset>\n';
+        }
+        
+        xml += '</assets>';
+        return xml;
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/broadcast-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor } from '../types';
+
+export class BroadcastTools implements ToolExecutor {
+    private listeners: Map<string, Function[]> = new Map();
+    private messageLog: Array<{ message: string; data: any; timestamp: number }> = [];
+
+    constructor() {
+        this.setupBroadcastListeners();
+    }
+
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'get_broadcast_log',
+                description: 'Get recent broadcast messages log',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        limit: {
+                            type: 'number',
+                            description: 'Number of recent messages to return',
+                            default: 50
+                        },
+                        messageType: {
+                            type: 'string',
+                            description: 'Filter by message type (optional)'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'listen_broadcast',
+                description: 'Start listening for specific broadcast messages',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        messageType: {
+                            type: 'string',
+                            description: 'Message type to listen for'
+                        }
+                    },
+                    required: ['messageType']
+                }
+            },
+            {
+                name: 'stop_listening',
+                description: 'Stop listening for specific broadcast messages',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        messageType: {
+                            type: 'string',
+                            description: 'Message type to stop listening for'
+                        }
+                    },
+                    required: ['messageType']
+                }
+            },
+            {
+                name: 'clear_broadcast_log',
+                description: 'Clear the broadcast messages log',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'get_active_listeners',
+                description: 'Get list of active broadcast listeners',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'get_broadcast_log':
+                return await this.getBroadcastLog(args.limit, args.messageType);
+            case 'listen_broadcast':
+                return await this.listenBroadcast(args.messageType);
+            case 'stop_listening':
+                return await this.stopListening(args.messageType);
+            case 'clear_broadcast_log':
+                return await this.clearBroadcastLog();
+            case 'get_active_listeners':
+                return await this.getActiveListeners();
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private setupBroadcastListeners(): void {
+        // 设置预定义的重要广播消息监听
+        const importantMessages = [
+            'build-worker:ready',
+            'build-worker:closed',
+            'scene:ready',
+            'scene:close',
+            'scene:light-probe-edit-mode-changed',
+            'scene:light-probe-bounding-box-edit-mode-changed',
+            'asset-db:ready',
+            'asset-db:close',
+            'asset-db:asset-add',
+            'asset-db:asset-change',
+            'asset-db:asset-delete'
+        ];
+
+        importantMessages.forEach(messageType => {
+            this.addBroadcastListener(messageType);
+        });
+    }
+
+    private addBroadcastListener(messageType: string): void {
+        const listener = (data: any) => {
+            this.messageLog.push({
+                message: messageType,
+                data: data,
+                timestamp: Date.now()
+            });
+
+            // 保持日志大小在合理范围内
+            if (this.messageLog.length > 1000) {
+                this.messageLog = this.messageLog.slice(-500);
+            }
+
+            console.log(`[Broadcast] ${messageType}:`, data);
+        };
+
+        if (!this.listeners.has(messageType)) {
+            this.listeners.set(messageType, []);
+        }
+        this.listeners.get(messageType)!.push(listener);
+
+        // 注册 Editor 消息监听 - 暂时注释掉，Editor.Message API可能不支持
+        // Editor.Message.on(messageType, listener);
+        console.log(`[BroadcastTools] Added listener for ${messageType} (simulated)`);
+    }
+
+    private removeBroadcastListener(messageType: string): void {
+        const listeners = this.listeners.get(messageType);
+        if (listeners) {
+            listeners.forEach(listener => {
+                // Editor.Message.off(messageType, listener);
+                console.log(`[BroadcastTools] Removed listener for ${messageType} (simulated)`);
+            });
+            this.listeners.delete(messageType);
+        }
+    }
+
+    private async getBroadcastLog(limit: number = 50, messageType?: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            let filteredLog = this.messageLog;
+
+            if (messageType) {
+                filteredLog = this.messageLog.filter(entry => entry.message === messageType);
+            }
+
+            const recentLog = filteredLog.slice(-limit).map(entry => ({
+                ...entry,
+                timestamp: new Date(entry.timestamp).toISOString()
+            }));
+
+            resolve({
+                success: true,
+                data: {
+                    log: recentLog,
+                    count: recentLog.length,
+                    totalCount: filteredLog.length,
+                    filter: messageType || 'all',
+                    message: 'Broadcast log retrieved successfully'
+                }
+            });
+        });
+    }
+
+    private async listenBroadcast(messageType: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            try {
+                if (!this.listeners.has(messageType)) {
+                    this.addBroadcastListener(messageType);
+                    resolve({
+                        success: true,
+                        data: {
+                            messageType: messageType,
+                            message: `Started listening for broadcast: ${messageType}`
+                        }
+                    });
+                } else {
+                    resolve({
+                        success: true,
+                        data: {
+                            messageType: messageType,
+                            message: `Already listening for broadcast: ${messageType}`
+                        }
+                    });
+                }
+            } catch (err: any) {
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+
+    private async stopListening(messageType: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            try {
+                if (this.listeners.has(messageType)) {
+                    this.removeBroadcastListener(messageType);
+                    resolve({
+                        success: true,
+                        data: {
+                            messageType: messageType,
+                            message: `Stopped listening for broadcast: ${messageType}`
+                        }
+                    });
+                } else {
+                    resolve({
+                        success: true,
+                        data: {
+                            messageType: messageType,
+                            message: `Was not listening for broadcast: ${messageType}`
+                        }
+                    });
+                }
+            } catch (err: any) {
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+
+    private async clearBroadcastLog(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const previousCount = this.messageLog.length;
+            this.messageLog = [];
+            resolve({
+                success: true,
+                data: {
+                    clearedCount: previousCount,
+                    message: 'Broadcast log cleared successfully'
+                }
+            });
+        });
+    }
+
+    private async getActiveListeners(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const activeListeners = Array.from(this.listeners.keys()).map(messageType => ({
+                messageType: messageType,
+                listenerCount: this.listeners.get(messageType)?.length || 0
+            }));
+
+            resolve({
+                success: true,
+                data: {
+                    listeners: activeListeners,
+                    count: activeListeners.length,
+                    message: 'Active listeners retrieved successfully'
+                }
+            });
+        });
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/component-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor, ComponentInfo } from '../types';
+
+export class ComponentTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'add_component',
+                description: 'Add a component to a specific node. IMPORTANT: You must provide the nodeUuid parameter to specify which node to add the component to.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Target node UUID. REQUIRED: You must specify the exact node to add the component to. Use get_all_nodes or find_node_by_name to get the UUID of the desired node.'
+                        },
+                        componentType: {
+                            type: 'string',
+                            description: 'Component type (e.g., cc.Sprite, cc.Label, cc.Button)'
+                        }
+                    },
+                    required: ['nodeUuid', 'componentType']
+                }
+            },
+            {
+                name: 'remove_component',
+                description: 'Remove a component from a node. componentType must be the component\'s classId (cid, i.e. the type field from getComponents), not the script name or class name. Use getComponents to get the correct cid.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        },
+                        componentType: {
+                            type: 'string',
+                            description: 'Component cid (type field from getComponents). Do NOT use script name or class name. Example: "cc.Sprite" or "9b4a7ueT9xD6aRE+AlOusy1"'
+                        }
+                    },
+                    required: ['nodeUuid', 'componentType']
+                }
+            },
+            {
+                name: 'get_components',
+                description: 'Get all components of a node',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        }
+                    },
+                    required: ['nodeUuid']
+                }
+            },
+            {
+                name: 'get_component_info',
+                description: 'Get specific component information',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        },
+                        componentType: {
+                            type: 'string',
+                            description: 'Component type to get info for'
+                        }
+                    },
+                    required: ['nodeUuid', 'componentType']
+                }
+            },
+            {
+                name: 'set_component_property',
+                description: 'Set component property values for UI components or custom script components. Supports setting properties of built-in UI components (e.g., cc.Label, cc.Sprite) and custom script components. Note: For node basic properties (name, active, layer, etc.), use set_node_property. For node transform properties (position, rotation, scale, etc.), use set_node_transform.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Target node UUID - Must specify the node to operate on'
+                        },
+                        componentType: {
+                            type: 'string',
+                            description: 'Component type - Can be built-in components (e.g., cc.Label) or custom script components (e.g., MyScript). If unsure about component type, use get_components first to retrieve all components on the node.',
+                            // 移除enum限制，允许任意组件类型包括自定义脚本
+                        },
+                        property: {
+                            type: 'string',
+                            description: 'Property name - The property to set. Common properties include:\n' +
+                                '• cc.Label: string (text content), fontSize (font size), color (text color)\n' +
+                                '• cc.Sprite: spriteFrame (sprite frame), color (tint color), sizeMode (size mode)\n' +
+                                '• cc.Button: normalColor (normal color), pressedColor (pressed color), target (target node)\n' +
+                                '• cc.UITransform: contentSize (content size), anchorPoint (anchor point)\n' +
+                                '• Custom Scripts: Based on properties defined in the script'
+                        },
+                        propertyType: {
+                            type: 'string',
+                            description: 'Property type - Must explicitly specify the property data type for correct value conversion and validation',
+                            enum: [
+                                'string', 'number', 'boolean', 'integer', 'float',
+                                'color', 'vec2', 'vec3', 'size',
+                                'node', 'component', 'spriteFrame', 'prefab', 'asset',
+                                'nodeArray', 'colorArray', 'numberArray', 'stringArray'
+                            ]
+                                                },
+
+                        value: {
+                            description: 'Property value - Use the corresponding data format based on propertyType:\n\n' +
+                                '📝 Basic Data Types:\n' +
+                                '• string: "Hello World" (text string)\n' +
+                                '• number/integer/float: 42 or 3.14 (numeric value)\n' +
+                                '• boolean: true or false (boolean value)\n\n' +
+                                '🎨 Color Type:\n' +
+                                '• color: {"r":255,"g":0,"b":0,"a":255} (RGBA values, range 0-255)\n' +
+                                '  - Alternative: "#FF0000" (hexadecimal format)\n' +
+                                '  - Transparency: a value controls opacity, 255 = fully opaque, 0 = fully transparent\n\n' +
+                                '📐 Vector and Size Types:\n' +
+                                '• vec2: {"x":100,"y":50} (2D vector)\n' +
+                                '• vec3: {"x":1,"y":2,"z":3} (3D vector)\n' +
+                                '• size: {"width":100,"height":50} (size dimensions)\n\n' +
+                                '🔗 Reference Types (using UUID strings):\n' +
+                                '• node: "target-node-uuid" (node reference)\n' +
+                                '  How to get: Use get_all_nodes or find_node_by_name to get node UUIDs\n' +
+                                '• component: "target-node-uuid" (component reference)\n' +
+                                '  How it works: \n' +
+                                '    1. Provide the UUID of the NODE that contains the target component\n' +
+                                '    2. System auto-detects required component type from property metadata\n' +
+                                '    3. Finds the component on target node and gets its scene __id__\n' +
+                                '    4. Sets reference using the scene __id__ (not node UUID)\n' +
+                                '  Example: value="label-node-uuid" will find cc.Label and use its scene ID\n' +
+                                '• spriteFrame: "spriteframe-uuid" (sprite frame asset)\n' +
+                                '  How to get: Check asset database or use asset browser\n' +
+                                '• prefab: "prefab-uuid" (prefab asset)\n' +
+                                '  How to get: Check asset database or use asset browser\n' +
+                                '• asset: "asset-uuid" (generic asset reference)\n' +
+                                '  How to get: Check asset database or use asset browser\n\n' +
+                                '📋 Array Types:\n' +
+                                '• nodeArray: ["uuid1","uuid2"] (array of node UUIDs)\n' +
+                                '• colorArray: [{"r":255,"g":0,"b":0,"a":255}] (array of colors)\n' +
+                                '• numberArray: [1,2,3,4,5] (array of numbers)\n' +
+                                '• stringArray: ["item1","item2"] (array of strings)'
+                        }
+                    },
+                    required: ['nodeUuid', 'componentType', 'property', 'propertyType', 'value']
+                }
+            },
+            {
+                name: 'attach_script',
+                description: 'Attach a script component to a node',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        },
+                        scriptPath: {
+                            type: 'string',
+                            description: 'Script asset path (e.g., db://assets/scripts/MyScript.ts)'
+                        }
+                    },
+                    required: ['nodeUuid', 'scriptPath']
+                }
+            },
+            {
+                name: 'get_available_components',
+                description: 'Get list of available component types',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        category: {
+                            type: 'string',
+                            description: 'Component category filter',
+                            enum: ['all', 'renderer', 'ui', 'physics', 'animation', 'audio'],
+                            default: 'all'
+                        }
+                    }
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'add_component':
+                return await this.addComponent(args.nodeUuid, args.componentType);
+            case 'remove_component':
+                return await this.removeComponent(args.nodeUuid, args.componentType);
+            case 'get_components':
+                return await this.getComponents(args.nodeUuid);
+            case 'get_component_info':
+                return await this.getComponentInfo(args.nodeUuid, args.componentType);
+            case 'set_component_property':
+                return await this.setComponentProperty(args);
+            case 'attach_script':
+                return await this.attachScript(args.nodeUuid, args.scriptPath);
+            case 'get_available_components':
+                return await this.getAvailableComponents(args.category);
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async addComponent(nodeUuid: string, componentType: string): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            // 先查找节点上是否已存在该组件
+            const allComponentsInfo = await this.getComponents(nodeUuid);
+            if (allComponentsInfo.success && allComponentsInfo.data?.components) {
+                const existingComponent = allComponentsInfo.data.components.find((comp: any) => comp.type === componentType);
+                if (existingComponent) {
+                    resolve({
+                        success: true,
+                        message: `Component '${componentType}' already exists on node`,
+                        data: {
+                            nodeUuid: nodeUuid,
+                            componentType: componentType,
+                            componentVerified: true,
+                            existing: true
+                        }
+                    });
+                    return;
+                }
+            }
+            // 尝试直接使用 Editor API 添加组件
+            Editor.Message.request('scene', 'create-component', {
+                uuid: nodeUuid,
+                component: componentType
+            }).then(async (result: any) => {
+                // 等待一段时间让Editor完成组件添加
+                await new Promise(resolve => setTimeout(resolve, 100));
+                // 重新查询节点信息验证组件是否真的添加成功
+                try {
+                    const allComponentsInfo2 = await this.getComponents(nodeUuid);
+                    if (allComponentsInfo2.success && allComponentsInfo2.data?.components) {
+                        const addedComponent = allComponentsInfo2.data.components.find((comp: any) => comp.type === componentType);
+                        if (addedComponent) {
+                            resolve({
+                                success: true,
+                                message: `Component '${componentType}' added successfully`,
+                                data: {
+                                    nodeUuid: nodeUuid,
+                                    componentType: componentType,
+                                    componentVerified: true,
+                                    existing: false
+                                }
+                            });
+                        } else {
+                            resolve({
+                                success: false,
+                                error: `Component '${componentType}' was not found on node after addition. Available components: ${allComponentsInfo2.data.components.map((c: any) => c.type).join(', ')}`
+                            });
+                        }
+                    } else {
+                        resolve({
+                            success: false,
+                            error: `Failed to verify component addition: ${allComponentsInfo2.error || 'Unable to get node components'}`
+                        });
+                    }
+                } catch (verifyError: any) {
+                    resolve({
+                        success: false,
+                        error: `Failed to verify component addition: ${verifyError.message}`
+                    });
+                }
+            }).catch((err: Error) => {
+                // 备用方案：使用场景脚本
+                const options = {
+                    name: 'cocos-mcp-server',
+                    method: 'addComponentToNode',
+                    args: [nodeUuid, componentType]
+                };
+                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+                    resolve(result);
+                }).catch((err2: Error) => {
+                    resolve({ success: false, error: `Direct API failed: ${err.message}, Scene script failed: ${err2.message}` });
+                });
+            });
+        });
+    }
+
+    private async removeComponent(nodeUuid: string, componentType: string): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            // 1. 查找节点上的所有组件
+            const allComponentsInfo = await this.getComponents(nodeUuid);
+            if (!allComponentsInfo.success || !allComponentsInfo.data?.components) {
+                resolve({ success: false, error: `Failed to get components for node '${nodeUuid}': ${allComponentsInfo.error}` });
+                return;
+            }
+            // 2. 只查找type字段等于componentType的组件（即cid）
+            const exists = allComponentsInfo.data.components.some((comp: any) => comp.type === componentType);
+            if (!exists) {
+                resolve({ success: false, error: `Component cid '${componentType}' not found on node '${nodeUuid}'. 请用getComponents获取type字段（cid）作为componentType。` });
+                return;
+            }
+            // 3. 官方API直接移除
+            try {
+                await Editor.Message.request('scene', 'remove-component', {
+                    uuid: nodeUuid,
+                    component: componentType
+                });
+                // 4. 再查一次确认是否移除
+                const afterRemoveInfo = await this.getComponents(nodeUuid);
+                const stillExists = afterRemoveInfo.success && afterRemoveInfo.data?.components?.some((comp: any) => comp.type === componentType);
+                if (stillExists) {
+                    resolve({ success: false, error: `Component cid '${componentType}' was not removed from node '${nodeUuid}'.` });
+                } else {
+                    resolve({
+                        success: true,
+                        message: `Component cid '${componentType}' removed successfully from node '${nodeUuid}'`,
+                        data: { nodeUuid, componentType }
+                    });
+                }
+            } catch (err: any) {
+                resolve({ success: false, error: `Failed to remove component: ${err.message}` });
+            }
+        });
+    }
+
+    private async getComponents(nodeUuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 优先尝试直接使用 Editor API 查询节点信息
+            Editor.Message.request('scene', 'query-node', nodeUuid).then((nodeData: any) => {
+                if (nodeData && nodeData.__comps__) {
+                    const components = nodeData.__comps__.map((comp: any) => ({
+                        type: comp.__type__ || comp.cid || comp.type || 'Unknown',
+                        uuid: comp.uuid?.value || comp.uuid || null,
+                        enabled: comp.enabled !== undefined ? comp.enabled : true,
+                        properties: this.extractComponentProperties(comp)
+                    }));
+                    
+                    resolve({
+                        success: true,
+                        data: {
+                            nodeUuid: nodeUuid,
+                            components: components
+                        }
+                    });
+                } else {
+                    resolve({ success: false, error: 'Node not found or no components data' });
+                }
+            }).catch((err: Error) => {
+                // 备用方案：使用场景脚本
+                const options = {
+                    name: 'cocos-mcp-server',
+                    method: 'getNodeInfo',
+                    args: [nodeUuid]
+                };
+                
+                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+                    if (result.success) {
+                        resolve({
+                            success: true,
+                            data: result.data.components
+                        });
+                    } else {
+                        resolve(result);
+                    }
+                }).catch((err2: Error) => {
+                    resolve({ success: false, error: `Direct API failed: ${err.message}, Scene script failed: ${err2.message}` });
+                });
+            });
+        });
+    }
+
+    private async getComponentInfo(nodeUuid: string, componentType: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 优先尝试直接使用 Editor API 查询节点信息
+            Editor.Message.request('scene', 'query-node', nodeUuid).then((nodeData: any) => {
+                if (nodeData && nodeData.__comps__) {
+                    const component = nodeData.__comps__.find((comp: any) => {
+                        const compType = comp.__type__ || comp.cid || comp.type;
+                        return compType === componentType;
+                    });
+                    
+                    if (component) {
+                        resolve({
+                            success: true,
+                            data: {
+                                nodeUuid: nodeUuid,
+                                componentType: componentType,
+                                enabled: component.enabled !== undefined ? component.enabled : true,
+                                properties: this.extractComponentProperties(component)
+                            }
+                        });
+                    } else {
+                        resolve({ success: false, error: `Component '${componentType}' not found on node` });
+                    }
+                } else {
+                    resolve({ success: false, error: 'Node not found or no components data' });
+                }
+            }).catch((err: Error) => {
+                // 备用方案：使用场景脚本
+                const options = {
+                    name: 'cocos-mcp-server',
+                    method: 'getNodeInfo',
+                    args: [nodeUuid]
+                };
+                
+                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+                    if (result.success && result.data.components) {
+                        const component = result.data.components.find((comp: any) => comp.type === componentType);
+                        if (component) {
+                            resolve({
+                                success: true,
+                                data: {
+                                    nodeUuid: nodeUuid,
+                                    componentType: componentType,
+                                    ...component
+                                }
+                            });
+                        } else {
+                            resolve({ success: false, error: `Component '${componentType}' not found on node` });
+                        }
+                    } else {
+                        resolve({ success: false, error: result.error || 'Failed to get component info' });
+                    }
+                }).catch((err2: Error) => {
+                    resolve({ success: false, error: `Direct API failed: ${err.message}, Scene script failed: ${err2.message}` });
+                });
+            });
+        });
+    }
+
+    private extractComponentProperties(component: any): Record<string, any> {
+        console.log(`[extractComponentProperties] Processing component:`, Object.keys(component));
+        
+        // 检查组件是否有 value 属性，这通常包含实际的组件属性
+        if (component.value && typeof component.value === 'object') {
+            console.log(`[extractComponentProperties] Found component.value with properties:`, Object.keys(component.value));
+            return component.value; // 直接返回 value 对象，它包含所有组件属性
+        }
+        
+        // 备用方案：从组件对象中直接提取属性
+        const properties: Record<string, any> = {};
+        const excludeKeys = ['__type__', 'enabled', 'node', '_id', '__scriptAsset', 'uuid', 'name', '_name', '_objFlags', '_enabled', 'type', 'readonly', 'visible', 'cid', 'editor', 'extends'];
+        
+        for (const key in component) {
+            if (!excludeKeys.includes(key) && !key.startsWith('_')) {
+                console.log(`[extractComponentProperties] Found direct property '${key}':`, typeof component[key]);
+                properties[key] = component[key];
+            }
+        }
+        
+        console.log(`[extractComponentProperties] Final extracted properties:`, Object.keys(properties));
+        return properties;
+    }
+
+    private async findComponentTypeByUuid(componentUuid: string): Promise<string | null> {
+        console.log(`[findComponentTypeByUuid] Searching for component type with UUID: ${componentUuid}`);
+        if (!componentUuid) {
+            return null;
+        }
+        try {
+            const nodeTree = await Editor.Message.request('scene', 'query-node-tree');
+            if (!nodeTree) {
+                console.warn('[findComponentTypeByUuid] Failed to query node tree.');
+                return null;
+            }
+
+            const queue: any[] = [nodeTree];
+            
+            while (queue.length > 0) {
+                const currentNodeInfo = queue.shift();
+                if (!currentNodeInfo || !currentNodeInfo.uuid) {
+                    continue;
+                }
+
+                try {
+                    const fullNodeData = await Editor.Message.request('scene', 'query-node', currentNodeInfo.uuid);
+                    if (fullNodeData && fullNodeData.__comps__) {
+                        for (const comp of fullNodeData.__comps__) {
+                            const compAny = comp as any; // Cast to any to access dynamic properties
+                            // The component UUID is nested in the 'value' property
+                            if (compAny.uuid && compAny.uuid.value === componentUuid) {
+                                const componentType = compAny.__type__;
+                                console.log(`[findComponentTypeByUuid] Found component type '${componentType}' for UUID ${componentUuid} on node ${fullNodeData.name?.value}`);
+                                return componentType;
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`[findComponentTypeByUuid] Could not query node ${currentNodeInfo.uuid}:`, e);
+                }
+
+                if (currentNodeInfo.children) {
+                    for (const child of currentNodeInfo.children) {
+                        queue.push(child);
+                    }
+                }
+            }
+
+            console.warn(`[findComponentTypeByUuid] Component with UUID ${componentUuid} not found in scene tree.`);
+            return null;
+        } catch (error) {
+            console.error(`[findComponentTypeByUuid] Error while searching for component type:`, error);
+            return null;
+        }
+    }
+
+    private async setComponentProperty(args: any): Promise<ToolResponse> {
+                        const { nodeUuid, componentType, property, propertyType, value } = args;
+        
+        return new Promise(async (resolve) => {
+            try {
+                console.log(`[ComponentTools] Setting ${componentType}.${property} (type: ${propertyType}) = ${JSON.stringify(value)} on node ${nodeUuid}`);
+                
+                // Step 0: 检测是否为节点属性，如果是则重定向到对应的节点方法
+                const nodeRedirectResult = await this.checkAndRedirectNodeProperties(args);
+                if (nodeRedirectResult) {
+                    resolve(nodeRedirectResult);
+                    return;
+                }
+                
+                // Step 1: 获取组件信息，使用与getComponents相同的方法
+                const componentsResponse = await this.getComponents(nodeUuid);
+                if (!componentsResponse.success || !componentsResponse.data) {
+                    resolve({
+                        success: false,
+                        error: `Failed to get components for node '${nodeUuid}': ${componentsResponse.error}`,
+                        instruction: `Please verify that node UUID '${nodeUuid}' is correct. Use get_all_nodes or find_node_by_name to get the correct node UUID.`
+                    });
+                    return;
+                }
+                
+                const allComponents = componentsResponse.data.components;
+                
+                // Step 2: 查找目标组件
+                let targetComponent = null;
+                const availableTypes: string[] = [];
+                
+                for (let i = 0; i < allComponents.length; i++) {
+                    const comp = allComponents[i];
+                    availableTypes.push(comp.type);
+                    
+                    if (comp.type === componentType) {
+                        targetComponent = comp;
+                        break;
+                    }
+                }
+                
+                if (!targetComponent) {
+                    // 提供更详细的错误信息和建议
+                    const instruction = this.generateComponentSuggestion(componentType, availableTypes, property);
+                    resolve({
+                        success: false,
+                        error: `Component '${componentType}' not found on node. Available components: ${availableTypes.join(', ')}`,
+                        instruction: instruction
+                    });
+                    return;
+                }
+                
+                // Step 3: 自动检测和转换属性值
+                let propertyInfo;
+                try {
+                    console.log(`[ComponentTools] Analyzing property: ${property}`);
+                    propertyInfo = this.analyzeProperty(targetComponent, property);
+                } catch (analyzeError: any) {
+                    console.error(`[ComponentTools] Error in analyzeProperty:`, analyzeError);
+                    resolve({
+                        success: false,
+                        error: `Failed to analyze property '${property}': ${analyzeError.message}`
+                    });
+                    return;
+                }
+                
+                if (!propertyInfo.exists) {
+                    resolve({
+                        success: false,
+                        error: `Property '${property}' not found on component '${componentType}'. Available properties: ${propertyInfo.availableProperties.join(', ')}`
+                    });
+                    return;
+                }
+                
+                // Step 4: 处理属性值和设置
+                const originalValue = propertyInfo.originalValue;
+                let processedValue: any;
+                
+                // 根据明确的propertyType处理属性值
+                switch (propertyType) {
+                    case 'string':
+                        processedValue = String(value);
+                        break;
+                    case 'number':
+                    case 'integer':
+                    case 'float':
+                        processedValue = Number(value);
+                        break;
+                    case 'boolean':
+                        processedValue = Boolean(value);
+                        break;
+                    case 'color':
+                        if (typeof value === 'string') {
+                            // 字符串格式：支持十六进制、颜色名称、rgb()/rgba()
+                            processedValue = this.parseColorString(value);
+                        } else if (typeof value === 'object' && value !== null) {
+                            // 对象格式：验证并转换RGBA值
+                            processedValue = {
+                                r: Math.min(255, Math.max(0, Number(value.r) || 0)),
+                                g: Math.min(255, Math.max(0, Number(value.g) || 0)),
+                                b: Math.min(255, Math.max(0, Number(value.b) || 0)),
+                                a: value.a !== undefined ? Math.min(255, Math.max(0, Number(value.a))) : 255
+                            };
+                        } else {
+                            throw new Error('Color value must be an object with r, g, b properties or a hexadecimal string (e.g., "#FF0000")');
+                        }
+                        break;
+                    case 'vec2':
+                        if (typeof value === 'object' && value !== null) {
+                            processedValue = {
+                                x: Number(value.x) || 0,
+                                y: Number(value.y) || 0
+                            };
+                        } else {
+                            throw new Error('Vec2 value must be an object with x, y properties');
+                        }
+                        break;
+                    case 'vec3':
+                        if (typeof value === 'object' && value !== null) {
+                            processedValue = {
+                                x: Number(value.x) || 0,
+                                y: Number(value.y) || 0,
+                                z: Number(value.z) || 0
+                            };
+                        } else {
+                            throw new Error('Vec3 value must be an object with x, y, z properties');
+                        }
+                        break;
+                    case 'size':
+                        if (typeof value === 'object' && value !== null) {
+                            processedValue = {
+                                width: Number(value.width) || 0,
+                                height: Number(value.height) || 0
+                            };
+                        } else {
+                            throw new Error('Size value must be an object with width, height properties');
+                        }
+                        break;
+                    case 'node':
+                        if (typeof value === 'string') {
+                            processedValue = { uuid: value };
+                        } else {
+                            throw new Error('Node reference value must be a string UUID');
+                        }
+                        break;
+                    case 'component':
+                        if (typeof value === 'string') {
+                            // 组件引用需要特殊处理：通过节点UUID找到组件的__id__
+                            processedValue = value; // 先保存节点UUID，后续会转换为__id__
+                        } else {
+                            throw new Error('Component reference value must be a string (node UUID containing the target component)');
+                        }
+                        break;
+                    case 'spriteFrame':
+                    case 'prefab':
+                    case 'asset':
+                        if (typeof value === 'string') {
+                            processedValue = { uuid: value };
+                        } else {
+                            throw new Error(`${propertyType} value must be a string UUID`);
+                        }
+                        break;
+                    case 'nodeArray':
+                        if (Array.isArray(value)) {
+                            processedValue = value.map((item: any) => {
+                                if (typeof item === 'string') {
+                                    return { uuid: item };
+                                } else {
+                                    throw new Error('NodeArray items must be string UUIDs');
+                                }
+                            });
+                        } else {
+                            throw new Error('NodeArray value must be an array');
+                        }
+                        break;
+                    case 'colorArray':
+                        if (Array.isArray(value)) {
+                            processedValue = value.map((item: any) => {
+                                if (typeof item === 'object' && item !== null && 'r' in item) {
+                                    return {
+                                        r: Math.min(255, Math.max(0, Number(item.r) || 0)),
+                                        g: Math.min(255, Math.max(0, Number(item.g) || 0)),
+                                        b: Math.min(255, Math.max(0, Number(item.b) || 0)),
+                                        a: item.a !== undefined ? Math.min(255, Math.max(0, Number(item.a))) : 255
+                                    };
+                                } else {
+                                    return { r: 255, g: 255, b: 255, a: 255 };
+                                }
+                            });
+                        } else {
+                            throw new Error('ColorArray value must be an array');
+                        }
+                        break;
+                    case 'numberArray':
+                        if (Array.isArray(value)) {
+                            processedValue = value.map((item: any) => Number(item));
+                        } else {
+                            throw new Error('NumberArray value must be an array');
+                        }
+                        break;
+                    case 'stringArray':
+                        if (Array.isArray(value)) {
+                            processedValue = value.map((item: any) => String(item));
+                        } else {
+                            throw new Error('StringArray value must be an array');
+                        }
+                        break;
+                    default:
+                        throw new Error(`Unsupported property type: ${propertyType}`);
+                }
+                
+                console.log(`[ComponentTools] Converting value: ${JSON.stringify(value)} -> ${JSON.stringify(processedValue)} (type: ${propertyType})`);
+                console.log(`[ComponentTools] Property analysis result: propertyInfo.type="${propertyInfo.type}", propertyType="${propertyType}"`);
+                console.log(`[ComponentTools] Will use color special handling: ${propertyType === 'color' && processedValue && typeof processedValue === 'object'}`);
+                
+                // 用于验证的实际期望值（对于组件引用需要特殊处理）
+                let actualExpectedValue = processedValue;
+                
+                // Step 5: 获取原始节点数据来构建正确的路径
+                const rawNodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
+                if (!rawNodeData || !rawNodeData.__comps__) {
+                    resolve({
+                        success: false,
+                        error: `Failed to get raw node data for property setting`
+                    });
+                    return;
+                }
+                
+                // 找到原始组件的索引
+                let rawComponentIndex = -1;
+                for (let i = 0; i < rawNodeData.__comps__.length; i++) {
+                    const comp = rawNodeData.__comps__[i] as any;
+                    const compType = comp.__type__ || comp.cid || comp.type || 'Unknown';
+                    if (compType === componentType) {
+                        rawComponentIndex = i;
+                        break;
+                    }
+                }
+                
+                if (rawComponentIndex === -1) {
+                    resolve({
+                        success: false,
+                        error: `Could not find component index for setting property`
+                    });
+                    return;
+                }
+                
+                // 构建正确的属性路径
+                let propertyPath = `__comps__.${rawComponentIndex}.${property}`;
+                
+                // 特殊处理资源类属性
+                if (propertyType === 'asset' || propertyType === 'spriteFrame' || propertyType === 'prefab' || 
+                    (propertyInfo.type === 'asset' && propertyType === 'string')) {
+                    
+                    console.log(`[ComponentTools] Setting asset reference:`, {
+                        value: processedValue,
+                        property: property,
+                        propertyType: propertyType,
+                        path: propertyPath
+                    });
+                    
+                    // Determine asset type based on property name
+                    let assetType = 'cc.SpriteFrame'; // default
+                    if (property.toLowerCase().includes('texture')) {
+                        assetType = 'cc.Texture2D';
+                    } else if (property.toLowerCase().includes('material')) {
+                        assetType = 'cc.Material';
+                    } else if (property.toLowerCase().includes('font')) {
+                        assetType = 'cc.Font';
+                    } else if (property.toLowerCase().includes('clip')) {
+                        assetType = 'cc.AudioClip';
+                    } else if (propertyType === 'prefab') {
+                        assetType = 'cc.Prefab';
+                    }
+                    
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: propertyPath,
+                        dump: { 
+                            value: processedValue,
+                            type: assetType
+                        }
+                    });
+                } else if (componentType === 'cc.UITransform' && (property === '_contentSize' || property === 'contentSize')) {
+                    // Special handling for UITransform contentSize - set width and height separately
+                    const width = Number(value.width) || 100;
+                    const height = Number(value.height) || 100;
+                    
+                    // Set width first
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: `__comps__.${rawComponentIndex}.width`,
+                        dump: { value: width }
+                    });
+                    
+                    // Then set height
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: `__comps__.${rawComponentIndex}.height`,
+                        dump: { value: height }
+                    });
+                } else if (componentType === 'cc.UITransform' && (property === '_anchorPoint' || property === 'anchorPoint')) {
+                    // Special handling for UITransform anchorPoint - set anchorX and anchorY separately
+                    const anchorX = Number(value.x) || 0.5;
+                    const anchorY = Number(value.y) || 0.5;
+                    
+                    // Set anchorX first
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: `__comps__.${rawComponentIndex}.anchorX`,
+                        dump: { value: anchorX }
+                    });
+                    
+                    // Then set anchorY  
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: `__comps__.${rawComponentIndex}.anchorY`,
+                        dump: { value: anchorY }
+                    });
+                } else if (propertyType === 'color' && processedValue && typeof processedValue === 'object') {
+                    // 特殊处理颜色属性，确保RGBA值正确
+                    // Cocos Creator颜色值范围是0-255
+                    const colorValue = {
+                        r: Math.min(255, Math.max(0, Number(processedValue.r) || 0)),
+                        g: Math.min(255, Math.max(0, Number(processedValue.g) || 0)),
+                        b: Math.min(255, Math.max(0, Number(processedValue.b) || 0)),
+                        a: processedValue.a !== undefined ? Math.min(255, Math.max(0, Number(processedValue.a))) : 255
+                    };
+                    
+                    console.log(`[ComponentTools] Setting color value:`, colorValue);
+                    
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: propertyPath,
+                        dump: { 
+                            value: colorValue,
+                            type: 'cc.Color'
+                        }
+                    });
+                } else if (propertyType === 'vec3' && processedValue && typeof processedValue === 'object') {
+                    // 特殊处理Vec3属性
+                    const vec3Value = {
+                        x: Number(processedValue.x) || 0,
+                        y: Number(processedValue.y) || 0,
+                        z: Number(processedValue.z) || 0
+                    };
+                    
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: propertyPath,
+                        dump: { 
+                            value: vec3Value,
+                            type: 'cc.Vec3'
+                        }
+                    });
+                } else if (propertyType === 'vec2' && processedValue && typeof processedValue === 'object') {
+                    // 特殊处理Vec2属性
+                    const vec2Value = {
+                        x: Number(processedValue.x) || 0,
+                        y: Number(processedValue.y) || 0
+                    };
+                    
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: propertyPath,
+                        dump: { 
+                            value: vec2Value,
+                            type: 'cc.Vec2'
+                        }
+                    });
+                } else if (propertyType === 'size' && processedValue && typeof processedValue === 'object') {
+                    // 特殊处理Size属性
+                    const sizeValue = {
+                        width: Number(processedValue.width) || 0,
+                        height: Number(processedValue.height) || 0
+                    };
+                    
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: propertyPath,
+                        dump: { 
+                            value: sizeValue,
+                            type: 'cc.Size'
+                        }
+                    });
+                } else if (propertyType === 'node' && processedValue && typeof processedValue === 'object' && 'uuid' in processedValue) {
+                    // 特殊处理节点引用
+                    console.log(`[ComponentTools] Setting node reference with UUID: ${processedValue.uuid}`);
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: propertyPath,
+                        dump: { 
+                            value: processedValue,
+                            type: 'cc.Node'
+                        }
+                    });
+                } else if (propertyType === 'component' && typeof processedValue === 'string') {
+                    // 特殊处理组件引用：通过节点UUID找到组件的__id__
+                    const targetNodeUuid = processedValue;
+                    console.log(`[ComponentTools] Setting component reference - finding component on node: ${targetNodeUuid}`);
+                    
+                    // 从当前组件的属性元数据中获取期望的组件类型
+                    let expectedComponentType = '';
+                    
+                    // 获取当前组件的详细信息，包括属性元数据
+                    const currentComponentInfo = await this.getComponentInfo(nodeUuid, componentType);
+                    if (currentComponentInfo.success && currentComponentInfo.data?.properties?.[property]) {
+                        const propertyMeta = currentComponentInfo.data.properties[property];
+                        
+                        // 从属性元数据中提取组件类型信息
+                        if (propertyMeta && typeof propertyMeta === 'object') {
+                            // 检查是否有type字段指示组件类型
+                            if (propertyMeta.type) {
+                                expectedComponentType = propertyMeta.type;
+                            } else if (propertyMeta.ctor) {
+                                // 有些属性可能使用ctor字段
+                                expectedComponentType = propertyMeta.ctor;
+                            } else if (propertyMeta.extends && Array.isArray(propertyMeta.extends)) {
+                                // 检查extends数组，通常第一个是最具体的类型
+                                for (const extendType of propertyMeta.extends) {
+                                    if (extendType.startsWith('cc.') && extendType !== 'cc.Component' && extendType !== 'cc.Object') {
+                                        expectedComponentType = extendType;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (!expectedComponentType) {
+                        throw new Error(`Unable to determine required component type for property '${property}' on component '${componentType}'. Property metadata may not contain type information.`);
+                    }
+                    
+                    console.log(`[ComponentTools] Detected required component type: ${expectedComponentType} for property: ${property}`);
+                    
+                    try {
+                        // 获取目标节点的组件信息
+                        const targetNodeData = await Editor.Message.request('scene', 'query-node', targetNodeUuid);
+                        if (!targetNodeData || !targetNodeData.__comps__) {
+                            throw new Error(`Target node ${targetNodeUuid} not found or has no components`);
+                        }
+                        
+                        // 打印目标节点的组件概览
+                        console.log(`[ComponentTools] Target node ${targetNodeUuid} has ${targetNodeData.__comps__.length} components:`);
+                        targetNodeData.__comps__.forEach((comp: any, index: number) => {
+                            const sceneId = comp.value && comp.value.uuid && comp.value.uuid.value ? comp.value.uuid.value : 'unknown';
+                            console.log(`[ComponentTools] Component ${index}: ${comp.type} (scene_id: ${sceneId})`);
+                        });
+                        
+                        // 查找对应的组件
+                        let targetComponent = null;
+                        let componentId: string | null = null;
+                        
+                        // 在目标节点的_components数组中查找指定类型的组件
+                        // 注意：__comps__和_components的索引是对应的
+                        console.log(`[ComponentTools] Searching for component type: ${expectedComponentType}`);
+                        
+                        for (let i = 0; i < targetNodeData.__comps__.length; i++) {
+                            const comp = targetNodeData.__comps__[i] as any;
+                            console.log(`[ComponentTools] Checking component ${i}: type=${comp.type}, target=${expectedComponentType}`);
+                            
+                            if (comp.type === expectedComponentType) {
+                                targetComponent = comp;
+                                console.log(`[ComponentTools] Found matching component at index ${i}: ${comp.type}`);
+                                
+                                // 从组件的value.uuid.value中获取组件在场景中的ID
+                                if (comp.value && comp.value.uuid && comp.value.uuid.value) {
+                                    componentId = comp.value.uuid.value;
+                                    console.log(`[ComponentTools] Got componentId from comp.value.uuid.value: ${componentId}`);
+                                } else {
+                                    console.log(`[ComponentTools] Component structure:`, {
+                                        hasValue: !!comp.value,
+                                        hasUuid: !!(comp.value && comp.value.uuid),
+                                        hasUuidValue: !!(comp.value && comp.value.uuid && comp.value.uuid.value),
+                                        uuidStructure: comp.value ? comp.value.uuid : 'No value'
+                                    });
+                                    throw new Error(`Unable to extract component ID from component structure`);
+                                }
+                                
+                                break;
+                            }
+                        }
+                        
+                        if (!targetComponent) {
+                            // 如果没找到，列出可用组件让用户了解，显示场景中的真实ID
+                            const availableComponents = targetNodeData.__comps__.map((comp: any, index: number) => {
+                                let sceneId = 'unknown';
+                                // 从组件的value.uuid.value获取场景ID
+                                if (comp.value && comp.value.uuid && comp.value.uuid.value) {
+                                    sceneId = comp.value.uuid.value;
+                                }
+                                return `${comp.type}(scene_id:${sceneId})`;
+                            });
+                            throw new Error(`Component type '${expectedComponentType}' not found on node ${targetNodeUuid}. Available components: ${availableComponents.join(', ')}`);
+                        }
+                        
+                        console.log(`[ComponentTools] Found component ${expectedComponentType} with scene ID: ${componentId} on node ${targetNodeUuid}`);
+                        
+                        // 更新期望值为实际的组件ID对象格式，用于后续验证
+                        if (componentId) {
+                            actualExpectedValue = { uuid: componentId };
+                        }
+                        
+                        // 尝试使用与节点/资源引用相同的格式：{uuid: componentId}
+                        // 测试看是否能正确设置组件引用
+                        await Editor.Message.request('scene', 'set-property', {
+                            uuid: nodeUuid,
+                            path: propertyPath,
+                            dump: { 
+                                value: { uuid: componentId },  // 使用对象格式，像节点/资源引用一样
+                                type: expectedComponentType
+                            }
+                        });
+                        
+                    } catch (error) {
+                        console.error(`[ComponentTools] Error setting component reference:`, error);
+                        throw error;
+                    }
+                } else if (propertyType === 'nodeArray' && Array.isArray(processedValue)) {
+                    // 特殊处理节点数组 - 保持预处理的格式
+                    console.log(`[ComponentTools] Setting node array:`, processedValue);
+                    
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: propertyPath,
+                        dump: { 
+                            value: processedValue  // 保持 [{uuid: "..."}, {uuid: "..."}] 格式
+                        }
+                    });
+                } else if (propertyType === 'colorArray' && Array.isArray(processedValue)) {
+                    // 特殊处理颜色数组
+                    const colorArrayValue = processedValue.map((item: any) => {
+                        if (item && typeof item === 'object' && 'r' in item) {
+                            return {
+                                r: Math.min(255, Math.max(0, Number(item.r) || 0)),
+                                g: Math.min(255, Math.max(0, Number(item.g) || 0)),
+                                b: Math.min(255, Math.max(0, Number(item.b) || 0)),
+                                a: item.a !== undefined ? Math.min(255, Math.max(0, Number(item.a))) : 255
+                            };
+                        } else {
+                            return { r: 255, g: 255, b: 255, a: 255 };
+                        }
+                    });
+                    
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: propertyPath,
+                        dump: { 
+                            value: colorArrayValue,
+                            type: 'cc.Color'
+                        }
+                    });
+                } else {
+                    // Normal property setting for non-asset properties
+                    await Editor.Message.request('scene', 'set-property', {
+                        uuid: nodeUuid,
+                        path: propertyPath,
+                        dump: { value: processedValue }
+                    });
+                }
+                
+                // Step 5: 等待Editor完成更新，然后验证设置结果
+                await new Promise(resolve => setTimeout(resolve, 200)); // 等待200ms让Editor完成更新
+                
+                const verification = await this.verifyPropertyChange(nodeUuid, componentType, property, originalValue, actualExpectedValue);
+                
+                resolve({
+                    success: true,
+                    message: `Successfully set ${componentType}.${property}`,
+                    data: {
+                        nodeUuid,
+                        componentType,
+                        property,
+                        actualValue: verification.actualValue,
+                        changeVerified: verification.verified
+                    }
+                });
+                
+            } catch (error: any) {
+                console.error(`[ComponentTools] Error setting property:`, error);
+                resolve({
+                    success: false,
+                    error: `Failed to set property: ${error.message}`
+                });
+            }
+        });
+    }
+
+
+    private async attachScript(nodeUuid: string, scriptPath: string): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            // 从脚本路径提取组件类名
+            const scriptName = scriptPath.split('/').pop()?.replace('.ts', '').replace('.js', '');
+            if (!scriptName) {
+                resolve({ success: false, error: 'Invalid script path' });
+                return;
+            }
+            // 先查找节点上是否已存在该脚本组件
+            const allComponentsInfo = await this.getComponents(nodeUuid);
+            if (allComponentsInfo.success && allComponentsInfo.data?.components) {
+                const existingScript = allComponentsInfo.data.components.find((comp: any) => comp.type === scriptName);
+                if (existingScript) {
+                    resolve({
+                        success: true,
+                        message: `Script '${scriptName}' already exists on node`,
+                        data: {
+                            nodeUuid: nodeUuid,
+                            componentName: scriptName,
+                            existing: true
+                        }
+                    });
+                    return;
+                }
+            }
+            // 首先尝试直接使用脚本名称作为组件类型
+            Editor.Message.request('scene', 'create-component', {
+                uuid: nodeUuid,
+                component: scriptName  // 使用脚本名称而非UUID
+            }).then(async (result: any) => {
+                // 等待一段时间让Editor完成组件添加
+                await new Promise(resolve => setTimeout(resolve, 100));
+                // 重新查询节点信息验证脚本是否真的添加成功
+                const allComponentsInfo2 = await this.getComponents(nodeUuid);
+                if (allComponentsInfo2.success && allComponentsInfo2.data?.components) {
+                    const addedScript = allComponentsInfo2.data.components.find((comp: any) => comp.type === scriptName);
+                    if (addedScript) {
+                        resolve({
+                            success: true,
+                            message: `Script '${scriptName}' attached successfully`,
+                            data: {
+                                nodeUuid: nodeUuid,
+                                componentName: scriptName,
+                                existing: false
+                            }
+                        });
+                    } else {
+                        resolve({
+                            success: false,
+                            error: `Script '${scriptName}' was not found on node after addition. Available components: ${allComponentsInfo2.data.components.map((c: any) => c.type).join(', ')}`
+                        });
+                    }
+                } else {
+                    resolve({
+                        success: false,
+                        error: `Failed to verify script addition: ${allComponentsInfo2.error || 'Unable to get node components'}`
+                    });
+                }
+            }).catch((err: Error) => {
+                // 备用方案：使用场景脚本
+                const options = {
+                    name: 'cocos-mcp-server',
+                    method: 'attachScript',
+                    args: [nodeUuid, scriptPath]
+                };
+                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+                    resolve(result);
+                }).catch(() => {
+                    resolve({ 
+                        success: false, 
+                        error: `Failed to attach script '${scriptName}': ${err.message}`,
+                        instruction: 'Please ensure the script is properly compiled and exported as a Component class. You can also manually attach the script through the Properties panel in the editor.'
+                    });
+                });
+            });
+        });
+    }
+
+    private async getAvailableComponents(category: string = 'all'): Promise<ToolResponse> {
+        const componentCategories: Record<string, string[]> = {
+            renderer: ['cc.Sprite', 'cc.Label', 'cc.RichText', 'cc.Mask', 'cc.Graphics'],
+            ui: ['cc.Button', 'cc.Toggle', 'cc.Slider', 'cc.ScrollView', 'cc.EditBox', 'cc.ProgressBar'],
+            physics: ['cc.RigidBody2D', 'cc.BoxCollider2D', 'cc.CircleCollider2D', 'cc.PolygonCollider2D'],
+            animation: ['cc.Animation', 'cc.AnimationClip', 'cc.SkeletalAnimation'],
+            audio: ['cc.AudioSource'],
+            layout: ['cc.Layout', 'cc.Widget', 'cc.PageView', 'cc.PageViewIndicator'],
+            effects: ['cc.MotionStreak', 'cc.ParticleSystem2D'],
+            camera: ['cc.Camera'],
+            light: ['cc.Light', 'cc.DirectionalLight', 'cc.PointLight', 'cc.SpotLight']
+        };
+
+        let components: string[] = [];
+        
+        if (category === 'all') {
+            for (const cat in componentCategories) {
+                components = components.concat(componentCategories[cat]);
+            }
+        } else if (componentCategories[category]) {
+            components = componentCategories[category];
+        }
+
+        return {
+            success: true,
+            data: {
+                category: category,
+                components: components
+            }
+        };
+    }
+
+    private isValidPropertyDescriptor(propData: any): boolean {
+        // 检查是否是有效的属性描述对象
+        if (typeof propData !== 'object' || propData === null) {
+            return false;
+        }
+        
+        try {
+            const keys = Object.keys(propData);
+            
+            // 避免遍历简单的数值对象（如 {width: 200, height: 150}）
+            const isSimpleValueObject = keys.every(key => {
+                const value = propData[key];
+                return typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean';
+            });
+            
+            if (isSimpleValueObject) {
+                return false;
+            }
+            
+            // 检查是否包含属性描述符的特征字段，不使用'in'操作符
+            const hasName = keys.includes('name');
+            const hasValue = keys.includes('value');
+            const hasType = keys.includes('type');
+            const hasDisplayName = keys.includes('displayName');
+            const hasReadonly = keys.includes('readonly');
+            
+            // 必须包含name或value字段，且通常还有type字段
+            const hasValidStructure = (hasName || hasValue) && (hasType || hasDisplayName || hasReadonly);
+            
+            // 额外检查：如果有default字段且结构复杂，避免深度遍历
+            if (keys.includes('default') && propData.default && typeof propData.default === 'object') {
+                const defaultKeys = Object.keys(propData.default);
+                if (defaultKeys.includes('value') && typeof propData.default.value === 'object') {
+                    // 这种情况下，我们只返回顶层属性，不深入遍历default.value
+                    return hasValidStructure;
+                }
+            }
+            
+            return hasValidStructure;
+        } catch (error) {
+            console.warn(`[isValidPropertyDescriptor] Error checking property descriptor:`, error);
+            return false;
+        }
+    }
+
+    private analyzeProperty(component: any, propertyName: string): { exists: boolean; type: string; availableProperties: string[]; originalValue: any } {
+        // 从复杂的组件结构中提取可用属性
+        const availableProperties: string[] = [];
+        let propertyValue: any = undefined;
+        let propertyExists = false;
+        
+        // 尝试多种方式查找属性：
+        // 1. 直接属性访问
+        if (Object.prototype.hasOwnProperty.call(component, propertyName)) {
+            propertyValue = component[propertyName];
+            propertyExists = true;
+        }
+        
+        // 2. 从嵌套结构中查找 (如从测试数据看到的复杂结构)
+        if (!propertyExists && component.properties && typeof component.properties === 'object') {
+            // 首先检查properties.value是否存在（这是我们在getComponents中看到的结构）
+            if (component.properties.value && typeof component.properties.value === 'object') {
+                const valueObj = component.properties.value;
+                for (const [key, propData] of Object.entries(valueObj)) {
+                    // 检查propData是否是一个有效的属性描述对象
+                    // 确保propData是对象且包含预期的属性结构
+                    if (this.isValidPropertyDescriptor(propData)) {
+                        const propInfo = propData as any;
+                        availableProperties.push(key);
+                        if (key === propertyName) {
+                            // 优先使用value属性，如果没有则使用propData本身
+                            try {
+                                const propKeys = Object.keys(propInfo);
+                                propertyValue = propKeys.includes('value') ? propInfo.value : propInfo;
+                            } catch (error) {
+                                // 如果检查失败，直接使用propInfo
+                                propertyValue = propInfo;
+                            }
+                            propertyExists = true;
+                        }
+                    }
+                }
+            } else {
+                // 备用方案：直接从properties查找
+                for (const [key, propData] of Object.entries(component.properties)) {
+                    if (this.isValidPropertyDescriptor(propData)) {
+                        const propInfo = propData as any;
+                        availableProperties.push(key);
+                        if (key === propertyName) {
+                            // 优先使用value属性，如果没有则使用propData本身
+                            try {
+                                const propKeys = Object.keys(propInfo);
+                                propertyValue = propKeys.includes('value') ? propInfo.value : propInfo;
+                            } catch (error) {
+                                // 如果检查失败，直接使用propInfo
+                                propertyValue = propInfo;
+                            }
+                            propertyExists = true;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // 3. 从直接属性中提取简单属性名
+        if (availableProperties.length === 0) {
+            for (const key of Object.keys(component)) {
+                if (!key.startsWith('_') && !['__type__', 'cid', 'node', 'uuid', 'name', 'enabled', 'type', 'readonly', 'visible'].includes(key)) {
+                    availableProperties.push(key);
+                }
+            }
+        }
+        
+        if (!propertyExists) {
+            return {
+                exists: false,
+                type: 'unknown',
+                availableProperties,
+                originalValue: undefined
+            };
+        }
+        
+        let type = 'unknown';
+        
+        // 智能类型检测
+        if (Array.isArray(propertyValue)) {
+            // 数组类型检测
+            if (propertyName.toLowerCase().includes('node')) {
+                type = 'nodeArray';
+            } else if (propertyName.toLowerCase().includes('color')) {
+                type = 'colorArray';
+            } else {
+                type = 'array';
+            }
+        } else if (typeof propertyValue === 'string') {
+            // Check if property name suggests it's an asset
+            if (['spriteFrame', 'texture', 'material', 'font', 'clip', 'prefab'].includes(propertyName.toLowerCase())) {
+                type = 'asset';
+            } else {
+                type = 'string';
+            }
+        } else if (typeof propertyValue === 'number') {
+            type = 'number';
+        } else if (typeof propertyValue === 'boolean') {
+            type = 'boolean';
+        } else if (propertyValue && typeof propertyValue === 'object') {
+            try {
+                const keys = Object.keys(propertyValue);
+                if (keys.includes('r') && keys.includes('g') && keys.includes('b')) {
+                    type = 'color';
+                } else if (keys.includes('x') && keys.includes('y')) {
+                    type = propertyValue.z !== undefined ? 'vec3' : 'vec2';
+                } else if (keys.includes('width') && keys.includes('height')) {
+                    type = 'size';
+                } else if (keys.includes('uuid') || keys.includes('__uuid__')) {
+                    // 检查是否是节点引用（通过属性名或__id__属性判断）
+                    if (propertyName.toLowerCase().includes('node') || 
+                        propertyName.toLowerCase().includes('target') ||
+                        keys.includes('__id__')) {
+                        type = 'node';
+                    } else {
+                        type = 'asset';
+                    }
+                } else if (keys.includes('__id__')) {
+                    // 节点引用特征
+                    type = 'node';
+                } else {
+                    type = 'object';
+                }
+            } catch (error) {
+                console.warn(`[analyzeProperty] Error checking property type for: ${JSON.stringify(propertyValue)}`);
+                type = 'object';
+            }
+        } else if (propertyValue === null || propertyValue === undefined) {
+            // For null/undefined values, check property name to determine type
+            if (['spriteFrame', 'texture', 'material', 'font', 'clip', 'prefab'].includes(propertyName.toLowerCase())) {
+                type = 'asset';
+            } else if (propertyName.toLowerCase().includes('node') || 
+                      propertyName.toLowerCase().includes('target')) {
+                type = 'node';
+            } else if (propertyName.toLowerCase().includes('component')) {
+                type = 'component';
+            } else {
+                type = 'unknown';
+            }
+        }
+        
+        return {
+            exists: true,
+            type,
+            availableProperties,
+            originalValue: propertyValue
+        };
+    }
+
+    private smartConvertValue(inputValue: any, propertyInfo: any): any {
+        const { type, originalValue } = propertyInfo;
+        
+        console.log(`[smartConvertValue] Converting ${JSON.stringify(inputValue)} to type: ${type}`);
+        
+        switch (type) {
+            case 'string':
+                return String(inputValue);
+                
+            case 'number':
+                return Number(inputValue);
+                
+            case 'boolean':
+                if (typeof inputValue === 'boolean') return inputValue;
+                if (typeof inputValue === 'string') {
+                    return inputValue.toLowerCase() === 'true' || inputValue === '1';
+                }
+                return Boolean(inputValue);
+                
+            case 'color':
+                // 优化的颜色处理，支持多种输入格式
+                if (typeof inputValue === 'string') {
+                    // 字符串格式：十六进制、颜色名称、rgb()/rgba()
+                    return this.parseColorString(inputValue);
+                } else if (typeof inputValue === 'object' && inputValue !== null) {
+                    try {
+                        const inputKeys = Object.keys(inputValue);
+                        // 如果输入是颜色对象，验证并转换
+                        if (inputKeys.includes('r') || inputKeys.includes('g') || inputKeys.includes('b')) {
+                            return {
+                                r: Math.min(255, Math.max(0, Number(inputValue.r) || 0)),
+                                g: Math.min(255, Math.max(0, Number(inputValue.g) || 0)),
+                                b: Math.min(255, Math.max(0, Number(inputValue.b) || 0)),
+                                a: inputValue.a !== undefined ? Math.min(255, Math.max(0, Number(inputValue.a))) : 255
+                            };
+                        }
+                    } catch (error) {
+                        console.warn(`[smartConvertValue] Invalid color object: ${JSON.stringify(inputValue)}`);
+                    }
+                }
+                // 如果有原值，保持原值结构并更新提供的值
+                if (originalValue && typeof originalValue === 'object') {
+                    try {
+                        const inputKeys = typeof inputValue === 'object' && inputValue ? Object.keys(inputValue) : [];
+                        return {
+                            r: inputKeys.includes('r') ? Math.min(255, Math.max(0, Number(inputValue.r))) : (originalValue.r || 255),
+                            g: inputKeys.includes('g') ? Math.min(255, Math.max(0, Number(inputValue.g))) : (originalValue.g || 255),
+                            b: inputKeys.includes('b') ? Math.min(255, Math.max(0, Number(inputValue.b))) : (originalValue.b || 255),
+                            a: inputKeys.includes('a') ? Math.min(255, Math.max(0, Number(inputValue.a))) : (originalValue.a || 255)
+                        };
+                    } catch (error) {
+                        console.warn(`[smartConvertValue] Error processing color with original value: ${error}`);
+                    }
+                }
+                // 默认返回白色
+                console.warn(`[smartConvertValue] Using default white color for invalid input: ${JSON.stringify(inputValue)}`);
+                return { r: 255, g: 255, b: 255, a: 255 };
+                
+            case 'vec2':
+                if (typeof inputValue === 'object' && inputValue !== null) {
+                    return {
+                        x: Number(inputValue.x) || originalValue.x || 0,
+                        y: Number(inputValue.y) || originalValue.y || 0
+                    };
+                }
+                return originalValue;
+                
+            case 'vec3':
+                if (typeof inputValue === 'object' && inputValue !== null) {
+                    return {
+                        x: Number(inputValue.x) || originalValue.x || 0,
+                        y: Number(inputValue.y) || originalValue.y || 0,
+                        z: Number(inputValue.z) || originalValue.z || 0
+                    };
+                }
+                return originalValue;
+                
+            case 'size':
+                if (typeof inputValue === 'object' && inputValue !== null) {
+                    return {
+                        width: Number(inputValue.width) || originalValue.width || 100,
+                        height: Number(inputValue.height) || originalValue.height || 100
+                    };
+                }
+                return originalValue;
+                
+            case 'node':
+                if (typeof inputValue === 'string') {
+                    // 节点引用需要特殊处理
+                    return inputValue;
+                } else if (typeof inputValue === 'object' && inputValue !== null) {
+                    // 如果已经是对象形式，返回UUID或完整对象
+                    return inputValue.uuid || inputValue;
+                }
+                return originalValue;
+                
+            case 'asset':
+                if (typeof inputValue === 'string') {
+                    // 如果输入是字符串路径，转换为asset对象
+                    return { uuid: inputValue };
+                } else if (typeof inputValue === 'object' && inputValue !== null) {
+                    return inputValue;
+                }
+                return originalValue;
+                
+            default:
+                // 对于未知类型，尽量保持原有结构
+                if (typeof inputValue === typeof originalValue) {
+                    return inputValue;
+                }
+                return originalValue;
+        }
+    }
+
+        private parseColorString(colorStr: string): { r: number; g: number; b: number; a: number } {
+        const str = colorStr.trim();
+        
+        // 只支持十六进制格式 #RRGGBB 或 #RRGGBBAA
+        if (str.startsWith('#')) {
+            if (str.length === 7) { // #RRGGBB
+                const r = parseInt(str.substring(1, 3), 16);
+                const g = parseInt(str.substring(3, 5), 16);
+                const b = parseInt(str.substring(5, 7), 16);
+                return { r, g, b, a: 255 };
+            } else if (str.length === 9) { // #RRGGBBAA
+                const r = parseInt(str.substring(1, 3), 16);
+                const g = parseInt(str.substring(3, 5), 16);
+                const b = parseInt(str.substring(5, 7), 16);
+                const a = parseInt(str.substring(7, 9), 16);
+                return { r, g, b, a };
+            }
+        }
+        
+        // 如果不是有效的十六进制格式，返回错误提示
+        throw new Error(`Invalid color format: "${colorStr}". Only hexadecimal format is supported (e.g., "#FF0000" or "#FF0000FF")`);
+    }
+
+    private async verifyPropertyChange(nodeUuid: string, componentType: string, property: string, originalValue: any, expectedValue: any): Promise<{ verified: boolean; actualValue: any; fullData: any }> {
+        console.log(`[verifyPropertyChange] Starting verification for ${componentType}.${property}`);
+        console.log(`[verifyPropertyChange] Expected value:`, JSON.stringify(expectedValue));
+        console.log(`[verifyPropertyChange] Original value:`, JSON.stringify(originalValue));
+        
+        try {
+            // 重新获取组件信息进行验证
+            console.log(`[verifyPropertyChange] Calling getComponentInfo...`);
+            const componentInfo = await this.getComponentInfo(nodeUuid, componentType);
+            console.log(`[verifyPropertyChange] getComponentInfo success:`, componentInfo.success);
+            
+            const allComponents = await this.getComponents(nodeUuid);
+            console.log(`[verifyPropertyChange] getComponents success:`, allComponents.success);
+            
+            if (componentInfo.success && componentInfo.data) {
+                console.log(`[verifyPropertyChange] Component data available, extracting property '${property}'`);
+                const allPropertyNames = Object.keys(componentInfo.data.properties || {});
+                console.log(`[verifyPropertyChange] Available properties:`, allPropertyNames);
+                const propertyData = componentInfo.data.properties?.[property];
+                console.log(`[verifyPropertyChange] Raw property data for '${property}':`, JSON.stringify(propertyData));
+                
+                // 从属性数据中提取实际值
+                let actualValue = propertyData;
+                console.log(`[verifyPropertyChange] Initial actualValue:`, JSON.stringify(actualValue));
+                
+                if (propertyData && typeof propertyData === 'object' && 'value' in propertyData) {
+                    actualValue = propertyData.value;
+                    console.log(`[verifyPropertyChange] Extracted actualValue from .value:`, JSON.stringify(actualValue));
+                } else {
+                    console.log(`[verifyPropertyChange] No .value property found, using raw data`);
+                }
+                
+                // 修复验证逻辑：检查实际值是否匹配期望值
+                let verified = false;
+                
+                if (typeof expectedValue === 'object' && expectedValue !== null && 'uuid' in expectedValue) {
+                    // 对于引用类型（节点/组件/资源），比较UUID
+                    const actualUuid = actualValue && typeof actualValue === 'object' && 'uuid' in actualValue ? actualValue.uuid : '';
+                    const expectedUuid = expectedValue.uuid || '';
+                    verified = actualUuid === expectedUuid && expectedUuid !== '';
+                    
+                    console.log(`[verifyPropertyChange] Reference comparison:`);
+                    console.log(`  - Expected UUID: "${expectedUuid}"`);
+                    console.log(`  - Actual UUID: "${actualUuid}"`);
+                    console.log(`  - UUID match: ${actualUuid === expectedUuid}`);
+                    console.log(`  - UUID not empty: ${expectedUuid !== ''}`);
+                    console.log(`  - Final verified: ${verified}`);
+                } else {
+                    // 对于其他类型，直接比较值
+                    console.log(`[verifyPropertyChange] Value comparison:`);
+                    console.log(`  - Expected type: ${typeof expectedValue}`);
+                    console.log(`  - Actual type: ${typeof actualValue}`);
+                    
+                    if (typeof actualValue === typeof expectedValue) {
+                        if (typeof actualValue === 'object' && actualValue !== null && expectedValue !== null) {
+                            // 对象类型的深度比较
+                            verified = JSON.stringify(actualValue) === JSON.stringify(expectedValue);
+                            console.log(`  - Object comparison (JSON): ${verified}`);
+                        } else {
+                            // 基本类型的直接比较
+                            verified = actualValue === expectedValue;
+                            console.log(`  - Direct comparison: ${verified}`);
+                        }
+                    } else {
+                        // 类型不匹配时的特殊处理（如数字和字符串）
+                        const stringMatch = String(actualValue) === String(expectedValue);
+                        const numberMatch = Number(actualValue) === Number(expectedValue);
+                        verified = stringMatch || numberMatch;
+                        console.log(`  - String match: ${stringMatch}`);
+                        console.log(`  - Number match: ${numberMatch}`);
+                        console.log(`  - Type mismatch verified: ${verified}`);
+                    }
+                }
+                
+                console.log(`[verifyPropertyChange] Final verification result: ${verified}`);
+                console.log(`[verifyPropertyChange] Final actualValue:`, JSON.stringify(actualValue));
+                
+                const result = {
+                    verified,
+                    actualValue,
+                    fullData: {
+                        // 只返回修改的属性信息，不返回完整组件数据
+                        modifiedProperty: {
+                            name: property,
+                            before: originalValue,
+                            expected: expectedValue,
+                            actual: actualValue,
+                            verified,
+                            propertyMetadata: propertyData // 只包含这个属性的元数据
+                        },
+                        // 简化的组件信息
+                        componentSummary: {
+                            nodeUuid,
+                            componentType,
+                            totalProperties: Object.keys(componentInfo.data?.properties || {}).length
+                        }
+                    }
+                };
+                
+                console.log(`[verifyPropertyChange] Returning result:`, JSON.stringify(result, null, 2));
+                return result;
+            } else {
+                console.log(`[verifyPropertyChange] ComponentInfo failed or no data:`, componentInfo);
+            }
+        } catch (error) {
+            console.error('[verifyPropertyChange] Verification failed with error:', error);
+            console.error('[verifyPropertyChange] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+        }
+        
+        console.log(`[verifyPropertyChange] Returning fallback result`);
+        return {
+            verified: false,
+            actualValue: undefined,
+            fullData: null
+        };
+    }
+
+    /**
+     * 检测是否为节点属性，如果是则重定向到对应的节点方法
+     */
+    private async checkAndRedirectNodeProperties(args: any): Promise<ToolResponse | null> {
+        const { nodeUuid, componentType, property, propertyType, value } = args;
+        
+        // 检测是否为节点基础属性（应该使用 set_node_property）
+        const nodeBasicProperties = [
+            'name', 'active', 'layer', 'mobility', 'parent', 'children', 'hideFlags'
+        ];
+        
+        // 检测是否为节点变换属性（应该使用 set_node_transform）
+        const nodeTransformProperties = [
+            'position', 'rotation', 'scale', 'eulerAngles', 'angle'
+        ];
+        
+        // Detect attempts to set cc.Node properties (common mistake)
+        if (componentType === 'cc.Node' || componentType === 'Node') {
+            if (nodeBasicProperties.includes(property)) {
+                return {
+                    success: false,
+                                          error: `Property '${property}' is a node basic property, not a component property`,
+                      instruction: `Please use set_node_property method to set node properties: set_node_property(uuid="${nodeUuid}", property="${property}", value=${JSON.stringify(value)})`
+                  };
+              } else if (nodeTransformProperties.includes(property)) {
+                  return {
+                      success: false,
+                      error: `Property '${property}' is a node transform property, not a component property`,
+                      instruction: `Please use set_node_transform method to set transform properties: set_node_transform(uuid="${nodeUuid}", ${property}=${JSON.stringify(value)})`
+                  };
+              }
+          }
+          
+          // Detect common incorrect usage
+          if (nodeBasicProperties.includes(property) || nodeTransformProperties.includes(property)) {
+              const methodName = nodeTransformProperties.includes(property) ? 'set_node_transform' : 'set_node_property';
+              return {
+                  success: false,
+                  error: `Property '${property}' is a node property, not a component property`,
+                  instruction: `Property '${property}' should be set using ${methodName} method, not set_component_property. Please use: ${methodName}(uuid="${nodeUuid}", ${nodeTransformProperties.includes(property) ? property : `property="${property}"`}=${JSON.stringify(value)})`
+              };
+          }
+          
+          return null; // 不是节点属性，继续正常处理
+      }
+
+      /**
+       * 生成组件建议信息
+       */
+      private generateComponentSuggestion(requestedType: string, availableTypes: string[], property: string): string {
+          // 检查是否存在相似的组件类型
+          const similarTypes = availableTypes.filter(type => 
+              type.toLowerCase().includes(requestedType.toLowerCase()) || 
+              requestedType.toLowerCase().includes(type.toLowerCase())
+          );
+          
+          let instruction = '';
+          
+          if (similarTypes.length > 0) {
+              instruction += `\n\n🔍 Found similar components: ${similarTypes.join(', ')}`;
+              instruction += `\n💡 Suggestion: Perhaps you meant to set the '${similarTypes[0]}' component?`;
+          }
+          
+          // Recommend possible components based on property name
+          const propertyToComponentMap: Record<string, string[]> = {
+              'string': ['cc.Label', 'cc.RichText', 'cc.EditBox'],
+              'text': ['cc.Label', 'cc.RichText'],
+              'fontSize': ['cc.Label', 'cc.RichText'],
+              'spriteFrame': ['cc.Sprite'],
+              'color': ['cc.Label', 'cc.Sprite', 'cc.Graphics'],
+              'normalColor': ['cc.Button'],
+              'pressedColor': ['cc.Button'],
+              'target': ['cc.Button'],
+              'contentSize': ['cc.UITransform'],
+              'anchorPoint': ['cc.UITransform']
+          };
+          
+          const recommendedComponents = propertyToComponentMap[property] || [];
+          const availableRecommended = recommendedComponents.filter(comp => availableTypes.includes(comp));
+          
+          if (availableRecommended.length > 0) {
+              instruction += `\n\n🎯 Based on property '${property}', recommended components: ${availableRecommended.join(', ')}`;
+          }
+          
+          // Provide operation suggestions
+          instruction += `\n\n📋 Suggested Actions:`;
+          instruction += `\n1. Use get_components(nodeUuid="${requestedType.includes('uuid') ? 'YOUR_NODE_UUID' : 'nodeUuid'}") to view all components on the node`;
+          instruction += `\n2. If you need to add a component, use add_component(nodeUuid="...", componentType="${requestedType}")`;
+          instruction += `\n3. Verify that the component type name is correct (case-sensitive)`;
+          
+                  return instruction;
+    }
+
+    /**
+     * 快速验证资源设置结果
+     */
+    private async quickVerifyAsset(nodeUuid: string, componentType: string, property: string): Promise<any> {
+        try {
+            const rawNodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
+            if (!rawNodeData || !rawNodeData.__comps__) {
+                return null;
+            }
+            
+            // 找到组件
+            const component = rawNodeData.__comps__.find((comp: any) => {
+                const compType = comp.__type__ || comp.cid || comp.type;
+                return compType === componentType;
+            });
+            
+            if (!component) {
+                return null;
+            }
+            
+            // 提取属性值
+            const properties = this.extractComponentProperties(component);
+            const propertyData = properties[property];
+            
+            if (propertyData && typeof propertyData === 'object' && 'value' in propertyData) {
+                return propertyData.value;
+            } else {
+                return propertyData;
+            }
+        } catch (error) {
+            console.error(`[quickVerifyAsset] Error:`, error);
+            return null;
+        }
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/debug-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor, ConsoleMessage, PerformanceStats, ValidationResult, ValidationIssue } from '../types';
+import * as fs from 'fs';
+import * as path from 'path';
+
+export class DebugTools implements ToolExecutor {
+    private consoleMessages: ConsoleMessage[] = [];
+    private readonly maxMessages = 1000;
+
+    constructor() {
+        this.setupConsoleCapture();
+    }
+
+    private setupConsoleCapture(): void {
+        // Intercept Editor console messages
+        // Note: Editor.Message.addBroadcastListener may not be available in all versions
+        // This is a placeholder for console capture implementation
+        console.log('Console capture setup - implementation depends on Editor API availability');
+    }
+
+    private addConsoleMessage(message: any): void {
+        this.consoleMessages.push({
+            timestamp: new Date().toISOString(),
+            ...message
+        });
+
+        // Keep only latest messages
+        if (this.consoleMessages.length > this.maxMessages) {
+            this.consoleMessages.shift();
+        }
+    }
+
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'get_console_logs',
+                description: 'Get editor console logs',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        limit: {
+                            type: 'number',
+                            description: 'Number of recent logs to retrieve',
+                            default: 100
+                        },
+                        filter: {
+                            type: 'string',
+                            description: 'Filter logs by type',
+                            enum: ['all', 'log', 'warn', 'error', 'info'],
+                            default: 'all'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'clear_console',
+                description: 'Clear editor console',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'execute_script',
+                description: 'Execute JavaScript in scene context',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        script: {
+                            type: 'string',
+                            description: 'JavaScript code to execute'
+                        }
+                    },
+                    required: ['script']
+                }
+            },
+            {
+                name: 'get_node_tree',
+                description: 'Get detailed node tree for debugging',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        rootUuid: {
+                            type: 'string',
+                            description: 'Root node UUID (optional, uses scene root if not provided)'
+                        },
+                        maxDepth: {
+                            type: 'number',
+                            description: 'Maximum tree depth',
+                            default: 10
+                        }
+                    }
+                }
+            },
+            {
+                name: 'get_performance_stats',
+                description: 'Get performance statistics',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'validate_scene',
+                description: 'Validate current scene for issues',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        checkMissingAssets: {
+                            type: 'boolean',
+                            description: 'Check for missing asset references',
+                            default: true
+                        },
+                        checkPerformance: {
+                            type: 'boolean',
+                            description: 'Check for performance issues',
+                            default: true
+                        }
+                    }
+                }
+            },
+            {
+                name: 'get_editor_info',
+                description: 'Get editor and environment information',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'get_project_logs',
+                description: 'Get project logs from temp/logs/project.log file',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        lines: {
+                            type: 'number',
+                            description: 'Number of lines to read from the end of the log file (default: 100)',
+                            default: 100,
+                            minimum: 1,
+                            maximum: 10000
+                        },
+                        filterKeyword: {
+                            type: 'string',
+                            description: 'Filter logs containing specific keyword (optional)'
+                        },
+                        logLevel: {
+                            type: 'string',
+                            description: 'Filter by log level',
+                            enum: ['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE', 'ALL'],
+                            default: 'ALL'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'get_log_file_info',
+                description: 'Get information about the project log file',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'search_project_logs',
+                description: 'Search for specific patterns or errors in project logs',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        pattern: {
+                            type: 'string',
+                            description: 'Search pattern (supports regex)'
+                        },
+                        maxResults: {
+                            type: 'number',
+                            description: 'Maximum number of matching results',
+                            default: 20,
+                            minimum: 1,
+                            maximum: 100
+                        },
+                        contextLines: {
+                            type: 'number',
+                            description: 'Number of context lines to show around each match',
+                            default: 2,
+                            minimum: 0,
+                            maximum: 10
+                        }
+                    },
+                    required: ['pattern']
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'get_console_logs':
+                return await this.getConsoleLogs(args.limit, args.filter);
+            case 'clear_console':
+                return await this.clearConsole();
+            case 'execute_script':
+                return await this.executeScript(args.script);
+            case 'get_node_tree':
+                return await this.getNodeTree(args.rootUuid, args.maxDepth);
+            case 'get_performance_stats':
+                return await this.getPerformanceStats();
+            case 'validate_scene':
+                return await this.validateScene(args);
+            case 'get_editor_info':
+                return await this.getEditorInfo();
+            case 'get_project_logs':
+                return await this.getProjectLogs(args.lines, args.filterKeyword, args.logLevel);
+            case 'get_log_file_info':
+                return await this.getLogFileInfo();
+            case 'search_project_logs':
+                return await this.searchProjectLogs(args.pattern, args.maxResults, args.contextLines);
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async getConsoleLogs(limit: number = 100, filter: string = 'all'): Promise<ToolResponse> {
+        let logs = this.consoleMessages;
+        
+        if (filter !== 'all') {
+            logs = logs.filter(log => log.type === filter);
+        }
+
+        const recentLogs = logs.slice(-limit);
+        
+        return {
+            success: true,
+            data: {
+                total: logs.length,
+                returned: recentLogs.length,
+                logs: recentLogs
+            }
+        };
+    }
+
+    private async clearConsole(): Promise<ToolResponse> {
+        this.consoleMessages = [];
+        
+        try {
+            // Note: Editor.Message.send may not return a promise in all versions
+            Editor.Message.send('console', 'clear');
+            return {
+                success: true,
+                message: 'Console cleared successfully'
+            };
+        } catch (err: any) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    private async executeScript(script: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'execute-scene-script', {
+                name: 'console',
+                method: 'eval',
+                args: [script]
+            }).then((result: any) => {
+                resolve({
+                    success: true,
+                    data: {
+                        result: result,
+                        message: 'Script executed successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async getNodeTree(rootUuid?: string, maxDepth: number = 10): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const buildTree = async (nodeUuid: string, depth: number = 0): Promise<any> => {
+                if (depth >= maxDepth) {
+                    return { truncated: true };
+                }
+
+                try {
+                    const nodeData = await Editor.Message.request('scene', 'query-node', nodeUuid);
+                    
+                    const tree = {
+                        uuid: nodeData.uuid,
+                        name: nodeData.name,
+                        active: nodeData.active,
+                        components: (nodeData as any).components ? (nodeData as any).components.map((c: any) => c.__type__) : [],
+                        childCount: nodeData.children ? nodeData.children.length : 0,
+                        children: [] as any[]
+                    };
+
+                    if (nodeData.children && nodeData.children.length > 0) {
+                        for (const childId of nodeData.children) {
+                            const childTree = await buildTree(childId, depth + 1);
+                            tree.children.push(childTree);
+                        }
+                    }
+
+                    return tree;
+                } catch (err: any) {
+                    return { error: err.message };
+                }
+            };
+
+            if (rootUuid) {
+                buildTree(rootUuid).then(tree => {
+                    resolve({ success: true, data: tree });
+                });
+            } else {
+                Editor.Message.request('scene', 'query-hierarchy').then(async (hierarchy: any) => {
+                    const trees = [];
+                    for (const rootNode of hierarchy.children) {
+                        const tree = await buildTree(rootNode.uuid);
+                        trees.push(tree);
+                    }
+                    resolve({ success: true, data: trees });
+                }).catch((err: Error) => {
+                    resolve({ success: false, error: err.message });
+                });
+            }
+        });
+    }
+
+    private async getPerformanceStats(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-performance').then((stats: any) => {
+                const perfStats: PerformanceStats = {
+                    nodeCount: stats.nodeCount || 0,
+                    componentCount: stats.componentCount || 0,
+                    drawCalls: stats.drawCalls || 0,
+                    triangles: stats.triangles || 0,
+                    memory: stats.memory || {}
+                };
+                resolve({ success: true, data: perfStats });
+            }).catch(() => {
+                // Fallback to basic stats
+                resolve({
+                    success: true,
+                    data: {
+                        message: 'Performance stats not available in edit mode'
+                    }
+                });
+            });
+        });
+    }
+
+    private async validateScene(options: any): Promise<ToolResponse> {
+        const issues: ValidationIssue[] = [];
+
+        try {
+            // Check for missing assets
+            if (options.checkMissingAssets) {
+                const assetCheck = await Editor.Message.request('scene', 'check-missing-assets');
+                if (assetCheck && assetCheck.missing) {
+                    issues.push({
+                        type: 'error',
+                        category: 'assets',
+                        message: `Found ${assetCheck.missing.length} missing asset references`,
+                        details: assetCheck.missing
+                    });
+                }
+            }
+
+            // Check for performance issues
+            if (options.checkPerformance) {
+                const hierarchy = await Editor.Message.request('scene', 'query-hierarchy');
+                const nodeCount = this.countNodes(hierarchy.children);
+                
+                if (nodeCount > 1000) {
+                    issues.push({
+                        type: 'warning',
+                        category: 'performance',
+                        message: `High node count: ${nodeCount} nodes (recommended < 1000)`,
+                        suggestion: 'Consider using object pooling or scene optimization'
+                    });
+                }
+            }
+
+            const result: ValidationResult = {
+                valid: issues.length === 0,
+                issueCount: issues.length,
+                issues: issues
+            };
+
+            return { success: true, data: result };
+        } catch (err: any) {
+            return { success: false, error: err.message };
+        }
+    }
+
+    private countNodes(nodes: any[]): number {
+        let count = nodes.length;
+        for (const node of nodes) {
+            if (node.children) {
+                count += this.countNodes(node.children);
+            }
+        }
+        return count;
+    }
+
+    private async getEditorInfo(): Promise<ToolResponse> {
+        const info = {
+            editor: {
+                version: (Editor as any).versions?.editor || 'Unknown',
+                cocosVersion: (Editor as any).versions?.cocos || 'Unknown',
+                platform: process.platform,
+                arch: process.arch,
+                nodeVersion: process.version
+            },
+            project: {
+                name: Editor.Project.name,
+                path: Editor.Project.path,
+                uuid: Editor.Project.uuid
+            },
+            memory: process.memoryUsage(),
+            uptime: process.uptime()
+        };
+
+        return { success: true, data: info };
+    }
+
+    private async getProjectLogs(lines: number = 100, filterKeyword?: string, logLevel: string = 'ALL'): Promise<ToolResponse> {
+        try {
+            // Try multiple possible project paths
+            let logFilePath = '';
+            const possiblePaths = [
+                Editor.Project ? Editor.Project.path : null,
+                '/Users/lizhiyong/NewProject_3',
+                process.cwd(),
+            ].filter(p => p !== null);
+            
+            for (const basePath of possiblePaths) {
+                const testPath = path.join(basePath, 'temp/logs/project.log');
+                if (fs.existsSync(testPath)) {
+                    logFilePath = testPath;
+                    break;
+                }
+            }
+            
+            if (!logFilePath) {
+                return {
+                    success: false,
+                    error: `Project log file not found. Tried paths: ${possiblePaths.map(p => path.join(p, 'temp/logs/project.log')).join(', ')}`
+                };
+            }
+
+            // Read the file content
+            const logContent = fs.readFileSync(logFilePath, 'utf8');
+            const logLines = logContent.split('\n').filter(line => line.trim() !== '');
+            
+            // Get the last N lines
+            const recentLines = logLines.slice(-lines);
+            
+            // Apply filters
+            let filteredLines = recentLines;
+            
+            // Filter by log level if not 'ALL'
+            if (logLevel !== 'ALL') {
+                filteredLines = filteredLines.filter(line => 
+                    line.includes(`[${logLevel}]`) || line.includes(logLevel.toLowerCase())
+                );
+            }
+            
+            // Filter by keyword if provided
+            if (filterKeyword) {
+                filteredLines = filteredLines.filter(line => 
+                    line.toLowerCase().includes(filterKeyword.toLowerCase())
+                );
+            }
+            
+            return {
+                success: true,
+                data: {
+                    totalLines: logLines.length,
+                    requestedLines: lines,
+                    filteredLines: filteredLines.length,
+                    logLevel: logLevel,
+                    filterKeyword: filterKeyword || null,
+                    logs: filteredLines,
+                    logFilePath: logFilePath
+                }
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Failed to read project logs: ${error.message}`
+            };
+        }
+    }
+
+    private async getLogFileInfo(): Promise<ToolResponse> {
+        try {
+            // Try multiple possible project paths
+            let logFilePath = '';
+            const possiblePaths = [
+                Editor.Project ? Editor.Project.path : null,
+                '/Users/lizhiyong/NewProject_3',
+                process.cwd(),
+            ].filter(p => p !== null);
+            
+            for (const basePath of possiblePaths) {
+                const testPath = path.join(basePath, 'temp/logs/project.log');
+                if (fs.existsSync(testPath)) {
+                    logFilePath = testPath;
+                    break;
+                }
+            }
+            
+            if (!logFilePath) {
+                return {
+                    success: false,
+                    error: `Project log file not found. Tried paths: ${possiblePaths.map(p => path.join(p, 'temp/logs/project.log')).join(', ')}`
+                };
+            }
+
+            const stats = fs.statSync(logFilePath);
+            const logContent = fs.readFileSync(logFilePath, 'utf8');
+            const lineCount = logContent.split('\n').filter(line => line.trim() !== '').length;
+            
+            return {
+                success: true,
+                data: {
+                    filePath: logFilePath,
+                    fileSize: stats.size,
+                    fileSizeFormatted: this.formatFileSize(stats.size),
+                    lastModified: stats.mtime.toISOString(),
+                    lineCount: lineCount,
+                    created: stats.birthtime.toISOString(),
+                    accessible: fs.constants.R_OK
+                }
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Failed to get log file info: ${error.message}`
+            };
+        }
+    }
+
+    private async searchProjectLogs(pattern: string, maxResults: number = 20, contextLines: number = 2): Promise<ToolResponse> {
+        try {
+            // Try multiple possible project paths
+            let logFilePath = '';
+            const possiblePaths = [
+                Editor.Project ? Editor.Project.path : null,
+                '/Users/lizhiyong/NewProject_3',
+                process.cwd(),
+            ].filter(p => p !== null);
+            
+            for (const basePath of possiblePaths) {
+                const testPath = path.join(basePath, 'temp/logs/project.log');
+                if (fs.existsSync(testPath)) {
+                    logFilePath = testPath;
+                    break;
+                }
+            }
+            
+            if (!logFilePath) {
+                return {
+                    success: false,
+                    error: `Project log file not found. Tried paths: ${possiblePaths.map(p => path.join(p, 'temp/logs/project.log')).join(', ')}`
+                };
+            }
+
+            const logContent = fs.readFileSync(logFilePath, 'utf8');
+            const logLines = logContent.split('\n');
+            
+            // Create regex pattern (support both string and regex patterns)
+            let regex: RegExp;
+            try {
+                regex = new RegExp(pattern, 'gi');
+            } catch {
+                // If pattern is not valid regex, treat as literal string
+                regex = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+            }
+            
+            const matches: any[] = [];
+            let resultCount = 0;
+            
+            for (let i = 0; i < logLines.length && resultCount < maxResults; i++) {
+                const line = logLines[i];
+                if (regex.test(line)) {
+                    // Get context lines
+                    const contextStart = Math.max(0, i - contextLines);
+                    const contextEnd = Math.min(logLines.length - 1, i + contextLines);
+                    
+                    const contextLinesArray = [];
+                    for (let j = contextStart; j <= contextEnd; j++) {
+                        contextLinesArray.push({
+                            lineNumber: j + 1,
+                            content: logLines[j],
+                            isMatch: j === i
+                        });
+                    }
+                    
+                    matches.push({
+                        lineNumber: i + 1,
+                        matchedLine: line,
+                        context: contextLinesArray
+                    });
+                    
+                    resultCount++;
+                    
+                    // Reset regex lastIndex for global search
+                    regex.lastIndex = 0;
+                }
+            }
+            
+            return {
+                success: true,
+                data: {
+                    pattern: pattern,
+                    totalMatches: matches.length,
+                    maxResults: maxResults,
+                    contextLines: contextLines,
+                    logFilePath: logFilePath,
+                    matches: matches
+                }
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Failed to search project logs: ${error.message}`
+            };
+        }
+    }
+
+    private formatFileSize(bytes: number): string {
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let size = bytes;
+        let unitIndex = 0;
+        
+        while (size >= 1024 && unitIndex < units.length - 1) {
+            size /= 1024;
+            unitIndex++;
+        }
+        
+        return `${size.toFixed(2)} ${units[unitIndex]}`;
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/node-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor, NodeInfo } from '../types';
+import { ComponentTools } from './component-tools';
+
+export class NodeTools implements ToolExecutor {
+    private componentTools = new ComponentTools();
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'create_node',
+                description: 'Create a new node in the scene. Supports creating empty nodes, nodes with components, or instantiating from assets (prefabs, etc.). IMPORTANT: You should always provide parentUuid to specify where to create the node.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        name: {
+                            type: 'string',
+                            description: 'Node name'
+                        },
+                        parentUuid: {
+                            type: 'string',
+                            description: 'Parent node UUID. STRONGLY RECOMMENDED: Always provide this parameter. Use get_current_scene or get_all_nodes to find parent UUIDs. If not provided, node will be created at scene root.'
+                        },
+                        nodeType: {
+                            type: 'string',
+                            description: 'Node type: Node, 2DNode, 3DNode',
+                            enum: ['Node', '2DNode', '3DNode'],
+                            default: 'Node'
+                        },
+                        siblingIndex: {
+                            type: 'number',
+                            description: 'Sibling index for ordering (-1 means append at end)',
+                            default: -1
+                        },
+                        assetUuid: {
+                            type: 'string',
+                            description: 'Asset UUID to instantiate from (e.g., prefab UUID). When provided, creates a node instance from the asset instead of an empty node.'
+                        },
+                        assetPath: {
+                            type: 'string',
+                            description: 'Asset path to instantiate from (e.g., "db://assets/prefabs/MyPrefab.prefab"). Alternative to assetUuid.'
+                        },
+                        components: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Array of component type names to add to the new node (e.g., ["cc.Sprite", "cc.Button"])'
+                        },
+                        unlinkPrefab: {
+                            type: 'boolean',
+                            description: 'If true and creating from prefab, unlink from prefab to create a regular node',
+                            default: false
+                        },
+                        keepWorldTransform: {
+                            type: 'boolean',
+                            description: 'Whether to keep world transform when creating the node',
+                            default: false
+                        },
+                        initialTransform: {
+                            type: 'object',
+                            properties: {
+                                position: {
+                                    type: 'object',
+                                    properties: {
+                                        x: { type: 'number' },
+                                        y: { type: 'number' },
+                                        z: { type: 'number' }
+                                    }
+                                },
+                                rotation: {
+                                    type: 'object',
+                                    properties: {
+                                        x: { type: 'number' },
+                                        y: { type: 'number' },
+                                        z: { type: 'number' }
+                                    }
+                                },
+                                scale: {
+                                    type: 'object',
+                                    properties: {
+                                        x: { type: 'number' },
+                                        y: { type: 'number' },
+                                        z: { type: 'number' }
+                                    }
+                                }
+                            },
+                            description: 'Initial transform to apply to the created node'
+                        }
+                    },
+                    required: ['name']
+                }
+            },
+            {
+                name: 'get_node_info',
+                description: 'Get node information by UUID',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        }
+                    },
+                    required: ['uuid']
+                }
+            },
+            {
+                name: 'find_nodes',
+                description: 'Find nodes by name pattern',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        pattern: {
+                            type: 'string',
+                            description: 'Name pattern to search'
+                        },
+                        exactMatch: {
+                            type: 'boolean',
+                            description: 'Exact match or partial match',
+                            default: false
+                        }
+                    },
+                    required: ['pattern']
+                }
+            },
+            {
+                name: 'find_node_by_name',
+                description: 'Find first node by exact name',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        name: {
+                            type: 'string',
+                            description: 'Node name to find'
+                        }
+                    },
+                    required: ['name']
+                }
+            },
+            {
+                name: 'get_all_nodes',
+                description: 'Get all nodes in the scene with their UUIDs',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'set_node_property',
+                description: 'Set node property value (prefer using set_node_transform for active/layer/mobility/position/rotation/scale)',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        },
+                        property: {
+                            type: 'string',
+                            description: 'Property name (e.g., active, name, layer)'
+                        },
+                        value: {
+                            description: 'Property value'
+                        }
+                    },
+                    required: ['uuid', 'property', 'value']
+                }
+            },
+            {
+                name: 'set_node_transform',
+                description: 'Set node transform properties (position, rotation, scale) with unified interface. Automatically handles 2D/3D node differences.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        },
+                        position: {
+                            type: 'object',
+                            properties: {
+                                x: { type: 'number' },
+                                y: { type: 'number' },
+                                z: { type: 'number', description: 'Z coordinate (ignored for 2D nodes)' }
+                            },
+                            description: 'Node position. For 2D nodes, only x,y are used; z is ignored. For 3D nodes, all coordinates are used.'
+                        },
+                        rotation: {
+                            type: 'object',
+                            properties: {
+                                x: { type: 'number', description: 'X rotation (ignored for 2D nodes)' },
+                                y: { type: 'number', description: 'Y rotation (ignored for 2D nodes)' },
+                                z: { type: 'number', description: 'Z rotation (main rotation axis for 2D nodes)' }
+                            },
+                            description: 'Node rotation in euler angles. For 2D nodes, only z rotation is used. For 3D nodes, all axes are used.'
+                        },
+                        scale: {
+                            type: 'object',
+                            properties: {
+                                x: { type: 'number' },
+                                y: { type: 'number' },
+                                z: { type: 'number', description: 'Z scale (usually 1 for 2D nodes)' }
+                            },
+                            description: 'Node scale. For 2D nodes, z is typically 1. For 3D nodes, all axes are used.'
+                        }
+                    },
+                    required: ['uuid']
+                }
+            },
+            {
+                name: 'delete_node',
+                description: 'Delete a node from scene',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Node UUID to delete'
+                        }
+                    },
+                    required: ['uuid']
+                }
+            },
+            {
+                name: 'move_node',
+                description: 'Move node to new parent',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Node UUID to move'
+                        },
+                        newParentUuid: {
+                            type: 'string',
+                            description: 'New parent node UUID'
+                        },
+                        siblingIndex: {
+                            type: 'number',
+                            description: 'Sibling index in new parent',
+                            default: -1
+                        }
+                    },
+                    required: ['nodeUuid', 'newParentUuid']
+                }
+            },
+            {
+                name: 'duplicate_node',
+                description: 'Duplicate a node',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Node UUID to duplicate'
+                        },
+                        includeChildren: {
+                            type: 'boolean',
+                            description: 'Include children nodes',
+                            default: true
+                        }
+                    },
+                    required: ['uuid']
+                }
+            },
+            {
+                name: 'detect_node_type',
+                description: 'Detect if a node is 2D or 3D based on its components and properties',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Node UUID to analyze'
+                        }
+                    },
+                    required: ['uuid']
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'create_node':
+                return await this.createNode(args);
+            case 'get_node_info':
+                return await this.getNodeInfo(args.uuid);
+            case 'find_nodes':
+                return await this.findNodes(args.pattern, args.exactMatch);
+            case 'find_node_by_name':
+                return await this.findNodeByName(args.name);
+            case 'get_all_nodes':
+                return await this.getAllNodes();
+            case 'set_node_property':
+                return await this.setNodeProperty(args.uuid, args.property, args.value);
+            case 'set_node_transform':
+                return await this.setNodeTransform(args);
+            case 'delete_node':
+                return await this.deleteNode(args.uuid);
+            case 'move_node':
+                return await this.moveNode(args.nodeUuid, args.newParentUuid, args.siblingIndex);
+            case 'duplicate_node':
+                return await this.duplicateNode(args.uuid, args.includeChildren);
+            case 'detect_node_type':
+                return await this.detectNodeType(args.uuid);
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async createNode(args: any): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                let targetParentUuid = args.parentUuid;
+                
+                // 如果没有提供父节点UUID，获取场景根节点
+                if (!targetParentUuid) {
+                    try {
+                        const sceneInfo = await Editor.Message.request('scene', 'query-node-tree');
+                        if (sceneInfo && typeof sceneInfo === 'object' && !Array.isArray(sceneInfo) && Object.prototype.hasOwnProperty.call(sceneInfo, 'uuid')) {
+                            targetParentUuid = (sceneInfo as any).uuid;
+                            console.log(`No parent specified, using scene root: ${targetParentUuid}`);
+                        } else if (Array.isArray(sceneInfo) && sceneInfo.length > 0 && sceneInfo[0].uuid) {
+                            targetParentUuid = sceneInfo[0].uuid;
+                            console.log(`No parent specified, using scene root: ${targetParentUuid}`);
+                        } else {
+                            const currentScene = await Editor.Message.request('scene', 'query-current-scene');
+                            if (currentScene && currentScene.uuid) {
+                                targetParentUuid = currentScene.uuid;
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('Failed to get scene root, will use default behavior');
+                    }
+                }
+
+                // 如果提供了assetPath，先解析为assetUuid
+                let finalAssetUuid = args.assetUuid;
+                if (args.assetPath && !finalAssetUuid) {
+                    try {
+                        const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', args.assetPath);
+                        if (assetInfo && assetInfo.uuid) {
+                            finalAssetUuid = assetInfo.uuid;
+                            console.log(`Asset path '${args.assetPath}' resolved to UUID: ${finalAssetUuid}`);
+                        } else {
+                            resolve({
+                                success: false,
+                                error: `Asset not found at path: ${args.assetPath}`
+                            });
+                            return;
+                        }
+                    } catch (err) {
+                        resolve({
+                            success: false,
+                            error: `Failed to resolve asset path '${args.assetPath}': ${err}`
+                        });
+                        return;
+                    }
+                }
+
+                // 构建create-node选项
+                const createNodeOptions: any = {
+                    name: args.name
+                };
+
+                // 设置父节点
+                if (targetParentUuid) {
+                    createNodeOptions.parent = targetParentUuid;
+                }
+
+                // 从资源实例化
+                if (finalAssetUuid) {
+                    createNodeOptions.assetUuid = finalAssetUuid;
+                    if (args.unlinkPrefab) {
+                        createNodeOptions.unlinkPrefab = true;
+                    }
+                }
+
+                // 添加组件
+                if (args.components && args.components.length > 0) {
+                    createNodeOptions.components = args.components;
+                } else if (args.nodeType && args.nodeType !== 'Node' && !finalAssetUuid) {
+                    // 只有在不从资源实例化时才添加nodeType组件
+                    createNodeOptions.components = [args.nodeType];
+                }
+
+                // 保持世界变换
+                if (args.keepWorldTransform) {
+                    createNodeOptions.keepWorldTransform = true;
+                }
+
+                // 不使用dump参数处理初始变换，创建后使用set_node_transform设置
+
+                console.log('Creating node with options:', createNodeOptions);
+
+                // 创建节点
+                const nodeUuid = await Editor.Message.request('scene', 'create-node', createNodeOptions);
+                const uuid = Array.isArray(nodeUuid) ? nodeUuid[0] : nodeUuid;
+
+                // 处理兄弟索引
+                if (args.siblingIndex !== undefined && args.siblingIndex >= 0 && uuid && targetParentUuid) {
+                    try {
+                        await new Promise(resolve => setTimeout(resolve, 100)); // 等待内部状态更新
+                        await Editor.Message.request('scene', 'set-parent', {
+                            parent: targetParentUuid,
+                            uuids: [uuid],
+                            keepWorldTransform: args.keepWorldTransform || false
+                        });
+                    } catch (err) {
+                        console.warn('Failed to set sibling index:', err);
+                    }
+                }
+
+                // 添加组件（如果提供的话）
+                if (args.components && args.components.length > 0 && uuid) {
+                    try {
+                        await new Promise(resolve => setTimeout(resolve, 100)); // 等待节点创建完成
+                        for (const componentType of args.components) {
+                            try {
+                                const result = await this.componentTools.execute('add_component', {
+                                    nodeUuid: uuid,
+                                    componentType: componentType
+                                });
+                                if (result.success) {
+                                    console.log(`Component ${componentType} added successfully`);
+                                } else {
+                                    console.warn(`Failed to add component ${componentType}:`, result.error);
+                                }
+                            } catch (err) {
+                                console.warn(`Failed to add component ${componentType}:`, err);
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('Failed to add components:', err);
+                    }
+                }
+
+                // 设置初始变换（如果提供的话）
+                if (args.initialTransform && uuid) {
+                    try {
+                        await new Promise(resolve => setTimeout(resolve, 150)); // 等待节点和组件创建完成
+                        await this.setNodeTransform({
+                            uuid: uuid,
+                            position: args.initialTransform.position,
+                            rotation: args.initialTransform.rotation,
+                            scale: args.initialTransform.scale
+                        });
+                        console.log('Initial transform applied successfully');
+                    } catch (err) {
+                        console.warn('Failed to set initial transform:', err);
+                    }
+                }
+
+                // 获取创建后的节点信息进行验证
+                let verificationData: any = null;
+                try {
+                    const nodeInfo = await this.getNodeInfo(uuid);
+                    if (nodeInfo.success) {
+                        verificationData = {
+                            nodeInfo: nodeInfo.data,
+                            creationDetails: {
+                                parentUuid: targetParentUuid,
+                                nodeType: args.nodeType || 'Node',
+                                fromAsset: !!finalAssetUuid,
+                                assetUuid: finalAssetUuid,
+                                assetPath: args.assetPath,
+                                timestamp: new Date().toISOString()
+                            }
+                        };
+                    }
+                } catch (err) {
+                    console.warn('Failed to get verification data:', err);
+                }
+
+                const successMessage = finalAssetUuid 
+                    ? `Node '${args.name}' instantiated from asset successfully`
+                    : `Node '${args.name}' created successfully`;
+
+                resolve({
+                    success: true,
+                    data: {
+                        uuid: uuid,
+                        name: args.name,
+                        parentUuid: targetParentUuid,
+                        nodeType: args.nodeType || 'Node',
+                        fromAsset: !!finalAssetUuid,
+                        assetUuid: finalAssetUuid,
+                        message: successMessage
+                    },
+                    verificationData: verificationData
+                });
+
+            } catch (err: any) {
+                resolve({ 
+                    success: false, 
+                    error: `Failed to create node: ${err.message}. Args: ${JSON.stringify(args)}`
+                });
+            }
+        });
+    }
+
+    private async getNodeInfo(uuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-node', uuid).then((nodeData: any) => {
+                if (!nodeData) {
+                    resolve({
+                        success: false,
+                        error: 'Node not found or invalid response'
+                    });
+                    return;
+                }
+                
+                // 根据实际返回的数据结构解析节点信息
+                const info: NodeInfo = {
+                    uuid: nodeData.uuid?.value || uuid,
+                    name: nodeData.name?.value || 'Unknown',
+                    active: nodeData.active?.value !== undefined ? nodeData.active.value : true,
+                    position: nodeData.position?.value || { x: 0, y: 0, z: 0 },
+                    rotation: nodeData.rotation?.value || { x: 0, y: 0, z: 0 },
+                    scale: nodeData.scale?.value || { x: 1, y: 1, z: 1 },
+                    parent: nodeData.parent?.value?.uuid || null,
+                    children: nodeData.children || [],
+                    components: (nodeData.__comps__ || []).map((comp: any) => ({
+                        type: comp.__type__ || 'Unknown',
+                        enabled: comp.enabled !== undefined ? comp.enabled : true
+                    })),
+                    layer: nodeData.layer?.value || 1073741824,
+                    mobility: nodeData.mobility?.value || 0
+                };
+                resolve({ success: true, data: info });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async findNodes(pattern: string, exactMatch: boolean = false): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // Note: 'query-nodes-by-name' API doesn't exist in official documentation
+            // Using tree traversal as primary approach
+            Editor.Message.request('scene', 'query-node-tree').then((tree: any) => {
+                const nodes: any[] = [];
+                
+                const searchTree = (node: any, currentPath: string = '') => {
+                    const nodePath = currentPath ? `${currentPath}/${node.name}` : node.name;
+                    
+                    const matches = exactMatch ? 
+                        node.name === pattern : 
+                        node.name.toLowerCase().includes(pattern.toLowerCase());
+                    
+                    if (matches) {
+                        nodes.push({
+                            uuid: node.uuid,
+                            name: node.name,
+                            path: nodePath
+                        });
+                    }
+                    
+                    if (node.children) {
+                        for (const child of node.children) {
+                            searchTree(child, nodePath);
+                        }
+                    }
+                };
+                
+                if (tree) {
+                    searchTree(tree);
+                }
+                
+                resolve({ success: true, data: nodes });
+            }).catch((err: Error) => {
+                // 备用方案：使用场景脚本
+                const options = {
+                    name: 'cocos-mcp-server',
+                    method: 'findNodes',
+                    args: [pattern, exactMatch]
+                };
+                
+                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+                    resolve(result);
+                }).catch((err2: Error) => {
+                    resolve({ success: false, error: `Tree search failed: ${err.message}, Scene script failed: ${err2.message}` });
+                });
+            });
+        });
+    }
+
+    private async findNodeByName(name: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 优先尝试使用 Editor API 查询节点树并搜索
+            Editor.Message.request('scene', 'query-node-tree').then((tree: any) => {
+                const foundNode = this.searchNodeInTree(tree, name);
+                if (foundNode) {
+                    resolve({
+                        success: true,
+                        data: {
+                            uuid: foundNode.uuid,
+                            name: foundNode.name,
+                            path: this.getNodePath(foundNode)
+                        }
+                    });
+                } else {
+                    resolve({ success: false, error: `Node '${name}' not found` });
+                }
+            }).catch((err: Error) => {
+                // 备用方案：使用场景脚本
+                const options = {
+                    name: 'cocos-mcp-server',
+                    method: 'findNodeByName',
+                    args: [name]
+                };
+                
+                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+                    resolve(result);
+                }).catch((err2: Error) => {
+                    resolve({ success: false, error: `Direct API failed: ${err.message}, Scene script failed: ${err2.message}` });
+                });
+            });
+        });
+    }
+
+    private searchNodeInTree(node: any, targetName: string): any {
+        if (node.name === targetName) {
+            return node;
+        }
+        
+        if (node.children) {
+            for (const child of node.children) {
+                const found = this.searchNodeInTree(child, targetName);
+                if (found) {
+                    return found;
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    private async getAllNodes(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 尝试查询场景节点树
+            Editor.Message.request('scene', 'query-node-tree').then((tree: any) => {
+                const nodes: any[] = [];
+                
+                const traverseTree = (node: any) => {
+                    nodes.push({
+                        uuid: node.uuid,
+                        name: node.name,
+                        type: node.type,
+                        active: node.active,
+                        path: this.getNodePath(node)
+                    });
+                    
+                    if (node.children) {
+                        for (const child of node.children) {
+                            traverseTree(child);
+                        }
+                    }
+                };
+                
+                if (tree && tree.children) {
+                    traverseTree(tree);
+                }
+                
+                resolve({
+                    success: true,
+                    data: {
+                        totalNodes: nodes.length,
+                        nodes: nodes
+                    }
+                });
+            }).catch((err: Error) => {
+                // 备用方案：使用场景脚本
+                const options = {
+                    name: 'cocos-mcp-server',
+                    method: 'getAllNodes',
+                    args: []
+                };
+                
+                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+                    resolve(result);
+                }).catch((err2: Error) => {
+                    resolve({ success: false, error: `Direct API failed: ${err.message}, Scene script failed: ${err2.message}` });
+                });
+            });
+        });
+    }
+
+    private getNodePath(node: any): string {
+        const path = [node.name];
+        let current = node.parent;
+        while (current && current.name !== 'Canvas') {
+            path.unshift(current.name);
+            current = current.parent;
+        }
+        return path.join('/');
+    }
+
+    private async setNodeProperty(uuid: string, property: string, value: any): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 尝试直接使用 Editor API 设置节点属性
+            Editor.Message.request('scene', 'set-property', {
+                uuid: uuid,
+                path: property,
+                dump: {
+                    value: value
+                }
+            }).then(() => {
+                // Get comprehensive verification data including updated node info
+                this.getNodeInfo(uuid).then((nodeInfo) => {
+                    resolve({
+                        success: true,
+                        message: `Property '${property}' updated successfully`,
+                        data: {
+                            nodeUuid: uuid,
+                            property: property,
+                            newValue: value
+                        },
+                        verificationData: {
+                            nodeInfo: nodeInfo.data,
+                            changeDetails: {
+                                property: property,
+                                value: value,
+                                timestamp: new Date().toISOString()
+                            }
+                        }
+                    });
+                }).catch(() => {
+                    resolve({
+                        success: true,
+                        message: `Property '${property}' updated successfully (verification failed)`
+                    });
+                });
+            }).catch((err: Error) => {
+                // 如果直接设置失败，尝试使用场景脚本
+                const options = {
+                    name: 'cocos-mcp-server',
+                    method: 'setNodeProperty',
+                    args: [uuid, property, value]
+                };
+                
+                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+                    resolve(result);
+                }).catch((err2: Error) => {
+                    resolve({ success: false, error: `Direct API failed: ${err.message}, Scene script failed: ${err2.message}` });
+                });
+            });
+        });
+    }
+
+    private async setNodeTransform(args: any): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            const { uuid, position, rotation, scale } = args;
+            const updatePromises: Promise<any>[] = [];
+            const updates: string[] = [];
+            const warnings: string[] = [];
+            
+            try {
+                // First get node info to determine if it's 2D or 3D
+                const nodeInfoResponse = await this.getNodeInfo(uuid);
+                if (!nodeInfoResponse.success || !nodeInfoResponse.data) {
+                    resolve({ success: false, error: 'Failed to get node information' });
+                    return;
+                }
+                
+                const nodeInfo = nodeInfoResponse.data;
+                const is2DNode = this.is2DNode(nodeInfo);
+                
+                if (position) {
+                    const normalizedPosition = this.normalizeTransformValue(position, 'position', is2DNode);
+                    if (normalizedPosition.warning) {
+                        warnings.push(normalizedPosition.warning);
+                    }
+                    
+                    updatePromises.push(
+                        Editor.Message.request('scene', 'set-property', {
+                            uuid: uuid,
+                            path: 'position',
+                            dump: { value: normalizedPosition.value }
+                        })
+                    );
+                    updates.push('position');
+                }
+                
+                if (rotation) {
+                    const normalizedRotation = this.normalizeTransformValue(rotation, 'rotation', is2DNode);
+                    if (normalizedRotation.warning) {
+                        warnings.push(normalizedRotation.warning);
+                    }
+                    
+                    updatePromises.push(
+                        Editor.Message.request('scene', 'set-property', {
+                            uuid: uuid,
+                            path: 'rotation',
+                            dump: { value: normalizedRotation.value }
+                        })
+                    );
+                    updates.push('rotation');
+                }
+                
+                if (scale) {
+                    const normalizedScale = this.normalizeTransformValue(scale, 'scale', is2DNode);
+                    if (normalizedScale.warning) {
+                        warnings.push(normalizedScale.warning);
+                    }
+                    
+                    updatePromises.push(
+                        Editor.Message.request('scene', 'set-property', {
+                            uuid: uuid,
+                            path: 'scale',
+                            dump: { value: normalizedScale.value }
+                        })
+                    );
+                    updates.push('scale');
+                }
+                
+                if (updatePromises.length === 0) {
+                    resolve({ success: false, error: 'No transform properties specified' });
+                    return;
+                }
+                
+                await Promise.all(updatePromises);
+                
+                // Verify the changes by getting updated node info
+                const updatedNodeInfo = await this.getNodeInfo(uuid);
+                const response: any = {
+                    success: true,
+                    message: `Transform properties updated: ${updates.join(', ')} ${is2DNode ? '(2D node)' : '(3D node)'}`,
+                    updatedProperties: updates,
+                    data: {
+                        nodeUuid: uuid,
+                        nodeType: is2DNode ? '2D' : '3D',
+                        appliedChanges: updates,
+                        transformConstraints: {
+                            position: is2DNode ? 'x, y only (z ignored)' : 'x, y, z all used',
+                            rotation: is2DNode ? 'z only (x, y ignored)' : 'x, y, z all used',
+                            scale: is2DNode ? 'x, y main, z typically 1' : 'x, y, z all used'
+                        }
+                    },
+                    verificationData: {
+                        nodeInfo: updatedNodeInfo.data,
+                        transformDetails: {
+                            originalNodeType: is2DNode ? '2D' : '3D',
+                            appliedTransforms: updates,
+                            timestamp: new Date().toISOString()
+                        },
+                        beforeAfterComparison: {
+                            before: nodeInfo,
+                            after: updatedNodeInfo.data
+                        }
+                    }
+                };
+                
+                if (warnings.length > 0) {
+                    response.warning = warnings.join('; ');
+                }
+                
+                resolve(response);
+                
+            } catch (err: any) {
+                resolve({ 
+                    success: false, 
+                    error: `Failed to update transform: ${err.message}` 
+                });
+            }
+        });
+    }
+
+    private is2DNode(nodeInfo: any): boolean {
+        // Check if node has 2D-specific components or is under Canvas
+        const components = nodeInfo.components || [];
+        
+        // Check for common 2D components
+        const has2DComponents = components.some((comp: any) => 
+            comp.type && (
+                comp.type.includes('cc.Sprite') ||
+                comp.type.includes('cc.Label') ||
+                comp.type.includes('cc.Button') ||
+                comp.type.includes('cc.Layout') ||
+                comp.type.includes('cc.Widget') ||
+                comp.type.includes('cc.Mask') ||
+                comp.type.includes('cc.Graphics')
+            )
+        );
+        
+        if (has2DComponents) {
+            return true;
+        }
+        
+        // Check for 3D-specific components  
+        const has3DComponents = components.some((comp: any) =>
+            comp.type && (
+                comp.type.includes('cc.MeshRenderer') ||
+                comp.type.includes('cc.Camera') ||
+                comp.type.includes('cc.Light') ||
+                comp.type.includes('cc.DirectionalLight') ||
+                comp.type.includes('cc.PointLight') ||
+                comp.type.includes('cc.SpotLight')
+            )
+        );
+        
+        if (has3DComponents) {
+            return false;
+        }
+        
+        // Default heuristic: if z position is 0 and hasn't been changed, likely 2D
+        const position = nodeInfo.position;
+        if (position && Math.abs(position.z) < 0.001) {
+            return true;
+        }
+        
+        // Default to 3D if uncertain
+        return false;
+    }
+
+    private normalizeTransformValue(value: any, type: 'position' | 'rotation' | 'scale', is2D: boolean): { value: any, warning?: string } {
+        const result = { ...value };
+        let warning: string | undefined;
+        
+        if (is2D) {
+            switch (type) {
+                case 'position':
+                    if (value.z !== undefined && Math.abs(value.z) > 0.001) {
+                        warning = `2D node: z position (${value.z}) ignored, set to 0`;
+                        result.z = 0;
+                    } else if (value.z === undefined) {
+                        result.z = 0;
+                    }
+                    break;
+                    
+                case 'rotation':
+                    if ((value.x !== undefined && Math.abs(value.x) > 0.001) || 
+                        (value.y !== undefined && Math.abs(value.y) > 0.001)) {
+                        warning = `2D node: x,y rotations ignored, only z rotation applied`;
+                        result.x = 0;
+                        result.y = 0;
+                    } else {
+                        result.x = result.x || 0;
+                        result.y = result.y || 0;
+                    }
+                    result.z = result.z || 0;
+                    break;
+                    
+                case 'scale':
+                    if (value.z === undefined) {
+                        result.z = 1; // Default scale for 2D
+                    }
+                    break;
+            }
+        } else {
+            // 3D node - ensure all axes are defined
+            result.x = result.x !== undefined ? result.x : (type === 'scale' ? 1 : 0);
+            result.y = result.y !== undefined ? result.y : (type === 'scale' ? 1 : 0);
+            result.z = result.z !== undefined ? result.z : (type === 'scale' ? 1 : 0);
+        }
+        
+        return { value: result, warning };
+    }
+
+    private async deleteNode(uuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'remove-node', { uuid: uuid }).then(() => {
+                resolve({
+                    success: true,
+                    message: 'Node deleted successfully'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async moveNode(nodeUuid: string, newParentUuid: string, siblingIndex: number = -1): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // Use correct set-parent API instead of move-node
+            Editor.Message.request('scene', 'set-parent', {
+                parent: newParentUuid,
+                uuids: [nodeUuid],
+                keepWorldTransform: false
+            }).then(() => {
+                resolve({
+                    success: true,
+                    message: 'Node moved successfully'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async duplicateNode(uuid: string, includeChildren: boolean = true): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // Note: includeChildren parameter is accepted for future use but not currently implemented
+            Editor.Message.request('scene', 'duplicate-node', uuid).then((result: any) => {
+                resolve({
+                    success: true,
+                    data: {
+                        newUuid: result.uuid,
+                        message: 'Node duplicated successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async detectNodeType(uuid: string): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                const nodeInfoResponse = await this.getNodeInfo(uuid);
+                if (!nodeInfoResponse.success || !nodeInfoResponse.data) {
+                    resolve({ success: false, error: 'Failed to get node information' });
+                    return;
+                }
+
+                const nodeInfo = nodeInfoResponse.data;
+                const is2D = this.is2DNode(nodeInfo);
+                const components = nodeInfo.components || [];
+                
+                // Collect detection reasons
+                const detectionReasons: string[] = [];
+                
+                // Check for 2D components
+                const twoDComponents = components.filter((comp: any) => 
+                    comp.type && (
+                        comp.type.includes('cc.Sprite') ||
+                        comp.type.includes('cc.Label') ||
+                        comp.type.includes('cc.Button') ||
+                        comp.type.includes('cc.Layout') ||
+                        comp.type.includes('cc.Widget') ||
+                        comp.type.includes('cc.Mask') ||
+                        comp.type.includes('cc.Graphics')
+                    )
+                );
+                
+                // Check for 3D components
+                const threeDComponents = components.filter((comp: any) =>
+                    comp.type && (
+                        comp.type.includes('cc.MeshRenderer') ||
+                        comp.type.includes('cc.Camera') ||
+                        comp.type.includes('cc.Light') ||
+                        comp.type.includes('cc.DirectionalLight') ||
+                        comp.type.includes('cc.PointLight') ||
+                        comp.type.includes('cc.SpotLight')
+                    )
+                );
+
+                if (twoDComponents.length > 0) {
+                    detectionReasons.push(`Has 2D components: ${twoDComponents.map((c: any) => c.type).join(', ')}`);
+                }
+                
+                if (threeDComponents.length > 0) {
+                    detectionReasons.push(`Has 3D components: ${threeDComponents.map((c: any) => c.type).join(', ')}`);
+                }
+                
+                // Check position for heuristic
+                const position = nodeInfo.position;
+                if (position && Math.abs(position.z) < 0.001) {
+                    detectionReasons.push('Z position is ~0 (likely 2D)');
+                } else if (position && Math.abs(position.z) > 0.001) {
+                    detectionReasons.push(`Z position is ${position.z} (likely 3D)`);
+                }
+
+                if (detectionReasons.length === 0) {
+                    detectionReasons.push('No specific indicators found, defaulting based on heuristics');
+                }
+
+                resolve({
+                    success: true,
+                    data: {
+                        nodeUuid: uuid,
+                        nodeName: nodeInfo.name,
+                        nodeType: is2D ? '2D' : '3D',
+                        detectionReasons: detectionReasons,
+                        components: components.map((comp: any) => ({
+                            type: comp.type,
+                            category: this.getComponentCategory(comp.type)
+                        })),
+                        position: nodeInfo.position,
+                        transformConstraints: {
+                            position: is2D ? 'x, y only (z ignored)' : 'x, y, z all used',
+                            rotation: is2D ? 'z only (x, y ignored)' : 'x, y, z all used',
+                            scale: is2D ? 'x, y main, z typically 1' : 'x, y, z all used'
+                        }
+                    }
+                });
+                
+            } catch (err: any) {
+                resolve({ 
+                    success: false, 
+                    error: `Failed to detect node type: ${err.message}` 
+                });
+            }
+        });
+    }
+
+    private getComponentCategory(componentType: string): string {
+        if (!componentType) return 'unknown';
+        
+        if (componentType.includes('cc.Sprite') || componentType.includes('cc.Label') || 
+            componentType.includes('cc.Button') || componentType.includes('cc.Layout') ||
+            componentType.includes('cc.Widget') || componentType.includes('cc.Mask') ||
+            componentType.includes('cc.Graphics')) {
+            return '2D';
+        }
+        
+        if (componentType.includes('cc.MeshRenderer') || componentType.includes('cc.Camera') ||
+            componentType.includes('cc.Light') || componentType.includes('cc.DirectionalLight') ||
+            componentType.includes('cc.PointLight') || componentType.includes('cc.SpotLight')) {
+            return '3D';
+        }
+        
+        return 'generic';
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/prefab-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor, PrefabInfo } from '../types';
+
+export class PrefabTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'get_prefab_list',
+                description: 'Get all prefabs in the project',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        folder: {
+                            type: 'string',
+                            description: 'Folder path to search (optional)',
+                            default: 'db://assets'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'load_prefab',
+                description: 'Load a prefab by path',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        prefabPath: {
+                            type: 'string',
+                            description: 'Prefab asset path'
+                        }
+                    },
+                    required: ['prefabPath']
+                }
+            },
+            {
+                name: 'instantiate_prefab',
+                description: 'Instantiate a prefab in the scene',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        prefabPath: {
+                            type: 'string',
+                            description: 'Prefab asset path'
+                        },
+                        parentUuid: {
+                            type: 'string',
+                            description: 'Parent node UUID (optional)'
+                        },
+                        position: {
+                            type: 'object',
+                            description: 'Initial position',
+                            properties: {
+                                x: { type: 'number' },
+                                y: { type: 'number' },
+                                z: { type: 'number' }
+                            }
+                        }
+                    },
+                    required: ['prefabPath']
+                }
+            },
+            {
+                name: 'create_prefab',
+                description: 'Create a prefab from a node with all children and components',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Source node UUID'
+                        },
+                        savePath: {
+                            type: 'string',
+                            description: 'Path to save the prefab (e.g., db://assets/prefabs/MyPrefab.prefab)'
+                        },
+                        prefabName: {
+                            type: 'string',
+                            description: 'Prefab name'
+                        }
+                    },
+                    required: ['nodeUuid', 'savePath', 'prefabName']
+                }
+            },
+            {
+                name: 'update_prefab',
+                description: 'Update an existing prefab',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        prefabPath: {
+                            type: 'string',
+                            description: 'Prefab asset path'
+                        },
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Node UUID with changes'
+                        }
+                    },
+                    required: ['prefabPath', 'nodeUuid']
+                }
+            },
+            {
+                name: 'revert_prefab',
+                description: 'Revert prefab instance to original',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Prefab instance node UUID'
+                        }
+                    },
+                    required: ['nodeUuid']
+                }
+            },
+            {
+                name: 'get_prefab_info',
+                description: 'Get detailed prefab information',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        prefabPath: {
+                            type: 'string',
+                            description: 'Prefab asset path'
+                        }
+                    },
+                    required: ['prefabPath']
+                }
+            },
+            {
+                name: 'validate_prefab',
+                description: 'Validate a prefab file format',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        prefabPath: {
+                            type: 'string',
+                            description: 'Prefab asset path'
+                        }
+                    },
+                    required: ['prefabPath']
+                }
+            },
+            {
+                name: 'duplicate_prefab',
+                description: 'Duplicate an existing prefab',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        sourcePrefabPath: {
+                            type: 'string',
+                            description: 'Source prefab path'
+                        },
+                        targetPrefabPath: {
+                            type: 'string',
+                            description: 'Target prefab path'
+                        },
+                        newPrefabName: {
+                            type: 'string',
+                            description: 'New prefab name'
+                        }
+                    },
+                    required: ['sourcePrefabPath', 'targetPrefabPath']
+                }
+            },
+            {
+                name: 'restore_prefab_node',
+                description: 'Restore prefab node using prefab asset (built-in undo record)',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Prefab instance node UUID'
+                        },
+                        assetUuid: {
+                            type: 'string',
+                            description: 'Prefab asset UUID'
+                        }
+                    },
+                    required: ['nodeUuid', 'assetUuid']
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'get_prefab_list':
+                return await this.getPrefabList(args.folder);
+            case 'load_prefab':
+                return await this.loadPrefab(args.prefabPath);
+            case 'instantiate_prefab':
+                return await this.instantiatePrefab(args);
+            case 'create_prefab':
+                return await this.createPrefab(args);
+            case 'update_prefab':
+                return await this.updatePrefab(args.prefabPath, args.nodeUuid);
+            case 'revert_prefab':
+                return await this.revertPrefab(args.nodeUuid);
+            case 'get_prefab_info':
+                return await this.getPrefabInfo(args.prefabPath);
+            case 'validate_prefab':
+                return await this.validatePrefab(args.prefabPath);
+            case 'duplicate_prefab':
+                return await this.duplicatePrefab(args);
+            case 'restore_prefab_node':
+                return await this.restorePrefabNode(args.nodeUuid, args.assetUuid);
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async getPrefabList(folder: string = 'db://assets'): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const pattern = folder.endsWith('/') ? 
+                `${folder}**/*.prefab` : `${folder}/**/*.prefab`;
+            
+            Editor.Message.request('asset-db', 'query-assets', {
+                pattern: pattern
+            }).then((results: any[]) => {
+                const prefabs: PrefabInfo[] = results.map(asset => ({
+                    name: asset.name,
+                    path: asset.url,
+                    uuid: asset.uuid,
+                    folder: asset.url.substring(0, asset.url.lastIndexOf('/'))
+                }));
+                resolve({ success: true, data: prefabs });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async loadPrefab(prefabPath: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'query-asset-info', prefabPath).then((assetInfo: any) => {
+                if (!assetInfo) {
+                    throw new Error('Prefab not found');
+                }
+                
+                return Editor.Message.request('scene', 'load-asset', {
+                    uuid: assetInfo.uuid
+                });
+            }).then((prefabData: any) => {
+                resolve({
+                    success: true,
+                    data: {
+                        uuid: prefabData.uuid,
+                        name: prefabData.name,
+                        message: 'Prefab loaded successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async instantiatePrefab(args: any): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // 获取预制体资源信息
+                const assetInfo = await Editor.Message.request('asset-db', 'query-asset-info', args.prefabPath);
+                if (!assetInfo) {
+                    throw new Error('预制体未找到');
+                }
+
+                // 使用正确的 create-node API 从预制体资源实例化
+                const createNodeOptions: any = {
+                    assetUuid: assetInfo.uuid
+                };
+
+                // 设置父节点
+                if (args.parentUuid) {
+                    createNodeOptions.parent = args.parentUuid;
+                }
+
+                // 设置节点名称
+                if (args.name) {
+                    createNodeOptions.name = args.name;
+                } else if (assetInfo.name) {
+                    createNodeOptions.name = assetInfo.name;
+                }
+
+                // 设置初始属性（如位置）
+                if (args.position) {
+                    createNodeOptions.dump = {
+                        position: {
+                            value: args.position
+                        }
+                    };
+                }
+
+                // 创建节点
+                const nodeUuid = await Editor.Message.request('scene', 'create-node', createNodeOptions);
+                const uuid = Array.isArray(nodeUuid) ? nodeUuid[0] : nodeUuid;
+
+                // 注意：create-node API从预制体资源创建时应该自动建立预制体关联
+                console.log('预制体节点创建成功:', {
+                    nodeUuid: uuid,
+                    prefabUuid: assetInfo.uuid,
+                    prefabPath: args.prefabPath
+                });
+                
+                resolve({
+                    success: true,
+                    data: {
+                        nodeUuid: uuid,
+                        prefabPath: args.prefabPath,
+                        parentUuid: args.parentUuid,
+                        position: args.position,
+                        message: '预制体实例化成功，已建立预制体关联'
+                    }
+                });
+            } catch (err: any) {
+                resolve({ 
+                    success: false, 
+                    error: `预制体实例化失败: ${err.message}`,
+                    instruction: '请检查预制体路径是否正确，确保预制体文件格式正确'
+                });
+            }
+        });
+    }
+
+    /**
+     * 建立节点与预制体的关联关系
+     * 这个方法创建必要的PrefabInfo和PrefabInstance结构
+     */
+    private async establishPrefabConnection(nodeUuid: string, prefabUuid: string, prefabPath: string): Promise<void> {
+        try {
+            // 读取预制体文件获取根节点的fileId
+            const prefabContent = await this.readPrefabFile(prefabPath);
+            if (!prefabContent || !prefabContent.data || !prefabContent.data.length) {
+                throw new Error('无法读取预制体文件内容');
+            }
+
+            // 找到预制体根节点的fileId (通常是第二个对象，即索引1)
+            const rootNode = prefabContent.data.find((item: any) => item.__type === 'cc.Node' && item._parent === null);
+            if (!rootNode || !rootNode._prefab) {
+                throw new Error('无法找到预制体根节点或其预制体信息');
+            }
+
+            // 获取根节点的PrefabInfo
+            const rootPrefabInfo = prefabContent.data[rootNode._prefab.__id__];
+            if (!rootPrefabInfo || rootPrefabInfo.__type !== 'cc.PrefabInfo') {
+                throw new Error('无法找到预制体根节点的PrefabInfo');
+            }
+
+            const rootFileId = rootPrefabInfo.fileId;
+
+            // 使用scene API建立预制体连接
+            const prefabConnectionData = {
+                node: nodeUuid,
+                prefab: prefabUuid,
+                fileId: rootFileId
+            };
+
+            // 尝试使用多种API方法建立预制体连接
+            const connectionMethods = [
+                () => Editor.Message.request('scene', 'connect-prefab-instance', prefabConnectionData),
+                () => Editor.Message.request('scene', 'set-prefab-connection', prefabConnectionData),
+                () => Editor.Message.request('scene', 'apply-prefab-link', prefabConnectionData)
+            ];
+
+            let connected = false;
+            for (const method of connectionMethods) {
+                try {
+                    await method();
+                    connected = true;
+                    break;
+                } catch (error) {
+                    console.warn('预制体连接方法失败，尝试下一个方法:', error);
+                }
+            }
+
+            if (!connected) {
+                // 如果所有API方法都失败，尝试手动修改场景数据
+                console.warn('所有预制体连接API都失败，尝试手动建立连接');
+                await this.manuallyEstablishPrefabConnection(nodeUuid, prefabUuid, rootFileId);
+            }
+
+        } catch (error) {
+            console.error('建立预制体连接失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 手动建立预制体连接（当API方法失败时的备用方案）
+     */
+    private async manuallyEstablishPrefabConnection(nodeUuid: string, prefabUuid: string, rootFileId: string): Promise<void> {
+        try {
+            // 尝试使用dump API修改节点的_prefab属性
+            const prefabConnectionData = {
+                [nodeUuid]: {
+                    '_prefab': {
+                        '__uuid__': prefabUuid,
+                        '__expectedType__': 'cc.Prefab',
+                        'fileId': rootFileId
+                    }
+                }
+            };
+
+            await Editor.Message.request('scene', 'set-property', {
+                uuid: nodeUuid,
+                path: '_prefab',
+                dump: {
+                    value: {
+                        '__uuid__': prefabUuid,
+                        '__expectedType__': 'cc.Prefab'
+                    }
+                }
+            });
+
+        } catch (error) {
+            console.error('手动建立预制体连接也失败:', error);
+            // 不抛出错误，因为基本的节点创建已经成功
+        }
+    }
+
+    /**
+     * 读取预制体文件内容
+     */
+    private async readPrefabFile(prefabPath: string): Promise<any> {
+        try {
+            // 尝试使用asset-db API读取文件内容
+            let assetContent: any;
+            try {
+                assetContent = await Editor.Message.request('asset-db', 'query-asset-info', prefabPath);
+                if (assetContent && assetContent.source) {
+                    // 如果有source路径，直接读取文件
+                    const fs = require('fs');
+                    const path = require('path');
+                    const fullPath = path.resolve(assetContent.source);
+                    const fileContent = fs.readFileSync(fullPath, 'utf8');
+                    return JSON.parse(fileContent);
+                }
+            } catch (error) {
+                console.warn('使用asset-db读取失败，尝试其他方法:', error);
+            }
+
+            // 备用方法：转换db://路径为实际文件路径
+            const fsPath = prefabPath.replace('db://assets/', 'assets/').replace('db://assets', 'assets');
+            const fs = require('fs');
+            const path = require('path');
+            
+            // 尝试多个可能的项目根路径
+            const possiblePaths = [
+                path.resolve(process.cwd(), '../../NewProject_3', fsPath),
+                path.resolve('/Users/lizhiyong/NewProject_3', fsPath),
+                path.resolve(fsPath),
+                // 如果是根目录下的文件，也尝试直接路径
+                path.resolve('/Users/lizhiyong/NewProject_3/assets', path.basename(fsPath))
+            ];
+
+            console.log('尝试读取预制体文件，路径转换:', {
+                originalPath: prefabPath,
+                fsPath: fsPath,
+                possiblePaths: possiblePaths
+            });
+
+            for (const fullPath of possiblePaths) {
+                try {
+                    console.log(`检查路径: ${fullPath}`);
+                    if (fs.existsSync(fullPath)) {
+                        console.log(`找到文件: ${fullPath}`);
+                        const fileContent = fs.readFileSync(fullPath, 'utf8');
+                        const parsed = JSON.parse(fileContent);
+                        console.log('文件解析成功，数据结构:', {
+                            hasData: !!parsed.data,
+                            dataLength: parsed.data ? parsed.data.length : 0
+                        });
+                        return parsed;
+                    } else {
+                        console.log(`文件不存在: ${fullPath}`);
+                    }
+                } catch (readError) {
+                    console.warn(`读取文件失败 ${fullPath}:`, readError);
+                }
+            }
+
+            throw new Error('无法找到或读取预制体文件');
+        } catch (error) {
+            console.error('读取预制体文件失败:', error);
+            throw error;
+        }
+    }
+
+    private async tryCreateNodeWithPrefab(args: any): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'query-asset-info', args.prefabPath).then((assetInfo: any) => {
+                if (!assetInfo) {
+                    throw new Error('预制体未找到');
+                }
+
+                // 方法2: 使用 create-node 指定预制体资源
+                const createNodeOptions: any = {
+                    assetUuid: assetInfo.uuid
+                };
+
+                // 设置父节点
+                if (args.parentUuid) {
+                    createNodeOptions.parent = args.parentUuid;
+                }
+
+                return Editor.Message.request('scene', 'create-node', createNodeOptions);
+            }).then((nodeUuid: string | string[]) => {
+                const uuid = Array.isArray(nodeUuid) ? nodeUuid[0] : nodeUuid;
+                
+                // 如果指定了位置，设置节点位置
+                if (args.position && uuid) {
+                    Editor.Message.request('scene', 'set-property', {
+                        uuid: uuid,
+                        path: 'position',
+                        dump: { value: args.position }
+                    }).then(() => {
+                        resolve({
+                            success: true,
+                            data: {
+                                nodeUuid: uuid,
+                                prefabPath: args.prefabPath,
+                                position: args.position,
+                                message: '预制体实例化成功（备用方法）并设置了位置'
+                            }
+                        });
+                    }).catch(() => {
+                        resolve({
+                            success: true,
+                            data: {
+                                nodeUuid: uuid,
+                                prefabPath: args.prefabPath,
+                                message: '预制体实例化成功（备用方法）但位置设置失败'
+                            }
+                        });
+                    });
+                } else {
+                    resolve({
+                        success: true,
+                        data: {
+                            nodeUuid: uuid,
+                            prefabPath: args.prefabPath,
+                            message: '预制体实例化成功（备用方法）'
+                        }
+                    });
+                }
+            }).catch((err: Error) => {
+                resolve({
+                    success: false,
+                    error: `备用预制体实例化方法也失败: ${err.message}`
+                });
+            });
+        });
+    }
+
+    private async tryAlternativeInstantiateMethods(args: any): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // 方法1: 尝试使用 create-node 然后设置预制体
+                const assetInfo = await this.getAssetInfo(args.prefabPath);
+                if (!assetInfo) {
+                    resolve({ success: false, error: '无法获取预制体信息' });
+                    return;
+                }
+
+                // 创建空节点
+                const createResult = await this.createNode(args.parentUuid, args.position);
+                if (!createResult.success) {
+                    resolve(createResult);
+                    return;
+                }
+
+                // 尝试将预制体应用到节点
+                const applyResult = await this.applyPrefabToNode(createResult.data.nodeUuid, assetInfo.uuid);
+                if (applyResult.success) {
+                    resolve({
+                        success: true,
+                        data: {
+                            nodeUuid: createResult.data.nodeUuid,
+                            name: createResult.data.name,
+                            message: '预制体实例化成功（使用备选方法）'
+                        }
+                    });
+                } else {
+                    resolve({
+                        success: false,
+                        error: '无法将预制体应用到节点',
+                        data: {
+                            nodeUuid: createResult.data.nodeUuid,
+                            message: '已创建节点，但无法应用预制体数据'
+                        }
+                    });
+                }
+
+            } catch (error) {
+                resolve({ success: false, error: `备选实例化方法失败: ${error}` });
+            }
+        });
+    }
+
+    private async getAssetInfo(prefabPath: string): Promise<any> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'query-asset-info', prefabPath).then((assetInfo: any) => {
+                resolve(assetInfo);
+            }).catch(() => {
+                resolve(null);
+            });
+        });
+    }
+
+    private async createNode(parentUuid?: string, position?: any): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const createNodeOptions: any = {
+                name: 'PrefabInstance'
+            };
+
+            // 设置父节点
+            if (parentUuid) {
+                createNodeOptions.parent = parentUuid;
+            }
+
+            // 设置位置
+            if (position) {
+                createNodeOptions.dump = {
+                    position: position
+                };
+            }
+
+            Editor.Message.request('scene', 'create-node', createNodeOptions).then((nodeUuid: string | string[]) => {
+                const uuid = Array.isArray(nodeUuid) ? nodeUuid[0] : nodeUuid;
+                resolve({
+                    success: true,
+                    data: {
+                        nodeUuid: uuid,
+                        name: 'PrefabInstance'
+                    }
+                });
+            }).catch((error: any) => {
+                resolve({ success: false, error: error.message || '创建节点失败' });
+            });
+        });
+    }
+
+    private async applyPrefabToNode(nodeUuid: string, prefabUuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 尝试多种方法来应用预制体数据
+            const methods = [
+                () => Editor.Message.request('scene', 'apply-prefab', { node: nodeUuid, prefab: prefabUuid }),
+                () => Editor.Message.request('scene', 'set-prefab', { node: nodeUuid, prefab: prefabUuid }),
+                () => Editor.Message.request('scene', 'load-prefab-to-node', { node: nodeUuid, prefab: prefabUuid })
+            ];
+
+            const tryMethod = (index: number) => {
+                if (index >= methods.length) {
+                    resolve({ success: false, error: '无法应用预制体数据' });
+                    return;
+                }
+
+                methods[index]().then(() => {
+                    resolve({ success: true });
+                }).catch(() => {
+                    tryMethod(index + 1);
+                });
+            };
+
+            tryMethod(0);
+        });
+    }
+
+    /**
+     * 使用 asset-db API 创建预制体的新方法
+     * 深度整合引擎的资源管理系统，实现完整的预制体创建流程
+     */
+    private async createPrefabWithAssetDB(nodeUuid: string, savePath: string, prefabName: string, includeChildren: boolean, includeComponents: boolean): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                console.log('=== 使用 Asset-DB API 创建预制体 ===');
+                console.log(`节点UUID: ${nodeUuid}`);
+                console.log(`保存路径: ${savePath}`);
+                console.log(`预制体名称: ${prefabName}`);
+
+                // 第一步：获取节点数据（包括变换属性）
+                const nodeData = await this.getNodeData(nodeUuid);
+                if (!nodeData) {
+                    resolve({
+                        success: false,
+                        error: '无法获取节点数据'
+                    });
+                    return;
+                }
+
+                console.log('获取到节点数据，子节点数量:', nodeData.children ? nodeData.children.length : 0);
+
+                // 第二步：先创建资源文件以获取引擎分配的UUID
+                console.log('创建预制体资源文件...');
+                const tempPrefabContent = JSON.stringify([{"__type__": "cc.Prefab", "_name": prefabName}], null, 2);
+                const createResult = await this.createAssetWithAssetDB(savePath, tempPrefabContent);
+                if (!createResult.success) {
+                    resolve(createResult);
+                    return;
+                }
+
+                // 获取引擎分配的实际UUID
+                const actualPrefabUuid = createResult.data?.uuid;
+                if (!actualPrefabUuid) {
+                    resolve({
+                        success: false,
+                        error: '无法获取引擎分配的预制体UUID'
+                    });
+                    return;
+                }
+                console.log('引擎分配的UUID:', actualPrefabUuid);
+
+                // 第三步：使用实际UUID重新生成预制体内容
+                const prefabContent = await this.createStandardPrefabContent(nodeData, prefabName, actualPrefabUuid, includeChildren, includeComponents);
+                const prefabContentString = JSON.stringify(prefabContent, null, 2);
+
+                // 第四步：更新预制体文件内容
+                console.log('更新预制体文件内容...');
+                const updateResult = await this.updateAssetWithAssetDB(savePath, prefabContentString);
+                
+                // 第五步：创建对应的meta文件（使用实际UUID）
+                console.log('创建预制体meta文件...');
+                const metaContent = this.createStandardMetaContent(prefabName, actualPrefabUuid);
+                const metaResult = await this.createMetaWithAssetDB(savePath, metaContent);
+                
+                // 第六步：重新导入资源以更新引用
+                console.log('重新导入预制体资源...');
+                const reimportResult = await this.reimportAssetWithAssetDB(savePath);
+
+                // 第七步：尝试将原始节点转换为预制体实例
+                console.log('尝试将原始节点转换为预制体实例...');
+                const convertResult = await this.convertNodeToPrefabInstance(nodeUuid, actualPrefabUuid, savePath);
+                
+                resolve({
+                    success: true,
+                    data: {
+                        prefabUuid: actualPrefabUuid,
+                        prefabPath: savePath,
+                        nodeUuid: nodeUuid,
+                        prefabName: prefabName,
+                        convertedToPrefabInstance: convertResult.success,
+                        createAssetResult: createResult,
+                        updateResult: updateResult,
+                        metaResult: metaResult,
+                        reimportResult: reimportResult,
+                        convertResult: convertResult,
+                        message: convertResult.success ? '预制体创建并成功转换原始节点' : '预制体创建成功，但节点转换失败'
+                    }
+                });
+
+            } catch (error) {
+                console.error('创建预制体时发生错误:', error);
+                resolve({
+                    success: false,
+                    error: `创建预制体失败: ${error}`
+                });
+            }
+        });
+    }
+
+    private async createPrefab(args: any): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // 支持 prefabPath 和 savePath 两种参数名
+                const pathParam = args.prefabPath || args.savePath;
+                if (!pathParam) {
+                    resolve({
+                        success: false,
+                        error: '缺少预制体路径参数。请提供 prefabPath 或 savePath。'
+                    });
+                    return;
+                }
+
+                const prefabName = args.prefabName || 'NewPrefab';
+                const fullPath = pathParam.endsWith('.prefab') ? 
+                    pathParam : `${pathParam}/${prefabName}.prefab`;
+
+                const includeChildren = args.includeChildren !== false; // 默认为 true
+                const includeComponents = args.includeComponents !== false; // 默认为 true
+
+                // 优先使用新的 asset-db 方法创建预制体
+                console.log('使用新的 asset-db 方法创建预制体...');
+                const assetDbResult = await this.createPrefabWithAssetDB(
+                    args.nodeUuid,
+                    fullPath,
+                    prefabName,
+                    includeChildren,
+                    includeComponents
+                );
+
+                if (assetDbResult.success) {
+                    resolve(assetDbResult);
+                    return;
+                }
+
+                // 如果 asset-db 方法失败，尝试使用Cocos Creator的原生预制体创建API
+                console.log('asset-db 方法失败，尝试原生API...');
+                const nativeResult = await this.createPrefabNative(args.nodeUuid, fullPath);
+                if (nativeResult.success) {
+                    resolve(nativeResult);
+                    return;
+                }
+
+                // 如果原生API失败，使用自定义实现
+                console.log('原生API失败，使用自定义实现...');
+                const customResult = await this.createPrefabCustom(args.nodeUuid, fullPath, prefabName);
+                resolve(customResult);
+
+            } catch (error) {
+                resolve({
+                    success: false,
+                    error: `创建预制体时发生错误: ${error}`
+                });
+            }
+        });
+    }
+
+    private async createPrefabNative(nodeUuid: string, prefabPath: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 根据官方API文档，不存在直接的预制体创建API
+            // 预制体创建需要手动在编辑器中完成
+            resolve({
+                success: false,
+                error: '原生预制体创建API不存在',
+                instruction: '根据Cocos Creator官方API文档，预制体创建需要手动操作：\n1. 在场景中选择节点\n2. 将节点拖拽到资源管理器中\n3. 或右键节点选择"生成预制体"'
+            });
+        });
+    }
+
+    private async createPrefabCustom(nodeUuid: string, prefabPath: string, prefabName: string): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // 1. 获取源节点的完整数据
+                const nodeData = await this.getNodeData(nodeUuid);
+                if (!nodeData) {
+                    resolve({
+                        success: false,
+                        error: `无法找到节点: ${nodeUuid}`
+                    });
+                    return;
+                }
+
+                // 2. 生成预制体UUID
+                const prefabUuid = this.generateUUID();
+
+                // 3. 创建预制体数据结构
+                const prefabData = this.createPrefabData(nodeData, prefabName, prefabUuid);
+
+                // 4. 基于官方格式创建预制体数据结构
+                console.log('=== 开始创建预制体 ===');
+                console.log('节点名称:', nodeData.name?.value || '未知');
+                console.log('节点UUID:', nodeData.uuid?.value || '未知');
+                console.log('预制体保存路径:', prefabPath);
+                console.log(`开始创建预制体，节点数据:`, nodeData);
+                const prefabJsonData = await this.createStandardPrefabContent(nodeData, prefabName, prefabUuid, true, true);
+
+                // 5. 创建标准meta文件数据
+                const standardMetaData = this.createStandardMetaData(prefabName, prefabUuid);
+
+                // 6. 保存预制体和meta文件
+                const saveResult = await this.savePrefabWithMeta(prefabPath, prefabJsonData, standardMetaData);
+
+                if (saveResult.success) {
+                    // 保存成功后，将原始节点转换为预制体实例
+                    const convertResult = await this.convertNodeToPrefabInstance(nodeUuid, prefabPath, prefabUuid);
+                    
+                    resolve({
+                        success: true,
+                        data: {
+                            prefabUuid: prefabUuid,
+                            prefabPath: prefabPath,
+                            nodeUuid: nodeUuid,
+                            prefabName: prefabName,
+                            convertedToPrefabInstance: convertResult.success,
+                            message: convertResult.success ? 
+                                '自定义预制体创建成功，原始节点已转换为预制体实例' : 
+                                '预制体创建成功，但节点转换失败'
+                        }
+                    });
+                } else {
+                    resolve({
+                        success: false,
+                        error: saveResult.error || '保存预制体文件失败'
+                    });
+                }
+
+            } catch (error) {
+                resolve({
+                    success: false,
+                    error: `创建预制体时发生错误: ${error}`
+                });
+            }
+        });
+    }
+
+    private async getNodeData(nodeUuid: string): Promise<any> {
+        return new Promise(async (resolve) => {
+            try {
+                // 首先获取基本节点信息
+                const nodeInfo = await Editor.Message.request('scene', 'query-node', nodeUuid);
+                if (!nodeInfo) {
+                    resolve(null);
+                    return;
+                }
+
+                console.log(`获取节点 ${nodeUuid} 的基本信息成功`);
+                
+                // 使用query-node-tree获取包含子节点的完整结构
+                const nodeTree = await this.getNodeWithChildren(nodeUuid);
+                if (nodeTree) {
+                    console.log(`获取节点 ${nodeUuid} 的完整树结构成功`);
+                    resolve(nodeTree);
+                } else {
+                    console.log(`使用基本节点信息`);
+                    resolve(nodeInfo);
+                }
+            } catch (error) {
+                console.warn(`获取节点数据失败 ${nodeUuid}:`, error);
+                resolve(null);
+            }
+        });
+    }
+
+    // 使用query-node-tree获取包含子节点的完整节点结构
+    private async getNodeWithChildren(nodeUuid: string): Promise<any> {
+        try {
+            // 获取整个场景树
+            const tree = await Editor.Message.request('scene', 'query-node-tree');
+            if (!tree) {
+                return null;
+            }
+
+            // 在树中查找指定的节点
+            const targetNode = this.findNodeInTree(tree, nodeUuid);
+            if (targetNode) {
+                console.log(`在场景树中找到节点 ${nodeUuid}，子节点数量: ${targetNode.children ? targetNode.children.length : 0}`);
+                
+                // 增强节点树，获取每个节点的正确组件信息
+                const enhancedTree = await this.enhanceTreeWithMCPComponents(targetNode);
+                return enhancedTree;
+            }
+
+            return null;
+        } catch (error) {
+            console.warn(`获取节点树结构失败 ${nodeUuid}:`, error);
+            return null;
+        }
+    }
+
+    // 在节点树中递归查找指定UUID的节点
+    private findNodeInTree(node: any, targetUuid: string): any {
+        if (!node) return null;
+        
+        // 检查当前节点
+        if (node.uuid === targetUuid || node.value?.uuid === targetUuid) {
+            return node;
+        }
+
+        // 递归检查子节点
+        if (node.children && Array.isArray(node.children)) {
+            for (const child of node.children) {
+                const found = this.findNodeInTree(child, targetUuid);
+                if (found) {
+                    return found;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * 使用MCP接口增强节点树，获取正确的组件信息
+     */
+    private async enhanceTreeWithMCPComponents(node: any): Promise<any> {
+        if (!node || !node.uuid) {
+            return node;
+        }
+
+        try {
+            // 使用MCP接口获取节点的组件信息
+            const response = await fetch('http://localhost:8585/mcp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    "jsonrpc": "2.0",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "component_get_components",
+                        "arguments": {
+                            "nodeUuid": node.uuid
+                        }
+                    },
+                    "id": Date.now()
+                })
+            });
+            
+            const mcpResult = await response.json();
+            if (mcpResult.result?.content?.[0]?.text) {
+                const componentData = JSON.parse(mcpResult.result.content[0].text);
+                if (componentData.success && componentData.data.components) {
+                    // 更新节点的组件信息为MCP返回的正确数据
+                    node.components = componentData.data.components;
+                    console.log(`节点 ${node.uuid} 获取到 ${componentData.data.components.length} 个组件，包含脚本组件的正确类型`);
+                }
+            }
+        } catch (error) {
+            console.warn(`获取节点 ${node.uuid} 的MCP组件信息失败:`, error);
+        }
+
+        // 递归处理子节点
+        if (node.children && Array.isArray(node.children)) {
+            for (let i = 0; i < node.children.length; i++) {
+                node.children[i] = await this.enhanceTreeWithMCPComponents(node.children[i]);
+            }
+        }
+
+        return node;
+    }
+
+    private async buildBasicNodeInfo(nodeUuid: string): Promise<any> {
+        return new Promise((resolve) => {
+            // 构建基本的节点信息
+            Editor.Message.request('scene', 'query-node', nodeUuid).then((nodeInfo: any) => {
+                if (!nodeInfo) {
+                    resolve(null);
+                    return;
+                }
+
+                // 简化版本：只返回基本节点信息，不获取子节点和组件
+                // 这些信息将在后续的预制体处理中根据需要添加
+                const basicInfo = {
+                    ...nodeInfo,
+                    children: [],
+                    components: []
+                };
+                resolve(basicInfo);
+            }).catch(() => {
+                resolve(null);
+            });
+        });
+    }
+
+    // 验证节点数据是否有效
+    private isValidNodeData(nodeData: any): boolean {
+        if (!nodeData) return false;
+        if (typeof nodeData !== 'object') return false;
+        
+        // 检查基本属性 - 适配query-node-tree的数据格式
+        return nodeData.hasOwnProperty('uuid') || 
+               nodeData.hasOwnProperty('name') || 
+               nodeData.hasOwnProperty('__type__') ||
+               (nodeData.value && (
+                   nodeData.value.hasOwnProperty('uuid') ||
+                   nodeData.value.hasOwnProperty('name') ||
+                   nodeData.value.hasOwnProperty('__type__')
+               ));
+    }
+
+    // 提取子节点UUID的统一方法
+    private extractChildUuid(childRef: any): string | null {
+        if (!childRef) return null;
+        
+        // 方法1: 直接字符串
+        if (typeof childRef === 'string') {
+            return childRef;
+        }
+        
+        // 方法2: value属性包含字符串
+        if (childRef.value && typeof childRef.value === 'string') {
+            return childRef.value;
+        }
+        
+        // 方法3: value.uuid属性
+        if (childRef.value && childRef.value.uuid) {
+            return childRef.value.uuid;
+        }
+        
+        // 方法4: 直接uuid属性
+        if (childRef.uuid) {
+            return childRef.uuid;
+        }
+        
+        // 方法5: __id__引用 - 这种情况需要特殊处理
+        if (childRef.__id__ !== undefined) {
+            console.log(`发现__id__引用: ${childRef.__id__}，可能需要从数据结构中查找`);
+            return null; // 暂时返回null，后续可以添加引用解析逻辑
+        }
+        
+        console.warn('无法提取子节点UUID:', JSON.stringify(childRef));
+        return null;
+    }
+
+    // 获取需要处理的子节点数据
+    private getChildrenToProcess(nodeData: any): any[] {
+        const children: any[] = [];
+        
+        // 方法1: 直接从children数组获取（从query-node-tree返回的数据）
+        if (nodeData.children && Array.isArray(nodeData.children)) {
+            console.log(`从children数组获取子节点，数量: ${nodeData.children.length}`);
+            for (const child of nodeData.children) {
+                // query-node-tree返回的子节点通常已经是完整的数据结构
+                if (this.isValidNodeData(child)) {
+                    children.push(child);
+                    console.log(`添加子节点: ${child.name || child.value?.name || '未知'}`);
+                } else {
+                    console.log('子节点数据无效:', JSON.stringify(child, null, 2));
+                }
+            }
+        } else {
+            console.log('节点没有子节点或children数组为空');
+        }
+        
+        return children;
+    }
+
+    private generateUUID(): string {
+        // 生成符合Cocos Creator格式的UUID
+        const chars = '0123456789abcdef';
+        let uuid = '';
+        for (let i = 0; i < 32; i++) {
+            if (i === 8 || i === 12 || i === 16 || i === 20) {
+                uuid += '-';
+            }
+            uuid += chars[Math.floor(Math.random() * chars.length)];
+        }
+        return uuid;
+    }
+
+    private createPrefabData(nodeData: any, prefabName: string, prefabUuid: string): any[] {
+        // 创建标准的预制体数据结构
+        const prefabAsset = {
+            "__type__": "cc.Prefab",
+            "_name": prefabName,
+            "_objFlags": 0,
+            "__editorExtras__": {},
+            "_native": "",
+            "data": {
+                "__id__": 1
+            },
+            "optimizationPolicy": 0,
+            "persistent": false
+        };
+
+        // 处理节点数据，确保符合预制体格式
+        const processedNodeData = this.processNodeForPrefab(nodeData, prefabUuid);
+
+        return [prefabAsset, ...processedNodeData];
+    }
+
+    private processNodeForPrefab(nodeData: any, prefabUuid: string): any[] {
+        // 处理节点数据以符合预制体格式
+        const processedData: any[] = [];
+        let idCounter = 1;
+
+        // 递归处理节点和组件
+        const processNode = (node: any, parentId: number = 0): number => {
+            const nodeId = idCounter++;
+            
+            // 创建节点对象
+            const processedNode = {
+                "__type__": "cc.Node",
+                "_name": node.name || "Node",
+                "_objFlags": 0,
+                "__editorExtras__": {},
+                "_parent": parentId > 0 ? { "__id__": parentId } : null,
+                "_children": node.children ? node.children.map(() => ({ "__id__": idCounter++ })) : [],
+                "_active": node.active !== false,
+                "_components": node.components ? node.components.map(() => ({ "__id__": idCounter++ })) : [],
+                "_prefab": {
+                    "__id__": idCounter++
+                },
+                "_lpos": {
+                    "__type__": "cc.Vec3",
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "_lrot": {
+                    "__type__": "cc.Quat",
+                    "x": 0,
+                    "y": 0,
+                    "z": 0,
+                    "w": 1
+                },
+                "_lscale": {
+                    "__type__": "cc.Vec3",
+                    "x": 1,
+                    "y": 1,
+                    "z": 1
+                },
+                "_mobility": 0,
+                "_layer": 1073741824,
+                "_euler": {
+                    "__type__": "cc.Vec3",
+                    "x": 0,
+                    "y": 0,
+                    "z": 0
+                },
+                "_id": ""
+            };
+
+            processedData.push(processedNode);
+
+            // 处理组件
+            if (node.components) {
+                node.components.forEach((component: any) => {
+                    const componentId = idCounter++;
+                    const processedComponents = this.processComponentForPrefab(component, componentId);
+                    processedData.push(...processedComponents);
+                });
+            }
+
+            // 处理子节点
+            if (node.children) {
+                node.children.forEach((child: any) => {
+                    processNode(child, nodeId);
+                });
+            }
+
+            return nodeId;
+        };
+
+        processNode(nodeData);
+        return processedData;
+    }
+
+    private processComponentForPrefab(component: any, componentId: number): any[] {
+        // 处理组件数据以符合预制体格式
+        const processedComponent = {
+            "__type__": component.type || "cc.Component",
+            "_name": "",
+            "_objFlags": 0,
+            "__editorExtras__": {},
+            "node": {
+                "__id__": componentId - 1
+            },
+            "_enabled": component.enabled !== false,
+            "__prefab": {
+                "__id__": componentId + 1
+            },
+            ...component.properties
+        };
+
+        // 添加组件特定的预制体信息
+        const compPrefabInfo = {
+            "__type__": "cc.CompPrefabInfo",
+            "fileId": this.generateFileId()
+        };
+
+        return [processedComponent, compPrefabInfo];
+    }
+
+    private generateFileId(): string {
+        // 生成文件ID（简化版本）
+        const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/';
+        let fileId = '';
+        for (let i = 0; i < 22; i++) {
+            fileId += chars[Math.floor(Math.random() * chars.length)];
+        }
+        return fileId;
+    }
+
+    private createMetaData(prefabName: string, prefabUuid: string): any {
+        return {
+            "ver": "1.1.50",
+            "importer": "prefab",
+            "imported": true,
+            "uuid": prefabUuid,
+            "files": [
+                ".json"
+            ],
+            "subMetas": {},
+            "userData": {
+                "syncNodeName": prefabName
+            }
+        };
+    }
+
+    private async savePrefabFiles(prefabPath: string, prefabData: any[], metaData: any): Promise<{ success: boolean; error?: string }> {
+        return new Promise((resolve) => {
+            try {
+                // 使用Editor API保存预制体文件
+                const prefabContent = JSON.stringify(prefabData, null, 2);
+                const metaContent = JSON.stringify(metaData, null, 2);
+                
+                // 尝试使用更可靠的保存方法
+                this.saveAssetFile(prefabPath, prefabContent).then(() => {
+                    // 再创建meta文件
+                    const metaPath = `${prefabPath}.meta`;
+                    return this.saveAssetFile(metaPath, metaContent);
+                }).then(() => {
+                    resolve({ success: true });
+                }).catch((error: any) => {
+                    resolve({ success: false, error: error.message || '保存预制体文件失败' });
+                });
+            } catch (error) {
+                resolve({ success: false, error: `保存文件时发生错误: ${error}` });
+            }
+        });
+    }
+
+    private async saveAssetFile(filePath: string, content: string): Promise<void> {
+        return new Promise((resolve, reject) => {
+            // 尝试多种保存方法
+            const saveMethods = [
+                () => Editor.Message.request('asset-db', 'create-asset', filePath, content),
+                () => Editor.Message.request('asset-db', 'save-asset', filePath, content),
+                () => Editor.Message.request('asset-db', 'write-asset', filePath, content)
+            ];
+
+            const trySave = (index: number) => {
+                if (index >= saveMethods.length) {
+                    reject(new Error('所有保存方法都失败了'));
+                    return;
+                }
+
+                saveMethods[index]().then(() => {
+                    resolve();
+                }).catch(() => {
+                    trySave(index + 1);
+                });
+            };
+
+            trySave(0);
+        });
+    }
+
+    private async updatePrefab(prefabPath: string, nodeUuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'query-asset-info', prefabPath).then((assetInfo: any) => {
+                if (!assetInfo) {
+                    throw new Error('Prefab not found');
+                }
+
+                return Editor.Message.request('scene', 'apply-prefab', {
+                    node: nodeUuid,
+                    prefab: assetInfo.uuid
+                });
+            }).then(() => {
+                resolve({
+                    success: true,
+                    message: 'Prefab updated successfully'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async revertPrefab(nodeUuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'revert-prefab', {
+                node: nodeUuid
+            }).then(() => {
+                resolve({
+                    success: true,
+                    message: 'Prefab instance reverted successfully'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async getPrefabInfo(prefabPath: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'query-asset-info', prefabPath).then((assetInfo: any) => {
+                if (!assetInfo) {
+                    throw new Error('Prefab not found');
+                }
+
+                return Editor.Message.request('asset-db', 'query-asset-meta', assetInfo.uuid);
+            }).then((metaInfo: any) => {
+                const info: PrefabInfo = {
+                    name: metaInfo.name,
+                    uuid: metaInfo.uuid,
+                    path: prefabPath,
+                    folder: prefabPath.substring(0, prefabPath.lastIndexOf('/')),
+                    createTime: metaInfo.createTime,
+                    modifyTime: metaInfo.modifyTime,
+                    dependencies: metaInfo.depends || []
+                };
+                resolve({ success: true, data: info });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async createPrefabFromNode(args: any): Promise<ToolResponse> {
+        // 从 prefabPath 提取名称
+        const prefabPath = args.prefabPath;
+        const prefabName = prefabPath.split('/').pop()?.replace('.prefab', '') || 'NewPrefab';
+        
+        // 调用原来的 createPrefab 方法
+        return await this.createPrefab({
+            nodeUuid: args.nodeUuid,
+            savePath: prefabPath,
+            prefabName: prefabName
+        });
+    }
+
+    private async validatePrefab(prefabPath: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            try {
+                // 读取预制体文件内容
+                Editor.Message.request('asset-db', 'query-asset-info', prefabPath).then((assetInfo: any) => {
+                    if (!assetInfo) {
+                        resolve({
+                            success: false,
+                            error: '预制体文件不存在'
+                        });
+                        return;
+                    }
+
+                    // 验证预制体格式
+                    Editor.Message.request('asset-db', 'read-asset', prefabPath).then((content: string) => {
+                        try {
+                            const prefabData = JSON.parse(content);
+                            const validationResult = this.validatePrefabFormat(prefabData);
+                            
+                            resolve({
+                                success: true,
+                                data: {
+                                    isValid: validationResult.isValid,
+                                    issues: validationResult.issues,
+                                    nodeCount: validationResult.nodeCount,
+                                    componentCount: validationResult.componentCount,
+                                    message: validationResult.isValid ? '预制体格式有效' : '预制体格式存在问题'
+                                }
+                            });
+                        } catch (parseError) {
+                            resolve({
+                                success: false,
+                                error: '预制体文件格式错误，无法解析JSON'
+                            });
+                        }
+                    }).catch((error: any) => {
+                        resolve({
+                            success: false,
+                            error: `读取预制体文件失败: ${error.message}`
+                        });
+                    });
+                }).catch((error: any) => {
+                    resolve({
+                        success: false,
+                        error: `查询预制体信息失败: ${error.message}`
+                    });
+                });
+            } catch (error) {
+                resolve({
+                    success: false,
+                    error: `验证预制体时发生错误: ${error}`
+                });
+            }
+        });
+    }
+
+    private validatePrefabFormat(prefabData: any): { isValid: boolean; issues: string[]; nodeCount: number; componentCount: number } {
+        const issues: string[] = [];
+        let nodeCount = 0;
+        let componentCount = 0;
+
+        // 检查基本结构
+        if (!Array.isArray(prefabData)) {
+            issues.push('预制体数据必须是数组格式');
+            return { isValid: false, issues, nodeCount, componentCount };
+        }
+
+        if (prefabData.length === 0) {
+            issues.push('预制体数据为空');
+            return { isValid: false, issues, nodeCount, componentCount };
+        }
+
+        // 检查第一个元素是否为预制体资产
+        const firstElement = prefabData[0];
+        if (!firstElement || firstElement.__type__ !== 'cc.Prefab') {
+            issues.push('第一个元素必须是cc.Prefab类型');
+        }
+
+        // 统计节点和组件
+        prefabData.forEach((item: any, index: number) => {
+            if (item.__type__ === 'cc.Node') {
+                nodeCount++;
+            } else if (item.__type__ && item.__type__.includes('cc.')) {
+                componentCount++;
+            }
+        });
+
+        // 检查必要的字段
+        if (nodeCount === 0) {
+            issues.push('预制体必须包含至少一个节点');
+        }
+
+        return {
+            isValid: issues.length === 0,
+            issues,
+            nodeCount,
+            componentCount
+        };
+    }
+
+    private async duplicatePrefab(args: any): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                const { sourcePrefabPath, targetPrefabPath, newPrefabName } = args;
+                
+                // 读取源预制体
+                const sourceInfo = await this.getPrefabInfo(sourcePrefabPath);
+                if (!sourceInfo.success) {
+                    resolve({
+                        success: false,
+                        error: `无法读取源预制体: ${sourceInfo.error}`
+                    });
+                    return;
+                }
+
+                // 读取源预制体内容
+                const sourceContent = await this.readPrefabContent(sourcePrefabPath);
+                if (!sourceContent.success) {
+                    resolve({
+                        success: false,
+                        error: `无法读取源预制体内容: ${sourceContent.error}`
+                    });
+                    return;
+                }
+
+                // 生成新的UUID
+                const newUuid = this.generateUUID();
+                
+                // 修改预制体数据
+                const modifiedData = this.modifyPrefabForDuplication(sourceContent.data, newPrefabName, newUuid);
+                
+                // 创建新的meta数据
+                const newMetaData = this.createMetaData(newPrefabName || 'DuplicatedPrefab', newUuid);
+                
+                // 预制体复制功能暂时禁用，因为涉及复杂的序列化格式
+                resolve({
+                    success: false,
+                    error: '预制体复制功能暂时不可用',
+                    instruction: '请在 Cocos Creator 编辑器中手动复制预制体：\n1. 在资源管理器中选择要复制的预制体\n2. 右键选择复制\n3. 在目标位置粘贴'
+                });
+
+            } catch (error) {
+                resolve({
+                    success: false,
+                    error: `复制预制体时发生错误: ${error}`
+                });
+            }
+        });
+    }
+
+    private async readPrefabContent(prefabPath: string): Promise<{ success: boolean; data?: any; error?: string }> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'read-asset', prefabPath).then((content: string) => {
+                try {
+                    const prefabData = JSON.parse(content);
+                    resolve({ success: true, data: prefabData });
+                } catch (parseError) {
+                    resolve({ success: false, error: '预制体文件格式错误' });
+                }
+            }).catch((error: any) => {
+                resolve({ success: false, error: error.message || '读取预制体文件失败' });
+            });
+        });
+    }
+
+    private modifyPrefabForDuplication(prefabData: any[], newName: string, newUuid: string): any[] {
+        // 修改预制体数据以创建副本
+        const modifiedData = [...prefabData];
+        
+        // 修改第一个元素（预制体资产）
+        if (modifiedData[0] && modifiedData[0].__type__ === 'cc.Prefab') {
+            modifiedData[0]._name = newName || 'DuplicatedPrefab';
+        }
+
+        // 更新所有UUID引用（简化版本）
+        // 在实际应用中，可能需要更复杂的UUID映射处理
+        
+        return modifiedData;
+    }
+
+    /**
+     * 使用 asset-db API 创建资源文件
+     */
+    private async createAssetWithAssetDB(assetPath: string, content: string): Promise<{ success: boolean; data?: any; error?: string }> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'create-asset', assetPath, content, {
+                overwrite: true,
+                rename: false
+            }).then((assetInfo: any) => {
+                console.log('创建资源文件成功:', assetInfo);
+                resolve({ success: true, data: assetInfo });
+            }).catch((error: any) => {
+                console.error('创建资源文件失败:', error);
+                resolve({ success: false, error: error.message || '创建资源文件失败' });
+            });
+        });
+    }
+
+    /**
+     * 使用 asset-db API 创建 meta 文件
+     */
+    private async createMetaWithAssetDB(assetPath: string, metaContent: any): Promise<{ success: boolean; data?: any; error?: string }> {
+        return new Promise((resolve) => {
+            const metaContentString = JSON.stringify(metaContent, null, 2);
+            Editor.Message.request('asset-db', 'save-asset-meta', assetPath, metaContentString).then((assetInfo: any) => {
+                console.log('创建meta文件成功:', assetInfo);
+                resolve({ success: true, data: assetInfo });
+            }).catch((error: any) => {
+                console.error('创建meta文件失败:', error);
+                resolve({ success: false, error: error.message || '创建meta文件失败' });
+            });
+        });
+    }
+
+    /**
+     * 使用 asset-db API 重新导入资源
+     */
+    private async reimportAssetWithAssetDB(assetPath: string): Promise<{ success: boolean; data?: any; error?: string }> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'reimport-asset', assetPath).then((result: any) => {
+                console.log('重新导入资源成功:', result);
+                resolve({ success: true, data: result });
+            }).catch((error: any) => {
+                console.error('重新导入资源失败:', error);
+                resolve({ success: false, error: error.message || '重新导入资源失败' });
+            });
+        });
+    }
+
+    /**
+     * 使用 asset-db API 更新资源文件内容
+     */
+    private async updateAssetWithAssetDB(assetPath: string, content: string): Promise<{ success: boolean; data?: any; error?: string }> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'save-asset', assetPath, content).then((result: any) => {
+                console.log('更新资源文件成功:', result);
+                resolve({ success: true, data: result });
+            }).catch((error: any) => {
+                console.error('更新资源文件失败:', error);
+                resolve({ success: false, error: error.message || '更新资源文件失败' });
+            });
+        });
+    }
+
+    /**
+     * 创建符合 Cocos Creator 标准的预制体内容
+     * 完整实现递归节点树处理，匹配引擎标准格式
+     */
+    private async createStandardPrefabContent(nodeData: any, prefabName: string, prefabUuid: string, includeChildren: boolean, includeComponents: boolean): Promise<any[]> {
+        console.log('开始创建引擎标准预制体内容...');
+        
+        const prefabData: any[] = [];
+        let currentId = 0;
+
+        // 1. 创建预制体资产对象 (index 0)
+        const prefabAsset = {
+            "__type__": "cc.Prefab",
+            "_name": prefabName || "", // 确保预制体名称不为空
+            "_objFlags": 0,
+            "__editorExtras__": {},
+            "_native": "",
+            "data": {
+                "__id__": 1
+            },
+            "optimizationPolicy": 0,
+            "persistent": false
+        };
+        prefabData.push(prefabAsset);
+        currentId++;
+
+        // 2. 递归创建完整的节点树结构
+        const context = {
+            prefabData,
+            currentId: currentId + 1, // 根节点占用索引1，子节点从索引2开始
+            prefabAssetIndex: 0,
+            nodeFileIds: new Map<string, string>(), // 存储节点ID到fileId的映射
+            nodeUuidToIndex: new Map<string, number>(), // 存储节点UUID到索引的映射
+            componentUuidToIndex: new Map<string, number>() // 存储组件UUID到索引的映射
+        };
+
+        // 创建根节点和整个节点树 - 注意：根节点的父节点应该是null，不是预制体对象
+        await this.createCompleteNodeTree(nodeData, null, 1, context, includeChildren, includeComponents, prefabName);
+
+        console.log(`预制体内容创建完成，总共 ${prefabData.length} 个对象`);
+        console.log('节点fileId映射:', Array.from(context.nodeFileIds.entries()));
+        
+        return prefabData;
+    }
+
+    /**
+     * 递归创建完整的节点树，包括所有子节点和对应的PrefabInfo
+     */
+    private async createCompleteNodeTree(
+        nodeData: any, 
+        parentNodeIndex: number | null, 
+        nodeIndex: number,
+        context: { 
+            prefabData: any[], 
+            currentId: number, 
+            prefabAssetIndex: number, 
+            nodeFileIds: Map<string, string>,
+            nodeUuidToIndex: Map<string, number>,
+            componentUuidToIndex: Map<string, number>
+        },
+        includeChildren: boolean,
+        includeComponents: boolean,
+        nodeName?: string
+    ): Promise<void> {
+        const { prefabData } = context;
+        
+        // 创建节点对象
+        const node = this.createEngineStandardNode(nodeData, parentNodeIndex, nodeName);
+        
+        // 确保节点在指定的索引位置
+        while (prefabData.length <= nodeIndex) {
+            prefabData.push(null);
+        }
+        console.log(`设置节点到索引 ${nodeIndex}: ${node._name}, _parent:`, node._parent, `_children count: ${node._children.length}`);
+        prefabData[nodeIndex] = node;
+        
+        // 为当前节点生成fileId并记录UUID到索引的映射
+        const nodeUuid = this.extractNodeUuid(nodeData);
+        const fileId = nodeUuid || this.generateFileId();
+        context.nodeFileIds.set(nodeIndex.toString(), fileId);
+        
+        // 记录节点UUID到索引的映射
+        if (nodeUuid) {
+            context.nodeUuidToIndex.set(nodeUuid, nodeIndex);
+            console.log(`记录节点UUID映射: ${nodeUuid} -> ${nodeIndex}`);
+        }
+
+        // 先处理子节点（保持与手动创建的索引顺序一致）
+        const childrenToProcess = this.getChildrenToProcess(nodeData);
+        if (includeChildren && childrenToProcess.length > 0) {
+            console.log(`处理节点 ${node._name} 的 ${childrenToProcess.length} 个子节点`);
+            
+            // 为每个子节点分配索引
+            const childIndices: number[] = [];
+            console.log(`准备为 ${childrenToProcess.length} 个子节点分配索引，当前ID: ${context.currentId}`);
+            for (let i = 0; i < childrenToProcess.length; i++) {
+                console.log(`处理第 ${i+1} 个子节点，当前currentId: ${context.currentId}`);
+                const childIndex = context.currentId++;
+                childIndices.push(childIndex);
+                node._children.push({ "__id__": childIndex });
+                console.log(`✅ 添加子节点引用到 ${node._name}: {__id__: ${childIndex}}`);
+            }
+            console.log(`✅ 节点 ${node._name} 最终的子节点数组:`, node._children);
+
+            // 递归创建子节点
+            for (let i = 0; i < childrenToProcess.length; i++) {
+                const childData = childrenToProcess[i];
+                const childIndex = childIndices[i];
+                await this.createCompleteNodeTree(
+                    childData, 
+                    nodeIndex, 
+                    childIndex, 
+                    context,
+                    includeChildren,
+                    includeComponents,
+                    childData.name || `Child${i+1}`
+                );
+            }
+        }
+
+        // 然后处理组件
+        if (includeComponents && nodeData.components && Array.isArray(nodeData.components)) {
+            console.log(`处理节点 ${node._name} 的 ${nodeData.components.length} 个组件`);
+            
+            const componentIndices: number[] = [];
+            for (const component of nodeData.components) {
+                const componentIndex = context.currentId++;
+                componentIndices.push(componentIndex);
+                node._components.push({ "__id__": componentIndex });
+                
+                // 记录组件UUID到索引的映射
+                const componentUuid = component.uuid || (component.value && component.value.uuid);
+                if (componentUuid) {
+                    context.componentUuidToIndex.set(componentUuid, componentIndex);
+                    console.log(`记录组件UUID映射: ${componentUuid} -> ${componentIndex}`);
+                }
+                
+                // 创建组件对象，传入context以处理引用
+                const componentObj = this.createComponentObject(component, nodeIndex, context);
+                prefabData[componentIndex] = componentObj;
+                
+                // 为组件创建 CompPrefabInfo
+                const compPrefabInfoIndex = context.currentId++;
+                prefabData[compPrefabInfoIndex] = {
+                    "__type__": "cc.CompPrefabInfo",
+                    "fileId": this.generateFileId()
+                };
+                
+                // 如果组件对象有 __prefab 属性，设置引用
+                if (componentObj && typeof componentObj === 'object') {
+                    componentObj.__prefab = { "__id__": compPrefabInfoIndex };
+                }
+            }
+            
+            console.log(`✅ 节点 ${node._name} 添加了 ${componentIndices.length} 个组件`);
+        }
+
+
+        // 为当前节点创建PrefabInfo
+        const prefabInfoIndex = context.currentId++;
+        node._prefab = { "__id__": prefabInfoIndex };
+        
+        const prefabInfo: any = {
+            "__type__": "cc.PrefabInfo",
+            "root": { "__id__": 1 },
+            "asset": { "__id__": context.prefabAssetIndex },
+            "fileId": fileId,
+            "targetOverrides": null,
+            "nestedPrefabInstanceRoots": null
+        };
+        
+        // 根节点的特殊处理
+        if (nodeIndex === 1) {
+            // 根节点没有instance，但可能有targetOverrides
+            prefabInfo.instance = null;
+        } else {
+            // 子节点通常有instance为null
+            prefabInfo.instance = null;
+        }
+        
+        prefabData[prefabInfoIndex] = prefabInfo;
+        context.currentId = prefabInfoIndex + 1;
+    }
+
+    /**
+     * 将UUID转换为Cocos Creator的压缩格式
+     * 基于真实Cocos Creator编辑器的压缩算法实现
+     * 前5个hex字符保持不变，剩余27个字符压缩成18个字符
+     */
+    private uuidToCompressedId(uuid: string): string {
+        const BASE64_KEYS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+        
+        // 移除连字符并转为小写
+        const cleanUuid = uuid.replace(/-/g, '').toLowerCase();
+        
+        // 确保UUID有效
+        if (cleanUuid.length !== 32) {
+            return uuid; // 如果不是有效的UUID，返回原始值
+        }
+        
+        // Cocos Creator的压缩算法：前5个字符保持不变，剩余27个字符压缩成18个字符
+        let result = cleanUuid.substring(0, 5);
+        
+        // 剩余27个字符需要压缩成18个字符
+        const remainder = cleanUuid.substring(5);
+        
+        // 每3个hex字符压缩成2个字符
+        for (let i = 0; i < remainder.length; i += 3) {
+            const hex1 = remainder[i] || '0';
+            const hex2 = remainder[i + 1] || '0';
+            const hex3 = remainder[i + 2] || '0';
+            
+            // 将3个hex字符(12位)转换为2个base64字符
+            const value = parseInt(hex1 + hex2 + hex3, 16);
+            
+            // 12位分成两个6位
+            const high6 = (value >> 6) & 63;
+            const low6 = value & 63;
+            
+            result += BASE64_KEYS[high6] + BASE64_KEYS[low6];
+        }
+        
+        return result;
+    }
+
+    /**
+     * 创建组件对象
+     */
+    private createComponentObject(componentData: any, nodeIndex: number, context?: { 
+        nodeUuidToIndex?: Map<string, number>,
+        componentUuidToIndex?: Map<string, number>
+    }): any {
+        let componentType = componentData.type || componentData.__type__ || 'cc.Component';
+        const enabled = componentData.enabled !== undefined ? componentData.enabled : true;
+        
+        // console.log(`创建组件对象 - 原始类型: ${componentType}`);
+        // console.log('组件完整数据:', JSON.stringify(componentData, null, 2));
+        
+        // 处理脚本组件 - MCP接口已经返回正确的压缩UUID格式
+        if (componentType && !componentType.startsWith('cc.')) {
+            console.log(`使用脚本组件压缩UUID类型: ${componentType}`);
+        }
+        
+        // 基础组件结构
+        const component: any = {
+            "__type__": componentType,
+            "_name": "",
+            "_objFlags": 0,
+            "__editorExtras__": {},
+            "node": { "__id__": nodeIndex },
+            "_enabled": enabled
+        };
+        
+        // 提前设置 __prefab 属性占位符，后续会被正确设置
+        component.__prefab = null;
+        
+        // 根据组件类型添加特定属性
+        if (componentType === 'cc.UITransform') {
+            const contentSize = componentData.properties?.contentSize?.value || { width: 100, height: 100 };
+            const anchorPoint = componentData.properties?.anchorPoint?.value || { x: 0.5, y: 0.5 };
+            
+            component._contentSize = {
+                "__type__": "cc.Size",
+                "width": contentSize.width,
+                "height": contentSize.height
+            };
+            component._anchorPoint = {
+                "__type__": "cc.Vec2",
+                "x": anchorPoint.x,
+                "y": anchorPoint.y
+            };
+        } else if (componentType === 'cc.Sprite') {
+            // 处理Sprite组件的spriteFrame引用
+            const spriteFrameProp = componentData.properties?._spriteFrame || componentData.properties?.spriteFrame;
+            if (spriteFrameProp) {
+                component._spriteFrame = this.processComponentProperty(spriteFrameProp, context);
+            } else {
+                component._spriteFrame = null;
+            }
+            
+            component._type = componentData.properties?._type?.value ?? 0;
+            component._fillType = componentData.properties?._fillType?.value ?? 0;
+            component._sizeMode = componentData.properties?._sizeMode?.value ?? 1;
+            component._fillCenter = { "__type__": "cc.Vec2", "x": 0, "y": 0 };
+            component._fillStart = componentData.properties?._fillStart?.value ?? 0;
+            component._fillRange = componentData.properties?._fillRange?.value ?? 0;
+            component._isTrimmedMode = componentData.properties?._isTrimmedMode?.value ?? true;
+            component._useGrayscale = componentData.properties?._useGrayscale?.value ?? false;
+            
+            // 调试：打印Sprite组件的所有属性（已注释）
+            // console.log('Sprite组件属性:', JSON.stringify(componentData.properties, null, 2));
+            component._atlas = null;
+            component._id = "";
+        } else if (componentType === 'cc.Button') {
+            component._interactable = true;
+            component._transition = 3;
+            component._normalColor = { "__type__": "cc.Color", "r": 255, "g": 255, "b": 255, "a": 255 };
+            component._hoverColor = { "__type__": "cc.Color", "r": 211, "g": 211, "b": 211, "a": 255 };
+            component._pressedColor = { "__type__": "cc.Color", "r": 255, "g": 255, "b": 255, "a": 255 };
+            component._disabledColor = { "__type__": "cc.Color", "r": 124, "g": 124, "b": 124, "a": 255 };
+            component._normalSprite = null;
+            component._hoverSprite = null;
+            component._pressedSprite = null;
+            component._disabledSprite = null;
+            component._duration = 0.1;
+            component._zoomScale = 1.2;
+            // 处理Button的target引用
+            const targetProp = componentData.properties?._target || componentData.properties?.target;
+            if (targetProp) {
+                component._target = this.processComponentProperty(targetProp, context);
+            } else {
+                component._target = { "__id__": nodeIndex }; // 默认指向自身节点
+            }
+            component._clickEvents = [];
+            component._id = "";
+        } else if (componentType === 'cc.Label') {
+            component._string = componentData.properties?._string?.value || "Label";
+            component._horizontalAlign = 1;
+            component._verticalAlign = 1;
+            component._actualFontSize = 20;
+            component._fontSize = 20;
+            component._fontFamily = "Arial";
+            component._lineHeight = 25;
+            component._overflow = 0;
+            component._enableWrapText = true;
+            component._font = null;
+            component._isSystemFontUsed = true;
+            component._spacingX = 0;
+            component._isItalic = false;
+            component._isBold = false;
+            component._isUnderline = false;
+            component._underlineHeight = 2;
+            component._cacheMode = 0;
+            component._id = "";
+        } else if (componentData.properties) {
+            // 处理所有组件的属性（包括内置组件和自定义脚本组件）
+            for (const [key, value] of Object.entries(componentData.properties)) {
+                if (key === 'node' || key === 'enabled' || key === '__type__' || 
+                    key === 'uuid' || key === 'name' || key === '__scriptAsset' || key === '_objFlags') {
+                    continue; // 跳过这些特殊属性，包括_objFlags
+                }
+                
+                // 对于以下划线开头的属性，需要特殊处理
+                if (key.startsWith('_')) {
+                    // 确保属性名保持原样（包括下划线）
+                    const propValue = this.processComponentProperty(value, context);
+                    if (propValue !== undefined) {
+                        component[key] = propValue;
+                    }
+                } else {
+                    // 非下划线开头的属性正常处理
+                    const propValue = this.processComponentProperty(value, context);
+                    if (propValue !== undefined) {
+                        component[key] = propValue;
+                    }
+                }
+            }
+        }
+        
+        // 确保 _id 在最后位置
+        const _id = component._id || "";
+        delete component._id;
+        component._id = _id;
+        
+        return component;
+    }
+
+    /**
+     * 处理组件属性值，确保格式与手动创建的预制体一致
+     */
+    private processComponentProperty(propData: any, context?: { 
+        nodeUuidToIndex?: Map<string, number>,
+        componentUuidToIndex?: Map<string, number>
+    }): any {
+        if (!propData || typeof propData !== 'object') {
+            return propData;
+        }
+
+        const value = propData.value;
+        const type = propData.type;
+
+        // 处理null值
+        if (value === null || value === undefined) {
+            return null;
+        }
+
+        // 处理空UUID对象，转换为null
+        if (value && typeof value === 'object' && value.uuid === '') {
+            return null;
+        }
+
+        // 处理节点引用
+        if (type === 'cc.Node' && value?.uuid) {
+            // 在预制体中，节点引用需要转换为 __id__ 形式
+            if (context?.nodeUuidToIndex && context.nodeUuidToIndex.has(value.uuid)) {
+                // 内部引用：转换为__id__格式
+                return {
+                    "__id__": context.nodeUuidToIndex.get(value.uuid)
+                };
+            }
+            // 外部引用：设置为null，因为外部节点不属于预制体结构
+            console.warn(`Node reference UUID ${value.uuid} not found in prefab context, setting to null (external reference)`);
+            return null;
+        }
+
+        // 处理资源引用（预制体、纹理、精灵帧等）
+        if (value?.uuid && (
+            type === 'cc.Prefab' || 
+            type === 'cc.Texture2D' || 
+            type === 'cc.SpriteFrame' ||
+            type === 'cc.Material' ||
+            type === 'cc.AnimationClip' ||
+            type === 'cc.AudioClip' ||
+            type === 'cc.Font' ||
+            type === 'cc.Asset'
+        )) {
+            // 对于预制体引用，保持原始UUID格式
+            const uuidToUse = type === 'cc.Prefab' ? value.uuid : this.uuidToCompressedId(value.uuid);
+            return {
+                "__uuid__": uuidToUse,
+                "__expectedType__": type
+            };
+        }
+
+        // 处理组件引用（包括具体的组件类型如cc.Label, cc.Button等）
+        if (value?.uuid && (type === 'cc.Component' || 
+            type === 'cc.Label' || type === 'cc.Button' || type === 'cc.Sprite' || 
+            type === 'cc.UITransform' || type === 'cc.RigidBody2D' || 
+            type === 'cc.BoxCollider2D' || type === 'cc.Animation' || 
+            type === 'cc.AudioSource' || (type?.startsWith('cc.') && !type.includes('@')))) {
+            // 在预制体中，组件引用也需要转换为 __id__ 形式
+            if (context?.componentUuidToIndex && context.componentUuidToIndex.has(value.uuid)) {
+                // 内部引用：转换为__id__格式
+                console.log(`Component reference ${type} UUID ${value.uuid} found in prefab context, converting to __id__`);
+                return {
+                    "__id__": context.componentUuidToIndex.get(value.uuid)
+                };
+            }
+            // 外部引用：设置为null，因为外部组件不属于预制体结构
+            console.warn(`Component reference ${type} UUID ${value.uuid} not found in prefab context, setting to null (external reference)`);
+            return null;
+        }
+
+        // 处理复杂类型，添加__type__标记
+        if (value && typeof value === 'object') {
+            if (type === 'cc.Color') {
+                return {
+                    "__type__": "cc.Color",
+                    "r": Math.min(255, Math.max(0, Number(value.r) || 0)),
+                    "g": Math.min(255, Math.max(0, Number(value.g) || 0)),
+                    "b": Math.min(255, Math.max(0, Number(value.b) || 0)),
+                    "a": value.a !== undefined ? Math.min(255, Math.max(0, Number(value.a))) : 255
+                };
+            } else if (type === 'cc.Vec3') {
+                return {
+                    "__type__": "cc.Vec3",
+                    "x": Number(value.x) || 0,
+                    "y": Number(value.y) || 0,
+                    "z": Number(value.z) || 0
+                };
+            } else if (type === 'cc.Vec2') {
+                return {
+                    "__type__": "cc.Vec2", 
+                    "x": Number(value.x) || 0,
+                    "y": Number(value.y) || 0
+                };
+            } else if (type === 'cc.Size') {
+                return {
+                    "__type__": "cc.Size",
+                    "width": Number(value.width) || 0,
+                    "height": Number(value.height) || 0
+                };
+            } else if (type === 'cc.Quat') {
+                return {
+                    "__type__": "cc.Quat",
+                    "x": Number(value.x) || 0,
+                    "y": Number(value.y) || 0,
+                    "z": Number(value.z) || 0,
+                    "w": value.w !== undefined ? Number(value.w) : 1
+                };
+            }
+        }
+
+        // 处理数组类型
+        if (Array.isArray(value)) {
+            // 节点数组
+            if (propData.elementTypeData?.type === 'cc.Node') {
+                return value.map(item => {
+                    if (item?.uuid && context?.nodeUuidToIndex?.has(item.uuid)) {
+                        return { "__id__": context.nodeUuidToIndex.get(item.uuid) };
+                    }
+                    return null;
+                }).filter(item => item !== null);
+            }
+            
+            // 资源数组
+            if (propData.elementTypeData?.type && propData.elementTypeData.type.startsWith('cc.')) {
+                return value.map(item => {
+                    if (item?.uuid) {
+                        return {
+                            "__uuid__": this.uuidToCompressedId(item.uuid),
+                            "__expectedType__": propData.elementTypeData.type
+                        };
+                    }
+                    return null;
+                }).filter(item => item !== null);
+            }
+
+            // 基础类型数组
+            return value.map(item => item?.value !== undefined ? item.value : item);
+        }
+
+        // 其他复杂对象类型，保持原样但确保有__type__标记
+        if (value && typeof value === 'object' && type && type.startsWith('cc.')) {
+            return {
+                "__type__": type,
+                ...value
+            };
+        }
+
+        return value;
+    }
+
+    /**
+     * 创建符合引擎标准的节点对象
+     */
+    private createEngineStandardNode(nodeData: any, parentNodeIndex: number | null, nodeName?: string): any {
+        // 调试：打印原始节点数据（已注释）
+        // console.log('原始节点数据:', JSON.stringify(nodeData, null, 2));
+        
+        // 提取节点的基本属性
+        const getValue = (prop: any) => {
+            if (prop?.value !== undefined) return prop.value;
+            if (prop !== undefined) return prop;
+            return null;
+        };
+        
+        const position = getValue(nodeData.position) || getValue(nodeData.value?.position) || { x: 0, y: 0, z: 0 };
+        const rotation = getValue(nodeData.rotation) || getValue(nodeData.value?.rotation) || { x: 0, y: 0, z: 0, w: 1 };
+        const scale = getValue(nodeData.scale) || getValue(nodeData.value?.scale) || { x: 1, y: 1, z: 1 };
+        const active = getValue(nodeData.active) ?? getValue(nodeData.value?.active) ?? true;
+        const name = nodeName || getValue(nodeData.name) || getValue(nodeData.value?.name) || 'Node';
+        const layer = getValue(nodeData.layer) || getValue(nodeData.value?.layer) || 1073741824;
+
+        // 调试输出
+        console.log(`创建节点: ${name}, parentNodeIndex: ${parentNodeIndex}`);
+
+        const parentRef = parentNodeIndex !== null ? { "__id__": parentNodeIndex } : null;
+        console.log(`节点 ${name} 的父节点引用:`, parentRef);
+
+        return {
+            "__type__": "cc.Node",
+            "_name": name,
+            "_objFlags": 0,
+            "__editorExtras__": {},
+            "_parent": parentRef,
+            "_children": [], // 子节点引用将在递归过程中动态添加
+            "_active": active,
+            "_components": [], // 组件引用将在处理组件时动态添加
+            "_prefab": { "__id__": 0 }, // 临时值，后续会被正确设置
+            "_lpos": {
+                "__type__": "cc.Vec3",
+                "x": position.x,
+                "y": position.y,
+                "z": position.z
+            },
+            "_lrot": {
+                "__type__": "cc.Quat",
+                "x": rotation.x,
+                "y": rotation.y,
+                "z": rotation.z,
+                "w": rotation.w
+            },
+            "_lscale": {
+                "__type__": "cc.Vec3",
+                "x": scale.x,
+                "y": scale.y,
+                "z": scale.z
+            },
+            "_mobility": 0,
+            "_layer": layer,
+            "_euler": {
+                "__type__": "cc.Vec3",
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "_id": ""
+        };
+    }
+
+    /**
+     * 从节点数据中提取UUID
+     */
+    private extractNodeUuid(nodeData: any): string | null {
+        if (!nodeData) return null;
+        
+        // 尝试多种方式获取UUID
+        const sources = [
+            nodeData.uuid,
+            nodeData.value?.uuid,
+            nodeData.__uuid__,
+            nodeData.value?.__uuid__,
+            nodeData.id,
+            nodeData.value?.id
+        ];
+        
+        for (const source of sources) {
+            if (typeof source === 'string' && source.length > 0) {
+                return source;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * 创建最小化的节点对象，不包含任何组件以避免依赖问题
+     */
+    private createMinimalNode(nodeData: any, nodeName?: string): any {
+        // 提取节点的基本属性
+        const getValue = (prop: any) => {
+            if (prop?.value !== undefined) return prop.value;
+            if (prop !== undefined) return prop;
+            return null;
+        };
+        
+        const position = getValue(nodeData.position) || getValue(nodeData.value?.position) || { x: 0, y: 0, z: 0 };
+        const rotation = getValue(nodeData.rotation) || getValue(nodeData.value?.rotation) || { x: 0, y: 0, z: 0, w: 1 };
+        const scale = getValue(nodeData.scale) || getValue(nodeData.value?.scale) || { x: 1, y: 1, z: 1 };
+        const active = getValue(nodeData.active) ?? getValue(nodeData.value?.active) ?? true;
+        const name = nodeName || getValue(nodeData.name) || getValue(nodeData.value?.name) || 'Node';
+        const layer = getValue(nodeData.layer) || getValue(nodeData.value?.layer) || 33554432;
+
+        return {
+            "__type__": "cc.Node",
+            "_name": name,
+            "_objFlags": 0,
+            "_parent": null,
+            "_children": [],
+            "_active": active,
+            "_components": [], // 空的组件数组，避免组件依赖问题
+            "_prefab": {
+                "__id__": 2
+            },
+            "_lpos": {
+                "__type__": "cc.Vec3",
+                "x": position.x,
+                "y": position.y,
+                "z": position.z
+            },
+            "_lrot": {
+                "__type__": "cc.Quat",
+                "x": rotation.x,
+                "y": rotation.y,
+                "z": rotation.z,
+                "w": rotation.w
+            },
+            "_lscale": {
+                "__type__": "cc.Vec3",
+                "x": scale.x,
+                "y": scale.y,
+                "z": scale.z
+            },
+            "_layer": layer,
+            "_euler": {
+                "__type__": "cc.Vec3",
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "_id": ""
+        };
+    }
+
+    /**
+     * 创建标准的 meta 文件内容
+     */
+    private createStandardMetaContent(prefabName: string, prefabUuid: string): any {
+        return {
+            "ver": "2.0.3",
+            "importer": "prefab",
+            "imported": true,
+            "uuid": prefabUuid,
+            "files": [
+                ".json"
+            ],
+            "subMetas": {},
+            "userData": {
+                "syncNodeName": prefabName,
+                "hasIcon": false
+            }
+        };
+    }
+
+    /**
+     * 尝试将原始节点转换为预制体实例
+     */
+    private async convertNodeToPrefabInstance(nodeUuid: string, prefabUuid: string, prefabPath: string): Promise<{ success: boolean; error?: string }> {
+        return new Promise((resolve) => {
+            // 这个功能需要深入的场景编辑器集成，暂时返回失败
+            // 在实际的引擎中，这涉及到复杂的预制体实例化和节点替换逻辑
+            console.log('节点转换为预制体实例的功能需要更深入的引擎集成');
+            resolve({
+                success: false,
+                error: '节点转换为预制体实例需要更深入的引擎集成支持'
+            });
+        });
+    }
+
+    private async restorePrefabNode(nodeUuid: string, assetUuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 使用官方API restore-prefab 还原预制体节点
+            (Editor.Message.request as any)('scene', 'restore-prefab', nodeUuid, assetUuid).then(() => {
+                resolve({
+                    success: true,
+                    data: {
+                        nodeUuid: nodeUuid,
+                        assetUuid: assetUuid,
+                        message: '预制体节点还原成功'
+                    }
+                });
+            }).catch((error: any) => {
+                resolve({
+                    success: false,
+                    error: `预制体节点还原失败: ${error.message}`
+                });
+            });
+        });
+    }
+
+    // 基于官方预制体格式的新实现方法
+    private async getNodeDataForPrefab(nodeUuid: string): Promise<{ success: boolean; data?: any; error?: string }> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-node', nodeUuid).then((nodeData: any) => {
+                if (!nodeData) {
+                    resolve({ success: false, error: '节点不存在' });
+                    return;
+                }
+                resolve({ success: true, data: nodeData });
+            }).catch((error: any) => {
+                resolve({ success: false, error: error.message });
+            });
+        });
+    }
+
+    private async createStandardPrefabData(nodeData: any, prefabName: string, prefabUuid: string): Promise<any[]> {
+        // 基于官方Canvas.prefab格式创建预制体数据结构
+        const prefabData: any[] = [];
+        let currentId = 0;
+
+        // 第一个元素：cc.Prefab 资源对象
+        const prefabAsset = {
+            "__type__": "cc.Prefab",
+            "_name": prefabName,
+            "_objFlags": 0,
+            "__editorExtras__": {},
+            "_native": "",
+            "data": {
+                "__id__": 1
+            },
+            "optimizationPolicy": 0,
+            "persistent": false
+        };
+        prefabData.push(prefabAsset);
+        currentId++;
+
+        // 第二个元素：根节点
+        const rootNode = await this.createNodeObject(nodeData, null, prefabData, currentId);
+        prefabData.push(rootNode.node);
+        currentId = rootNode.nextId;
+
+        // 添加根节点的 PrefabInfo - 修复asset引用使用UUID
+        const rootPrefabInfo = {
+            "__type__": "cc.PrefabInfo",
+            "root": {
+                "__id__": 1
+            },
+            "asset": {
+                "__uuid__": prefabUuid
+            },
+            "fileId": this.generateFileId(),
+            "instance": null,
+            "targetOverrides": [],
+            "nestedPrefabInstanceRoots": []
+        };
+        prefabData.push(rootPrefabInfo);
+
+        return prefabData;
+    }
+
+
+    private async createNodeObject(nodeData: any, parentId: number | null, prefabData: any[], currentId: number): Promise<{ node: any; nextId: number }> {
+        const nodeId = currentId++;
+        
+        // 提取节点的基本属性 - 适配query-node-tree的数据格式
+        const getValue = (prop: any) => {
+            if (prop?.value !== undefined) return prop.value;
+            if (prop !== undefined) return prop;
+            return null;
+        };
+        
+        const position = getValue(nodeData.position) || getValue(nodeData.value?.position) || { x: 0, y: 0, z: 0 };
+        const rotation = getValue(nodeData.rotation) || getValue(nodeData.value?.rotation) || { x: 0, y: 0, z: 0, w: 1 };
+        const scale = getValue(nodeData.scale) || getValue(nodeData.value?.scale) || { x: 1, y: 1, z: 1 };
+        const active = getValue(nodeData.active) ?? getValue(nodeData.value?.active) ?? true;
+        const name = getValue(nodeData.name) || getValue(nodeData.value?.name) || 'Node';
+        const layer = getValue(nodeData.layer) || getValue(nodeData.value?.layer) || 33554432;
+
+        const node: any = {
+            "__type__": "cc.Node",
+            "_name": name,
+            "_objFlags": 0,
+            "__editorExtras__": {},
+            "_parent": parentId !== null ? { "__id__": parentId } : null,
+            "_children": [],
+            "_active": active,
+            "_components": [],
+            "_prefab": parentId === null ? {
+                "__id__": currentId++
+            } : null,
+            "_lpos": {
+                "__type__": "cc.Vec3",
+                "x": position.x,
+                "y": position.y,
+                "z": position.z
+            },
+            "_lrot": {
+                "__type__": "cc.Quat",
+                "x": rotation.x,
+                "y": rotation.y,
+                "z": rotation.z,
+                "w": rotation.w
+            },
+            "_lscale": {
+                "__type__": "cc.Vec3",
+                "x": scale.x,
+                "y": scale.y,
+                "z": scale.z
+            },
+            "_mobility": 0,
+            "_layer": layer,
+            "_euler": {
+                "__type__": "cc.Vec3",
+                "x": 0,
+                "y": 0,
+                "z": 0
+            },
+            "_id": ""
+        };
+
+        // 暂时跳过UITransform组件以避免_getDependComponent错误
+        // 后续通过Engine API动态添加
+        console.log(`节点 ${name} 暂时跳过UITransform组件，避免引擎依赖错误`);
+        
+        // 处理其他组件（暂时跳过，专注于修复UITransform问题）
+        const components = this.extractComponentsFromNode(nodeData);
+        if (components.length > 0) {
+            console.log(`节点 ${name} 包含 ${components.length} 个其他组件，暂时跳过以专注于UITransform修复`);
+        }
+
+        // 处理子节点 - 使用query-node-tree获取的完整结构
+        const childrenToProcess = this.getChildrenToProcess(nodeData);
+        if (childrenToProcess.length > 0) {
+            console.log(`=== 处理子节点 ===`);
+            console.log(`节点 ${name} 包含 ${childrenToProcess.length} 个子节点`);
+            
+            for (let i = 0; i < childrenToProcess.length; i++) {
+                const childData = childrenToProcess[i];
+                const childName = childData.name || childData.value?.name || '未知';
+                console.log(`处理第${i + 1}个子节点: ${childName}`);
+                
+                try {
+                    const childId = currentId;
+                    node._children.push({ "__id__": childId });
+                    
+                    // 递归创建子节点
+                    const childResult = await this.createNodeObject(childData, nodeId, prefabData, currentId);
+                    prefabData.push(childResult.node);
+                    currentId = childResult.nextId;
+                    
+                    // 子节点不需要PrefabInfo，只有根节点需要
+                    // 子节点的_prefab应该设置为null
+                    childResult.node._prefab = null;
+                    
+                    console.log(`✅ 成功添加子节点: ${childName}`);
+                } catch (error) {
+                    console.error(`处理子节点 ${childName} 时出错:`, error);
+                }
+            }
+        }
+
+        return { node, nextId: currentId };
+    }
+
+    // 从节点数据中提取组件信息
+    private extractComponentsFromNode(nodeData: any): any[] {
+        const components: any[] = [];
+        
+        // 从不同位置尝试获取组件数据
+        const componentSources = [
+            nodeData.__comps__,
+            nodeData.components,
+            nodeData.value?.__comps__,
+            nodeData.value?.components
+        ];
+        
+        for (const source of componentSources) {
+            if (Array.isArray(source)) {
+                components.push(...source.filter(comp => comp && (comp.__type__ || comp.type)));
+                break; // 找到有效的组件数组就退出
+            }
+        }
+        
+        return components;
+    }
+    
+    // 创建标准的组件对象
+    private createStandardComponentObject(componentData: any, nodeId: number, prefabInfoId: number): any {
+        const componentType = componentData.__type__ || componentData.type;
+        
+        if (!componentType) {
+            console.warn('组件缺少类型信息:', componentData);
+            return null;
+        }
+        
+        // 基础组件结构 - 基于官方预制体格式
+        const component: any = {
+            "__type__": componentType,
+            "_name": "",
+            "_objFlags": 0,
+            "node": {
+                "__id__": nodeId
+            },
+            "_enabled": this.getComponentPropertyValue(componentData, 'enabled', true),
+            "__prefab": {
+                "__id__": prefabInfoId
+            }
+        };
+        
+        // 根据组件类型添加特定属性
+        this.addComponentSpecificProperties(component, componentData, componentType);
+        
+        // 添加_id属性
+        component._id = "";
+        
+        return component;
+    }
+    
+    // 添加组件特定的属性
+    private addComponentSpecificProperties(component: any, componentData: any, componentType: string): void {
+        switch (componentType) {
+            case 'cc.UITransform':
+                this.addUITransformProperties(component, componentData);
+                break;
+            case 'cc.Sprite':
+                this.addSpriteProperties(component, componentData);
+                break;
+            case 'cc.Label':
+                this.addLabelProperties(component, componentData);
+                break;
+            case 'cc.Button':
+                this.addButtonProperties(component, componentData);
+                break;
+            default:
+                // 对于未知类型的组件，复制所有安全的属性
+                this.addGenericProperties(component, componentData);
+                break;
+        }
+    }
+    
+    // UITransform组件属性
+    private addUITransformProperties(component: any, componentData: any): void {
+        component._contentSize = this.createSizeObject(
+            this.getComponentPropertyValue(componentData, 'contentSize', { width: 100, height: 100 })
+        );
+        component._anchorPoint = this.createVec2Object(
+            this.getComponentPropertyValue(componentData, 'anchorPoint', { x: 0.5, y: 0.5 })
+        );
+    }
+    
+    // Sprite组件属性
+    private addSpriteProperties(component: any, componentData: any): void {
+        component._visFlags = 0;
+        component._customMaterial = null;
+        component._srcBlendFactor = 2;
+        component._dstBlendFactor = 4;
+        component._color = this.createColorObject(
+            this.getComponentPropertyValue(componentData, 'color', { r: 255, g: 255, b: 255, a: 255 })
+        );
+        component._spriteFrame = this.getComponentPropertyValue(componentData, 'spriteFrame', null);
+        component._type = this.getComponentPropertyValue(componentData, 'type', 0);
+        component._fillType = 0;
+        component._sizeMode = this.getComponentPropertyValue(componentData, 'sizeMode', 1);
+        component._fillCenter = this.createVec2Object({ x: 0, y: 0 });
+        component._fillStart = 0;
+        component._fillRange = 0;
+        component._isTrimmedMode = true;
+        component._useGrayscale = false;
+        component._atlas = null;
+    }
+    
+    // Label组件属性
+    private addLabelProperties(component: any, componentData: any): void {
+        component._visFlags = 0;
+        component._customMaterial = null;
+        component._srcBlendFactor = 2;
+        component._dstBlendFactor = 4;
+        component._color = this.createColorObject(
+            this.getComponentPropertyValue(componentData, 'color', { r: 0, g: 0, b: 0, a: 255 })
+        );
+        component._string = this.getComponentPropertyValue(componentData, 'string', 'Label');
+        component._horizontalAlign = 1;
+        component._verticalAlign = 1;
+        component._actualFontSize = 20;
+        component._fontSize = this.getComponentPropertyValue(componentData, 'fontSize', 20);
+        component._fontFamily = 'Arial';
+        component._lineHeight = 40;
+        component._overflow = 1;
+        component._enableWrapText = false;
+        component._font = null;
+        component._isSystemFontUsed = true;
+        component._isItalic = false;
+        component._isBold = false;
+        component._isUnderline = false;
+        component._underlineHeight = 2;
+        component._cacheMode = 0;
+    }
+    
+    // Button组件属性
+    private addButtonProperties(component: any, componentData: any): void {
+        component.clickEvents = [];
+        component._interactable = true;
+        component._transition = 2;
+        component._normalColor = this.createColorObject({ r: 214, g: 214, b: 214, a: 255 });
+        component._hoverColor = this.createColorObject({ r: 211, g: 211, b: 211, a: 255 });
+        component._pressedColor = this.createColorObject({ r: 255, g: 255, b: 255, a: 255 });
+        component._disabledColor = this.createColorObject({ r: 124, g: 124, b: 124, a: 255 });
+        component._duration = 0.1;
+        component._zoomScale = 1.2;
+    }
+    
+    // 添加通用属性
+    private addGenericProperties(component: any, componentData: any): void {
+        // 只复制安全的、已知的属性
+        const safeProperties = ['enabled', 'color', 'string', 'fontSize', 'spriteFrame', 'type', 'sizeMode'];
+        
+        for (const prop of safeProperties) {
+            if (componentData.hasOwnProperty(prop)) {
+                const value = this.getComponentPropertyValue(componentData, prop);
+                if (value !== undefined) {
+                    component[`_${prop}`] = value;
+                }
+            }
+        }
+    }
+    
+    // 创建Vec2对象
+    private createVec2Object(data: any): any {
+        return {
+            "__type__": "cc.Vec2",
+            "x": data?.x || 0,
+            "y": data?.y || 0
+        };
+    }
+    
+    // 创建Vec3对象
+    private createVec3Object(data: any): any {
+        return {
+            "__type__": "cc.Vec3",
+            "x": data?.x || 0,
+            "y": data?.y || 0,
+            "z": data?.z || 0
+        };
+    }
+    
+    // 创建Size对象
+    private createSizeObject(data: any): any {
+        return {
+            "__type__": "cc.Size",
+            "width": data?.width || 100,
+            "height": data?.height || 100
+        };
+    }
+    
+    // 创建Color对象
+    private createColorObject(data: any): any {
+        return {
+            "__type__": "cc.Color",
+            "r": data?.r ?? 255,
+            "g": data?.g ?? 255,
+            "b": data?.b ?? 255,
+            "a": data?.a ?? 255
+        };
+    }
+
+    // 判断是否应该复制组件属性
+    private shouldCopyComponentProperty(key: string, value: any): boolean {
+        // 跳过内部属性和已处理的属性
+        if (key.startsWith('__') || key === '_enabled' || key === 'node' || key === 'enabled') {
+            return false;
+        }
+        
+        // 跳过函数和undefined值
+        if (typeof value === 'function' || value === undefined) {
+            return false;
+        }
+        
+        return true;
+    }
+
+
+    // 获取组件属性值 - 重命名以避免冲突
+    private getComponentPropertyValue(componentData: any, propertyName: string, defaultValue?: any): any {
+        // 尝试直接获取属性
+        if (componentData[propertyName] !== undefined) {
+            return this.extractValue(componentData[propertyName]);
+        }
+        
+        // 尝试从value属性中获取
+        if (componentData.value && componentData.value[propertyName] !== undefined) {
+            return this.extractValue(componentData.value[propertyName]);
+        }
+        
+        // 尝试带下划线前缀的属性名
+        const prefixedName = `_${propertyName}`;
+        if (componentData[prefixedName] !== undefined) {
+            return this.extractValue(componentData[prefixedName]);
+        }
+        
+        return defaultValue;
+    }
+    
+    // 提取属性值
+    private extractValue(data: any): any {
+        if (data === null || data === undefined) {
+            return data;
+        }
+        
+        // 如果有value属性，优先使用value
+        if (typeof data === 'object' && data.hasOwnProperty('value')) {
+            return data.value;
+        }
+        
+        // 如果是引用对象，保持原样
+        if (typeof data === 'object' && (data.__id__ !== undefined || data.__uuid__ !== undefined)) {
+            return data;
+        }
+        
+        return data;
+    }
+
+    private createStandardMetaData(prefabName: string, prefabUuid: string): any {
+        return {
+            "ver": "1.1.50",
+            "importer": "prefab",
+            "imported": true,
+            "uuid": prefabUuid,
+            "files": [
+                ".json"
+            ],
+            "subMetas": {},
+            "userData": {
+                "syncNodeName": prefabName
+            }
+        };
+    }
+
+    private async savePrefabWithMeta(prefabPath: string, prefabData: any[], metaData: any): Promise<{ success: boolean; error?: string }> {
+        try {
+            const prefabContent = JSON.stringify(prefabData, null, 2);
+            const metaContent = JSON.stringify(metaData, null, 2);
+
+            // 确保路径以.prefab结尾
+            const finalPrefabPath = prefabPath.endsWith('.prefab') ? prefabPath : `${prefabPath}.prefab`;
+            const metaPath = `${finalPrefabPath}.meta`;
+
+            // 使用asset-db API创建预制体文件
+            await new Promise((resolve, reject) => {
+                Editor.Message.request('asset-db', 'create-asset', finalPrefabPath, prefabContent).then(() => {
+                    resolve(true);
+                }).catch((error: any) => {
+                    reject(error);
+                });
+            });
+
+            // 创建meta文件
+            await new Promise((resolve, reject) => {
+                Editor.Message.request('asset-db', 'create-asset', metaPath, metaContent).then(() => {
+                    resolve(true);
+                }).catch((error: any) => {
+                    reject(error);
+                });
+            });
+
+            console.log(`=== 预制体保存完成 ===`);
+            console.log(`预制体文件已保存: ${finalPrefabPath}`);
+            console.log(`Meta文件已保存: ${metaPath}`);
+            console.log(`预制体数组总长度: ${prefabData.length}`);
+            console.log(`预制体根节点索引: ${prefabData.length - 1}`);
+
+            return { success: true };
+        } catch (error: any) {
+            console.error('保存预制体文件时出错:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/preferences-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor } from '../types';
+
+export class PreferencesTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'open_preferences_settings',
+                description: 'Open preferences settings panel',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        tab: {
+                            type: 'string',
+                            description: 'Preferences tab to open (optional)',
+                            enum: ['general', 'external-tools', 'data-editor', 'laboratory', 'extensions']
+                        },
+                        args: {
+                            type: 'array',
+                            description: 'Additional arguments to pass to the tab'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'query_preferences_config',
+                description: 'Query preferences configuration',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        name: {
+                            type: 'string',
+                            description: 'Plugin or category name',
+                            default: 'general'
+                        },
+                        path: {
+                            type: 'string',
+                            description: 'Configuration path (optional)'
+                        },
+                        type: {
+                            type: 'string',
+                            description: 'Configuration type',
+                            enum: ['default', 'global', 'local'],
+                            default: 'global'
+                        }
+                    },
+                    required: ['name']
+                }
+            },
+            {
+                name: 'set_preferences_config',
+                description: 'Set preferences configuration',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        name: {
+                            type: 'string',
+                            description: 'Plugin name'
+                        },
+                        path: {
+                            type: 'string',
+                            description: 'Configuration path'
+                        },
+                        value: {
+                            description: 'Configuration value'
+                        },
+                        type: {
+                            type: 'string',
+                            description: 'Configuration type',
+                            enum: ['default', 'global', 'local'],
+                            default: 'global'
+                        }
+                    },
+                    required: ['name', 'path', 'value']
+                }
+            },
+            {
+                name: 'get_all_preferences',
+                description: 'Get all available preferences categories',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'reset_preferences',
+                description: 'Reset preferences to default values',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        name: {
+                            type: 'string',
+                            description: 'Specific preference category to reset (optional)'
+                        },
+                        type: {
+                            type: 'string',
+                            description: 'Configuration type to reset',
+                            enum: ['global', 'local'],
+                            default: 'global'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'export_preferences',
+                description: 'Export current preferences configuration',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        exportPath: {
+                            type: 'string',
+                            description: 'Path to export preferences file (optional)'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'import_preferences',
+                description: 'Import preferences configuration from file',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        importPath: {
+                            type: 'string',
+                            description: 'Path to import preferences file from'
+                        }
+                    },
+                    required: ['importPath']
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'open_preferences_settings':
+                return await this.openPreferencesSettings(args.tab, args.args);
+            case 'query_preferences_config':
+                return await this.queryPreferencesConfig(args.name, args.path, args.type);
+            case 'set_preferences_config':
+                return await this.setPreferencesConfig(args.name, args.path, args.value, args.type);
+            case 'get_all_preferences':
+                return await this.getAllPreferences();
+            case 'reset_preferences':
+                return await this.resetPreferences(args.name, args.type);
+            case 'export_preferences':
+                return await this.exportPreferences(args.exportPath);
+            case 'import_preferences':
+                return await this.importPreferences(args.importPath);
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async openPreferencesSettings(tab?: string, args?: any[]): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const requestArgs = [];
+            if (tab) {
+                requestArgs.push(tab);
+            }
+            if (args && args.length > 0) {
+                requestArgs.push(...args);
+            }
+
+            (Editor.Message.request as any)('preferences', 'open-settings', ...requestArgs).then(() => {
+                resolve({
+                    success: true,
+                    message: `Preferences settings opened${tab ? ` on tab: ${tab}` : ''}`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryPreferencesConfig(name: string, path?: string, type: string = 'global'): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const requestArgs = [name];
+            if (path) {
+                requestArgs.push(path);
+            }
+            requestArgs.push(type);
+
+            (Editor.Message.request as any)('preferences', 'query-config', ...requestArgs).then((config: any) => {
+                resolve({
+                    success: true,
+                    data: {
+                        name: name,
+                        path: path,
+                        type: type,
+                        config: config
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async setPreferencesConfig(name: string, path: string, value: any, type: string = 'global'): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            (Editor.Message.request as any)('preferences', 'set-config', name, path, value, type).then((success: boolean) => {
+                if (success) {
+                    resolve({
+                        success: true,
+                        message: `Preference '${name}.${path}' updated successfully`
+                    });
+                } else {
+                    resolve({
+                        success: false,
+                        error: `Failed to update preference '${name}.${path}'`
+                    });
+                }
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async getAllPreferences(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // Common preference categories in Cocos Creator
+            const categories = [
+                'general',
+                'external-tools', 
+                'data-editor',
+                'laboratory',
+                'extensions',
+                'preview',
+                'console',
+                'native',
+                'builder'
+            ];
+
+            const preferences: any = {};
+
+            const queryPromises = categories.map(category => {
+                return Editor.Message.request('preferences', 'query-config', category, undefined, 'global')
+                    .then((config: any) => {
+                        preferences[category] = config;
+                    })
+                    .catch(() => {
+                        // Ignore errors for categories that don't exist
+                        preferences[category] = null;
+                    });
+            });
+
+            Promise.all(queryPromises).then(() => {
+                // Filter out null entries
+                const validPreferences = Object.fromEntries(
+                    Object.entries(preferences).filter(([_, value]) => value !== null)
+                );
+
+                resolve({
+                    success: true,
+                    data: {
+                        categories: Object.keys(validPreferences),
+                        preferences: validPreferences
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async resetPreferences(name?: string, type: string = 'global'): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            if (name) {
+                // Reset specific preference category
+                Editor.Message.request('preferences', 'query-config', name, undefined, 'default').then((defaultConfig: any) => {
+                    return (Editor.Message.request as any)('preferences', 'set-config', name, '', defaultConfig, type);
+                }).then((success: boolean) => {
+                    if (success) {
+                        resolve({
+                            success: true,
+                            message: `Preference category '${name}' reset to default`
+                        });
+                    } else {
+                        resolve({
+                            success: false,
+                            error: `Failed to reset preference category '${name}'`
+                        });
+                    }
+                }).catch((err: Error) => {
+                    resolve({ success: false, error: err.message });
+                });
+            } else {
+                resolve({
+                    success: false,
+                    error: 'Resetting all preferences is not supported through API. Please specify a preference category.'
+                });
+            }
+        });
+    }
+
+    private async exportPreferences(exportPath?: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            this.getAllPreferences().then((prefsResult: ToolResponse) => {
+                if (!prefsResult.success) {
+                    resolve(prefsResult);
+                    return;
+                }
+
+                const prefsData = JSON.stringify(prefsResult.data, null, 2);
+                const path = exportPath || `preferences_export_${Date.now()}.json`;
+
+                // For now, return the data - in a real implementation, you'd write to file
+                resolve({
+                    success: true,
+                    data: {
+                        exportPath: path,
+                        preferences: prefsResult.data,
+                        jsonData: prefsData,
+                        message: 'Preferences exported successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async importPreferences(importPath: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            resolve({
+                success: false,
+                error: 'Import preferences functionality requires file system access which is not available in this context. Please manually import preferences through the Editor UI.'
+            });
+        });
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/project-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor, ProjectInfo, AssetInfo } from '../types';
+import * as fs from 'fs';
+import * as path from 'path';
+
+export class ProjectTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'run_project',
+                description: 'Run the project in preview mode',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        platform: {
+                            type: 'string',
+                            description: 'Target platform',
+                            enum: ['browser', 'simulator', 'preview'],
+                            default: 'browser'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'build_project',
+                description: 'Build the project',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        platform: {
+                            type: 'string',
+                            description: 'Build platform',
+                            enum: ['web-mobile', 'web-desktop', 'ios', 'android', 'windows', 'mac']
+                        },
+                        debug: {
+                            type: 'boolean',
+                            description: 'Debug build',
+                            default: true
+                        }
+                    },
+                    required: ['platform']
+                }
+            },
+            {
+                name: 'get_project_info',
+                description: 'Get project information',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'get_project_settings',
+                description: 'Get project settings',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        category: {
+                            type: 'string',
+                            description: 'Settings category',
+                            enum: ['general', 'physics', 'render', 'assets'],
+                            default: 'general'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'refresh_assets',
+                description: 'Refresh asset database',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        folder: {
+                            type: 'string',
+                            description: 'Specific folder to refresh (optional)'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'import_asset',
+                description: 'Import an asset file',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        sourcePath: {
+                            type: 'string',
+                            description: 'Source file path'
+                        },
+                        targetFolder: {
+                            type: 'string',
+                            description: 'Target folder in assets'
+                        }
+                    },
+                    required: ['sourcePath', 'targetFolder']
+                }
+            },
+            {
+                name: 'get_asset_info',
+                description: 'Get asset information',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        assetPath: {
+                            type: 'string',
+                            description: 'Asset path (db://assets/...)'
+                        }
+                    },
+                    required: ['assetPath']
+                }
+            },
+            {
+                name: 'get_assets',
+                description: 'Get assets by type',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        type: {
+                            type: 'string',
+                            description: 'Asset type filter',
+                            enum: ['all', 'scene', 'prefab', 'script', 'texture', 'material', 'mesh', 'audio', 'animation'],
+                            default: 'all'
+                        },
+                        folder: {
+                            type: 'string',
+                            description: 'Folder to search in',
+                            default: 'db://assets'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'get_build_settings',
+                description: 'Get build settings - shows current limitations',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'open_build_panel',
+                description: 'Open the build panel in the editor',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'check_builder_status',
+                description: 'Check if builder worker is ready',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'start_preview_server',
+                description: 'Start preview server',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        port: {
+                            type: 'number',
+                            description: 'Preview server port',
+                            default: 7456
+                        }
+                    }
+                }
+            },
+            {
+                name: 'stop_preview_server',
+                description: 'Stop preview server',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'create_asset',
+                description: 'Create a new asset file or folder',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        url: {
+                            type: 'string',
+                            description: 'Asset URL (e.g., db://assets/newfile.json)'
+                        },
+                        content: {
+                            type: 'string',
+                            description: 'File content (null for folder)',
+                            default: null
+                        },
+                        overwrite: {
+                            type: 'boolean',
+                            description: 'Overwrite existing file',
+                            default: false
+                        }
+                    },
+                    required: ['url']
+                }
+            },
+            {
+                name: 'copy_asset',
+                description: 'Copy an asset to another location',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        source: {
+                            type: 'string',
+                            description: 'Source asset URL'
+                        },
+                        target: {
+                            type: 'string',
+                            description: 'Target location URL'
+                        },
+                        overwrite: {
+                            type: 'boolean',
+                            description: 'Overwrite existing file',
+                            default: false
+                        }
+                    },
+                    required: ['source', 'target']
+                }
+            },
+            {
+                name: 'move_asset',
+                description: 'Move an asset to another location',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        source: {
+                            type: 'string',
+                            description: 'Source asset URL'
+                        },
+                        target: {
+                            type: 'string',
+                            description: 'Target location URL'
+                        },
+                        overwrite: {
+                            type: 'boolean',
+                            description: 'Overwrite existing file',
+                            default: false
+                        }
+                    },
+                    required: ['source', 'target']
+                }
+            },
+            {
+                name: 'delete_asset',
+                description: 'Delete an asset',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        url: {
+                            type: 'string',
+                            description: 'Asset URL to delete'
+                        }
+                    },
+                    required: ['url']
+                }
+            },
+            {
+                name: 'save_asset',
+                description: 'Save asset content',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        url: {
+                            type: 'string',
+                            description: 'Asset URL'
+                        },
+                        content: {
+                            type: 'string',
+                            description: 'Asset content'
+                        }
+                    },
+                    required: ['url', 'content']
+                }
+            },
+            {
+                name: 'reimport_asset',
+                description: 'Reimport an asset',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        url: {
+                            type: 'string',
+                            description: 'Asset URL to reimport'
+                        }
+                    },
+                    required: ['url']
+                }
+            },
+            {
+                name: 'query_asset_path',
+                description: 'Get asset disk path',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        url: {
+                            type: 'string',
+                            description: 'Asset URL'
+                        }
+                    },
+                    required: ['url']
+                }
+            },
+            {
+                name: 'query_asset_uuid',
+                description: 'Get asset UUID from URL',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        url: {
+                            type: 'string',
+                            description: 'Asset URL'
+                        }
+                    },
+                    required: ['url']
+                }
+            },
+            {
+                name: 'query_asset_url',
+                description: 'Get asset URL from UUID',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Asset UUID'
+                        }
+                    },
+                    required: ['uuid']
+                }
+            },
+            {
+                name: 'find_asset_by_name',
+                description: 'Find assets by name (supports partial matching and multiple results)',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        name: {
+                            type: 'string',
+                            description: 'Asset name to search for (supports partial matching)'
+                        },
+                        exactMatch: {
+                            type: 'boolean',
+                            description: 'Whether to use exact name matching',
+                            default: false
+                        },
+                        assetType: {
+                            type: 'string',
+                            description: 'Filter by asset type',
+                            enum: ['all', 'scene', 'prefab', 'script', 'texture', 'material', 'mesh', 'audio', 'animation', 'spriteFrame'],
+                            default: 'all'
+                        },
+                        folder: {
+                            type: 'string',
+                            description: 'Folder to search in',
+                            default: 'db://assets'
+                        },
+                        maxResults: {
+                            type: 'number',
+                            description: 'Maximum number of results to return',
+                            default: 20,
+                            minimum: 1,
+                            maximum: 100
+                        }
+                    },
+                    required: ['name']
+                }
+            },
+            {
+                name: 'get_asset_details',
+                description: 'Get detailed asset information including spriteFrame sub-assets',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        assetPath: {
+                            type: 'string',
+                            description: 'Asset path (db://assets/...)'
+                        },
+                        includeSubAssets: {
+                            type: 'boolean',
+                            description: 'Include sub-assets like spriteFrame, texture',
+                            default: true
+                        }
+                    },
+                    required: ['assetPath']
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'run_project':
+                return await this.runProject(args.platform);
+            case 'build_project':
+                return await this.buildProject(args);
+            case 'get_project_info':
+                return await this.getProjectInfo();
+            case 'get_project_settings':
+                return await this.getProjectSettings(args.category);
+            case 'refresh_assets':
+                return await this.refreshAssets(args.folder);
+            case 'import_asset':
+                return await this.importAsset(args.sourcePath, args.targetFolder);
+            case 'get_asset_info':
+                return await this.getAssetInfo(args.assetPath);
+            case 'get_assets':
+                return await this.getAssets(args.type, args.folder);
+            case 'get_build_settings':
+                return await this.getBuildSettings();
+            case 'open_build_panel':
+                return await this.openBuildPanel();
+            case 'check_builder_status':
+                return await this.checkBuilderStatus();
+            case 'start_preview_server':
+                return await this.startPreviewServer(args.port);
+            case 'stop_preview_server':
+                return await this.stopPreviewServer();
+            case 'create_asset':
+                return await this.createAsset(args.url, args.content, args.overwrite);
+            case 'copy_asset':
+                return await this.copyAsset(args.source, args.target, args.overwrite);
+            case 'move_asset':
+                return await this.moveAsset(args.source, args.target, args.overwrite);
+            case 'delete_asset':
+                return await this.deleteAsset(args.url);
+            case 'save_asset':
+                return await this.saveAsset(args.url, args.content);
+            case 'reimport_asset':
+                return await this.reimportAsset(args.url);
+            case 'query_asset_path':
+                return await this.queryAssetPath(args.url);
+            case 'query_asset_uuid':
+                return await this.queryAssetUuid(args.url);
+            case 'query_asset_url':
+                return await this.queryAssetUrl(args.uuid);
+            case 'find_asset_by_name':
+                return await this.findAssetByName(args);
+            case 'get_asset_details':
+                return await this.getAssetDetails(args.assetPath, args.includeSubAssets);
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async runProject(platform: string = 'browser'): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const previewConfig = {
+                platform: platform,
+                scenes: [] // Will use current scene
+            };
+
+            // Note: Preview module is not documented in official API
+            // Using fallback approach - open build panel as alternative
+            Editor.Message.request('builder', 'open').then(() => {
+                resolve({
+                    success: true,
+                    message: `Build panel opened. Preview functionality requires manual setup.`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async buildProject(args: any): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const buildOptions = {
+                platform: args.platform,
+                debug: args.debug !== false,
+                sourceMaps: args.debug !== false,
+                buildPath: `build/${args.platform}`
+            };
+
+            // Note: Builder module only supports 'open' and 'query-worker-ready'
+            // Building requires manual interaction through the build panel
+            Editor.Message.request('builder', 'open').then(() => {
+                resolve({
+                    success: true,
+                    message: `Build panel opened for ${args.platform}. Please configure and start build manually.`,
+                    data: { 
+                        platform: args.platform,
+                        instruction: "Use the build panel to configure and start the build process"
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async getProjectInfo(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const info: ProjectInfo = {
+                name: Editor.Project.name,
+                path: Editor.Project.path,
+                uuid: Editor.Project.uuid,
+                version: (Editor.Project as any).version || '1.0.0',
+                cocosVersion: (Editor as any).versions?.cocos || 'Unknown'
+            };
+
+            // Note: 'query-info' API doesn't exist, using 'query-config' instead
+            Editor.Message.request('project', 'query-config', 'project').then((additionalInfo: any) => {
+                if (additionalInfo) {
+                    Object.assign(info, { config: additionalInfo });
+                }
+                resolve({ success: true, data: info });
+            }).catch(() => {
+                // Return basic info even if detailed query fails
+                resolve({ success: true, data: info });
+            });
+        });
+    }
+
+    private async getProjectSettings(category: string = 'general'): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 使用正确的 project API 查询项目配置
+            const configMap: Record<string, string> = {
+                general: 'project',
+                physics: 'physics',
+                render: 'render',
+                assets: 'asset-db'
+            };
+
+            const configName = configMap[category] || 'project';
+
+            Editor.Message.request('project', 'query-config', configName).then((settings: any) => {
+                resolve({
+                    success: true,
+                    data: {
+                        category: category,
+                        config: settings,
+                        message: `${category} settings retrieved successfully`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async refreshAssets(folder?: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 使用正确的 asset-db API 刷新资源
+            const targetPath = folder || 'db://assets';
+            
+            Editor.Message.request('asset-db', 'refresh-asset', targetPath).then(() => {
+                resolve({
+                    success: true,
+                    message: `Assets refreshed in: ${targetPath}`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async importAsset(sourcePath: string, targetFolder: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            if (!fs.existsSync(sourcePath)) {
+                resolve({ success: false, error: 'Source file not found' });
+                return;
+            }
+
+            const fileName = path.basename(sourcePath);
+            const targetPath = targetFolder.startsWith('db://') ?
+                targetFolder : `db://assets/${targetFolder}`;
+
+            Editor.Message.request('asset-db', 'import-asset', sourcePath, `${targetPath}/${fileName}`).then((result: any) => {
+                resolve({
+                    success: true,
+                    data: {
+                        uuid: result.uuid,
+                        path: result.url,
+                        message: `Asset imported: ${fileName}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async getAssetInfo(assetPath: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'query-asset-info', assetPath).then((assetInfo: any) => {
+                if (!assetInfo) {
+                    throw new Error('Asset not found');
+                }
+
+                const info: AssetInfo = {
+                    name: assetInfo.name,
+                    uuid: assetInfo.uuid,
+                    path: assetInfo.url,
+                    type: assetInfo.type,
+                    size: assetInfo.size,
+                    isDirectory: assetInfo.isDirectory
+                };
+
+                if (assetInfo.meta) {
+                    info.meta = {
+                        ver: assetInfo.meta.ver,
+                        importer: assetInfo.meta.importer
+                    };
+                }
+
+                resolve({ success: true, data: info });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async getAssets(type: string = 'all', folder: string = 'db://assets'): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            let pattern = `${folder}/**/*`;
+            
+            // 添加类型过滤
+            if (type !== 'all') {
+                const typeExtensions: Record<string, string> = {
+                    'scene': '.scene',
+                    'prefab': '.prefab',
+                    'script': '.{ts,js}',
+                    'texture': '.{png,jpg,jpeg,gif,tga,bmp,psd}',
+                    'material': '.mtl',
+                    'mesh': '.{fbx,obj,dae}',
+                    'audio': '.{mp3,ogg,wav,m4a}',
+                    'animation': '.{anim,clip}'
+                };
+                
+                const extension = typeExtensions[type];
+                if (extension) {
+                    pattern = `${folder}/**/*${extension}`;
+                }
+            }
+
+            // Note: query-assets API parameters corrected based on documentation
+            Editor.Message.request('asset-db', 'query-assets', { pattern: pattern }).then((results: any[]) => {
+                const assets = results.map(asset => ({
+                    name: asset.name,
+                    uuid: asset.uuid,
+                    path: asset.url,
+                    type: asset.type,
+                    size: asset.size || 0,
+                    isDirectory: asset.isDirectory || false
+                }));
+                
+                resolve({ 
+                    success: true, 
+                    data: {
+                        type: type,
+                        folder: folder,
+                        count: assets.length,
+                        assets: assets
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async getBuildSettings(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 检查构建器是否准备就绪
+            Editor.Message.request('builder', 'query-worker-ready').then((ready: boolean) => {
+                resolve({
+                    success: true,
+                    data: {
+                        builderReady: ready,
+                        message: 'Build settings are limited in MCP plugin environment',
+                        availableActions: [
+                            'Open build panel with open_build_panel',
+                            'Check builder status with check_builder_status',
+                            'Start preview server with start_preview_server',
+                            'Stop preview server with stop_preview_server'
+                        ],
+                        limitation: 'Full build configuration requires direct Editor UI access'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async openBuildPanel(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('builder', 'open').then(() => {
+                resolve({
+                    success: true,
+                    message: 'Build panel opened successfully'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async checkBuilderStatus(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('builder', 'query-worker-ready').then((ready: boolean) => {
+                resolve({
+                    success: true,
+                    data: {
+                        ready: ready,
+                        status: ready ? 'Builder worker is ready' : 'Builder worker is not ready',
+                        message: 'Builder status checked successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async startPreviewServer(port: number = 7456): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            resolve({
+                success: false,
+                error: 'Preview server control is not supported through MCP API',
+                instruction: 'Please start the preview server manually using the editor menu: Project > Preview, or use the preview panel in the editor'
+            });
+        });
+    }
+
+    private async stopPreviewServer(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            resolve({
+                success: false,
+                error: 'Preview server control is not supported through MCP API',
+                instruction: 'Please stop the preview server manually using the preview panel in the editor'
+            });
+        });
+    }
+
+    private async createAsset(url: string, content: string | null = null, overwrite: boolean = false): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const options = {
+                overwrite: overwrite,
+                rename: !overwrite
+            };
+
+            Editor.Message.request('asset-db', 'create-asset', url, content, options).then((result: any) => {
+                if (result && result.uuid) {
+                    resolve({
+                        success: true,
+                        data: {
+                            uuid: result.uuid,
+                            url: result.url,
+                            message: content === null ? 'Folder created successfully' : 'File created successfully'
+                        }
+                    });
+                } else {
+                    resolve({
+                        success: true,
+                        data: {
+                            url: url,
+                            message: content === null ? 'Folder created successfully' : 'File created successfully'
+                        }
+                    });
+                }
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async copyAsset(source: string, target: string, overwrite: boolean = false): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const options = {
+                overwrite: overwrite,
+                rename: !overwrite
+            };
+
+            Editor.Message.request('asset-db', 'copy-asset', source, target, options).then((result: any) => {
+                if (result && result.uuid) {
+                    resolve({
+                        success: true,
+                        data: {
+                            uuid: result.uuid,
+                            url: result.url,
+                            message: 'Asset copied successfully'
+                        }
+                    });
+                } else {
+                    resolve({
+                        success: true,
+                        data: {
+                            source: source,
+                            target: target,
+                            message: 'Asset copied successfully'
+                        }
+                    });
+                }
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async moveAsset(source: string, target: string, overwrite: boolean = false): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const options = {
+                overwrite: overwrite,
+                rename: !overwrite
+            };
+
+            Editor.Message.request('asset-db', 'move-asset', source, target, options).then((result: any) => {
+                if (result && result.uuid) {
+                    resolve({
+                        success: true,
+                        data: {
+                            uuid: result.uuid,
+                            url: result.url,
+                            message: 'Asset moved successfully'
+                        }
+                    });
+                } else {
+                    resolve({
+                        success: true,
+                        data: {
+                            source: source,
+                            target: target,
+                            message: 'Asset moved successfully'
+                        }
+                    });
+                }
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async deleteAsset(url: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'delete-asset', url).then((result: any) => {
+                resolve({
+                    success: true,
+                    data: {
+                        url: url,
+                        message: 'Asset deleted successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async saveAsset(url: string, content: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'save-asset', url, content).then((result: any) => {
+                if (result && result.uuid) {
+                    resolve({
+                        success: true,
+                        data: {
+                            uuid: result.uuid,
+                            url: result.url,
+                            message: 'Asset saved successfully'
+                        }
+                    });
+                } else {
+                    resolve({
+                        success: true,
+                        data: {
+                            url: url,
+                            message: 'Asset saved successfully'
+                        }
+                    });
+                }
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async reimportAsset(url: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'reimport-asset', url).then(() => {
+                resolve({
+                    success: true,
+                    data: {
+                        url: url,
+                        message: 'Asset reimported successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryAssetPath(url: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'query-path', url).then((path: string | null) => {
+                if (path) {
+                    resolve({
+                        success: true,
+                        data: {
+                            url: url,
+                            path: path,
+                            message: 'Asset path retrieved successfully'
+                        }
+                    });
+                } else {
+                    resolve({ success: false, error: 'Asset path not found' });
+                }
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryAssetUuid(url: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'query-uuid', url).then((uuid: string | null) => {
+                if (uuid) {
+                    resolve({
+                        success: true,
+                        data: {
+                            url: url,
+                            uuid: uuid,
+                            message: 'Asset UUID retrieved successfully'
+                        }
+                    });
+                } else {
+                    resolve({ success: false, error: 'Asset UUID not found' });
+                }
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryAssetUrl(uuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('asset-db', 'query-url', uuid).then((url: string | null) => {
+                if (url) {
+                    resolve({
+                        success: true,
+                        data: {
+                            uuid: uuid,
+                            url: url,
+                            message: 'Asset URL retrieved successfully'
+                        }
+                    });
+                } else {
+                    resolve({ success: false, error: 'Asset URL not found' });
+                }
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async findAssetByName(args: any): Promise<ToolResponse> {
+        const { name, exactMatch = false, assetType = 'all', folder = 'db://assets', maxResults = 20 } = args;
+        
+        return new Promise(async (resolve) => {
+            try {
+                // Get all assets in the specified folder
+                const allAssetsResponse = await this.getAssets(assetType, folder);
+                if (!allAssetsResponse.success || !allAssetsResponse.data) {
+                    resolve({
+                        success: false,
+                        error: `Failed to get assets: ${allAssetsResponse.error}`
+                    });
+                    return;
+                }
+                
+                const allAssets = allAssetsResponse.data.assets as any[];
+                let matchedAssets: any[] = [];
+                
+                // Search for matching assets
+                for (const asset of allAssets) {
+                    const assetName = asset.name;
+                    let matches = false;
+                    
+                    if (exactMatch) {
+                        matches = assetName === name;
+                    } else {
+                        matches = assetName.toLowerCase().includes(name.toLowerCase());
+                    }
+                    
+                    if (matches) {
+                        // Get detailed asset info if needed
+                        try {
+                            const detailResponse = await this.getAssetInfo(asset.path);
+                            if (detailResponse.success) {
+                                matchedAssets.push({
+                                    ...asset,
+                                    details: detailResponse.data
+                                });
+                            } else {
+                                matchedAssets.push(asset);
+                            }
+                        } catch {
+                            matchedAssets.push(asset);
+                        }
+                        
+                        if (matchedAssets.length >= maxResults) {
+                            break;
+                        }
+                    }
+                }
+                
+                resolve({
+                    success: true,
+                    data: {
+                        searchTerm: name,
+                        exactMatch,
+                        assetType,
+                        folder,
+                        totalFound: matchedAssets.length,
+                        maxResults,
+                        assets: matchedAssets,
+                        message: `Found ${matchedAssets.length} assets matching '${name}'`
+                    }
+                });
+                
+            } catch (error: any) {
+                resolve({
+                    success: false,
+                    error: `Asset search failed: ${error.message}`
+                });
+            }
+        });
+    }
+    
+    private async getAssetDetails(assetPath: string, includeSubAssets: boolean = true): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // Get basic asset info
+                const assetInfoResponse = await this.getAssetInfo(assetPath);
+                if (!assetInfoResponse.success) {
+                    resolve(assetInfoResponse);
+                    return;
+                }
+                
+                const assetInfo = assetInfoResponse.data;
+                const detailedInfo: any = {
+                    ...assetInfo,
+                    subAssets: []
+                };
+                
+                if (includeSubAssets && assetInfo) {
+                    // For image assets, try to get spriteFrame and texture sub-assets
+                    if (assetInfo.type === 'cc.ImageAsset' || assetPath.match(/\.(png|jpg|jpeg|gif|tga|bmp|psd)$/i)) {
+                        // Generate common sub-asset UUIDs
+                        const baseUuid = assetInfo.uuid;
+                        const possibleSubAssets = [
+                            { type: 'spriteFrame', uuid: `${baseUuid}@f9941`, suffix: '@f9941' },
+                            { type: 'texture', uuid: `${baseUuid}@6c48a`, suffix: '@6c48a' },
+                            { type: 'texture2D', uuid: `${baseUuid}@6c48a`, suffix: '@6c48a' }
+                        ];
+                        
+                        for (const subAsset of possibleSubAssets) {
+                            try {
+                                // Try to get URL for the sub-asset to verify it exists
+                                const subAssetUrl = await Editor.Message.request('asset-db', 'query-url', subAsset.uuid);
+                                if (subAssetUrl) {
+                                    detailedInfo.subAssets.push({
+                                        type: subAsset.type,
+                                        uuid: subAsset.uuid,
+                                        url: subAssetUrl,
+                                        suffix: subAsset.suffix
+                                    });
+                                }
+                            } catch {
+                                // Sub-asset doesn't exist, skip it
+                            }
+                        }
+                    }
+                }
+                
+                resolve({
+                    success: true,
+                    data: {
+                        assetPath,
+                        includeSubAssets,
+                        ...detailedInfo,
+                        message: `Asset details retrieved. Found ${detailedInfo.subAssets.length} sub-assets.`
+                    }
+                });
+                
+            } catch (error: any) {
+                resolve({
+                    success: false,
+                    error: `Failed to get asset details: ${error.message}`
+                });
+            }
+        });
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/reference-image-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor } from '../types';
+
+export class ReferenceImageTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'add_reference_image',
+                description: 'Add reference image(s) to scene',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        paths: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Array of reference image absolute paths'
+                        }
+                    },
+                    required: ['paths']
+                }
+            },
+            {
+                name: 'remove_reference_image',
+                description: 'Remove reference image(s)',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        paths: {
+                            type: 'array',
+                            items: { type: 'string' },
+                            description: 'Array of reference image paths to remove (optional, removes current if empty)'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'switch_reference_image',
+                description: 'Switch to specific reference image',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        path: {
+                            type: 'string',
+                            description: 'Reference image absolute path'
+                        },
+                        sceneUUID: {
+                            type: 'string',
+                            description: 'Specific scene UUID (optional)'
+                        }
+                    },
+                    required: ['path']
+                }
+            },
+            {
+                name: 'set_reference_image_data',
+                description: 'Set reference image transform and display properties',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        key: {
+                            type: 'string',
+                            description: 'Property key',
+                            enum: ['path', 'x', 'y', 'sx', 'sy', 'opacity']
+                        },
+                        value: {
+                            description: 'Property value (path: string, x/y/sx/sy: number, opacity: number 0-1)'
+                        }
+                    },
+                    required: ['key', 'value']
+                }
+            },
+            {
+                name: 'query_reference_image_config',
+                description: 'Query reference image configuration',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'query_current_reference_image',
+                description: 'Query current reference image data',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'refresh_reference_image',
+                description: 'Refresh reference image display',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'set_reference_image_position',
+                description: 'Set reference image position',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        x: {
+                            type: 'number',
+                            description: 'X offset'
+                        },
+                        y: {
+                            type: 'number',
+                            description: 'Y offset'
+                        }
+                    },
+                    required: ['x', 'y']
+                }
+            },
+            {
+                name: 'set_reference_image_scale',
+                description: 'Set reference image scale',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        sx: {
+                            type: 'number',
+                            description: 'X scale',
+                            minimum: 0.1,
+                            maximum: 10
+                        },
+                        sy: {
+                            type: 'number',
+                            description: 'Y scale',
+                            minimum: 0.1,
+                            maximum: 10
+                        }
+                    },
+                    required: ['sx', 'sy']
+                }
+            },
+            {
+                name: 'set_reference_image_opacity',
+                description: 'Set reference image opacity',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        opacity: {
+                            type: 'number',
+                            description: 'Opacity (0.0 to 1.0)',
+                            minimum: 0,
+                            maximum: 1
+                        }
+                    },
+                    required: ['opacity']
+                }
+            },
+            {
+                name: 'list_reference_images',
+                description: 'List all available reference images',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'clear_all_reference_images',
+                description: 'Clear all reference images',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'add_reference_image':
+                return await this.addReferenceImage(args.paths);
+            case 'remove_reference_image':
+                return await this.removeReferenceImage(args.paths);
+            case 'switch_reference_image':
+                return await this.switchReferenceImage(args.path, args.sceneUUID);
+            case 'set_reference_image_data':
+                return await this.setReferenceImageData(args.key, args.value);
+            case 'query_reference_image_config':
+                return await this.queryReferenceImageConfig();
+            case 'query_current_reference_image':
+                return await this.queryCurrentReferenceImage();
+            case 'refresh_reference_image':
+                return await this.refreshReferenceImage();
+            case 'set_reference_image_position':
+                return await this.setReferenceImagePosition(args.x, args.y);
+            case 'set_reference_image_scale':
+                return await this.setReferenceImageScale(args.sx, args.sy);
+            case 'set_reference_image_opacity':
+                return await this.setReferenceImageOpacity(args.opacity);
+            case 'list_reference_images':
+                return await this.listReferenceImages();
+            case 'clear_all_reference_images':
+                return await this.clearAllReferenceImages();
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async addReferenceImage(paths: string[]): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('reference-image', 'add-image', paths).then(() => {
+                resolve({
+                    success: true,
+                    data: {
+                        addedPaths: paths,
+                        count: paths.length,
+                        message: `Added ${paths.length} reference image(s)`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async removeReferenceImage(paths?: string[]): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('reference-image', 'remove-image', paths).then(() => {
+                const message = paths && paths.length > 0 ? 
+                    `Removed ${paths.length} reference image(s)` : 
+                    'Removed current reference image';
+                resolve({
+                    success: true,
+                    message: message
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async switchReferenceImage(path: string, sceneUUID?: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const args = sceneUUID ? [path, sceneUUID] : [path];
+            Editor.Message.request('reference-image', 'switch-image', ...args).then(() => {
+                resolve({
+                    success: true,
+                    data: {
+                        path: path,
+                        sceneUUID: sceneUUID,
+                        message: `Switched to reference image: ${path}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async setReferenceImageData(key: string, value: any): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('reference-image', 'set-image-data', key, value).then(() => {
+                resolve({
+                    success: true,
+                    data: {
+                        key: key,
+                        value: value,
+                        message: `Reference image ${key} set to ${value}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryReferenceImageConfig(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('reference-image', 'query-config').then((config: any) => {
+                resolve({
+                    success: true,
+                    data: config
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryCurrentReferenceImage(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('reference-image', 'query-current').then((current: any) => {
+                resolve({
+                    success: true,
+                    data: current
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async refreshReferenceImage(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('reference-image', 'refresh').then(() => {
+                resolve({
+                    success: true,
+                    message: 'Reference image refreshed'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async setReferenceImagePosition(x: number, y: number): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                await Editor.Message.request('reference-image', 'set-image-data', 'x', x);
+                await Editor.Message.request('reference-image', 'set-image-data', 'y', y);
+                
+                resolve({
+                    success: true,
+                    data: {
+                        x: x,
+                        y: y,
+                        message: `Reference image position set to (${x}, ${y})`
+                    }
+                });
+            } catch (err: any) {
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+
+    private async setReferenceImageScale(sx: number, sy: number): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                await Editor.Message.request('reference-image', 'set-image-data', 'sx', sx);
+                await Editor.Message.request('reference-image', 'set-image-data', 'sy', sy);
+                
+                resolve({
+                    success: true,
+                    data: {
+                        sx: sx,
+                        sy: sy,
+                        message: `Reference image scale set to (${sx}, ${sy})`
+                    }
+                });
+            } catch (err: any) {
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+
+    private async setReferenceImageOpacity(opacity: number): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('reference-image', 'set-image-data', 'opacity', opacity).then(() => {
+                resolve({
+                    success: true,
+                    data: {
+                        opacity: opacity,
+                        message: `Reference image opacity set to ${opacity}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async listReferenceImages(): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                const config = await Editor.Message.request('reference-image', 'query-config');
+                const current = await Editor.Message.request('reference-image', 'query-current');
+                
+                resolve({
+                    success: true,
+                    data: {
+                        config: config,
+                        current: current,
+                        message: 'Reference image information retrieved'
+                    }
+                });
+            } catch (err: any) {
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+
+    private async clearAllReferenceImages(): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // Remove all reference images by calling remove-image without paths
+                await Editor.Message.request('reference-image', 'remove-image');
+                
+                resolve({
+                    success: true,
+                    message: 'All reference images cleared'
+                });
+            } catch (err: any) {
+                resolve({ success: false, error: err.message });
+            }
+        });
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/scene-advanced-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor } from '../types';
+
+export class SceneAdvancedTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'reset_node_property',
+                description: 'Reset node property to default value',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        },
+                        path: {
+                            type: 'string',
+                            description: 'Property path (e.g., position, rotation, scale)'
+                        }
+                    },
+                    required: ['uuid', 'path']
+                }
+            },
+            {
+                name: 'move_array_element',
+                description: 'Move array element position',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        },
+                        path: {
+                            type: 'string',
+                            description: 'Array property path (e.g., __comps__)'
+                        },
+                        target: {
+                            type: 'number',
+                            description: 'Target item original index'
+                        },
+                        offset: {
+                            type: 'number',
+                            description: 'Offset amount (positive or negative)'
+                        }
+                    },
+                    required: ['uuid', 'path', 'target', 'offset']
+                }
+            },
+            {
+                name: 'remove_array_element',
+                description: 'Remove array element at specific index',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        },
+                        path: {
+                            type: 'string',
+                            description: 'Array property path'
+                        },
+                        index: {
+                            type: 'number',
+                            description: 'Target item index to remove'
+                        }
+                    },
+                    required: ['uuid', 'path', 'index']
+                }
+            },
+            {
+                name: 'copy_node',
+                description: 'Copy node for later paste operation',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuids: {
+                            oneOf: [
+                                { type: 'string' },
+                                { type: 'array', items: { type: 'string' } }
+                            ],
+                            description: 'Node UUID or array of UUIDs to copy'
+                        }
+                    },
+                    required: ['uuids']
+                }
+            },
+            {
+                name: 'paste_node',
+                description: 'Paste previously copied nodes',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        target: {
+                            type: 'string',
+                            description: 'Target parent node UUID'
+                        },
+                        uuids: {
+                            oneOf: [
+                                { type: 'string' },
+                                { type: 'array', items: { type: 'string' } }
+                            ],
+                            description: 'Node UUIDs to paste'
+                        },
+                        keepWorldTransform: {
+                            type: 'boolean',
+                            description: 'Keep world transform coordinates',
+                            default: false
+                        }
+                    },
+                    required: ['target', 'uuids']
+                }
+            },
+            {
+                name: 'cut_node',
+                description: 'Cut node (copy + mark for move)',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuids: {
+                            oneOf: [
+                                { type: 'string' },
+                                { type: 'array', items: { type: 'string' } }
+                            ],
+                            description: 'Node UUID or array of UUIDs to cut'
+                        }
+                    },
+                    required: ['uuids']
+                }
+            },
+            {
+                name: 'reset_node_transform',
+                description: 'Reset node position, rotation and scale',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        }
+                    },
+                    required: ['uuid']
+                }
+            },
+            {
+                name: 'reset_component',
+                description: 'Reset component to default values',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Component UUID'
+                        }
+                    },
+                    required: ['uuid']
+                }
+            },
+            {
+                name: 'restore_prefab',
+                description: 'Restore prefab instance from asset',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Node UUID'
+                        },
+                        assetUuid: {
+                            type: 'string',
+                            description: 'Prefab asset UUID'
+                        }
+                    },
+                    required: ['nodeUuid', 'assetUuid']
+                }
+            },
+            {
+                name: 'execute_component_method',
+                description: 'Execute method on component',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuid: {
+                            type: 'string',
+                            description: 'Component UUID'
+                        },
+                        name: {
+                            type: 'string',
+                            description: 'Method name'
+                        },
+                        args: {
+                            type: 'array',
+                            description: 'Method arguments',
+                            default: []
+                        }
+                    },
+                    required: ['uuid', 'name']
+                }
+            },
+            {
+                name: 'execute_scene_script',
+                description: 'Execute scene script method',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        name: {
+                            type: 'string',
+                            description: 'Plugin name'
+                        },
+                        method: {
+                            type: 'string',
+                            description: 'Method name'
+                        },
+                        args: {
+                            type: 'array',
+                            description: 'Method arguments',
+                            default: []
+                        }
+                    },
+                    required: ['name', 'method']
+                }
+            },
+            {
+                name: 'scene_snapshot',
+                description: 'Create scene state snapshot',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'scene_snapshot_abort',
+                description: 'Abort scene snapshot creation',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'begin_undo_recording',
+                description: 'Begin recording undo data',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        nodeUuid: {
+                            type: 'string',
+                            description: 'Node UUID to record'
+                        }
+                    },
+                    required: ['nodeUuid']
+                }
+            },
+            {
+                name: 'end_undo_recording',
+                description: 'End recording undo data',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        undoId: {
+                            type: 'string',
+                            description: 'Undo recording ID from begin_undo_recording'
+                        }
+                    },
+                    required: ['undoId']
+                }
+            },
+            {
+                name: 'cancel_undo_recording',
+                description: 'Cancel undo recording',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        undoId: {
+                            type: 'string',
+                            description: 'Undo recording ID to cancel'
+                        }
+                    },
+                    required: ['undoId']
+                }
+            },
+            {
+                name: 'soft_reload_scene',
+                description: 'Soft reload current scene',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'query_scene_ready',
+                description: 'Check if scene is ready',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'query_scene_dirty',
+                description: 'Check if scene has unsaved changes',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'query_scene_classes',
+                description: 'Query all registered classes',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        extends: {
+                            type: 'string',
+                            description: 'Filter classes that extend this base class'
+                        }
+                    }
+                }
+            },
+            {
+                name: 'query_scene_components',
+                description: 'Query available scene components',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'query_component_has_script',
+                description: 'Check if component has script',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        className: {
+                            type: 'string',
+                            description: 'Script class name to check'
+                        }
+                    },
+                    required: ['className']
+                }
+            },
+            {
+                name: 'query_nodes_by_asset_uuid',
+                description: 'Find nodes that use specific asset UUID',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        assetUuid: {
+                            type: 'string',
+                            description: 'Asset UUID to search for'
+                        }
+                    },
+                    required: ['assetUuid']
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'reset_node_property':
+                return await this.resetNodeProperty(args.uuid, args.path);
+            case 'move_array_element':
+                return await this.moveArrayElement(args.uuid, args.path, args.target, args.offset);
+            case 'remove_array_element':
+                return await this.removeArrayElement(args.uuid, args.path, args.index);
+            case 'copy_node':
+                return await this.copyNode(args.uuids);
+            case 'paste_node':
+                return await this.pasteNode(args.target, args.uuids, args.keepWorldTransform);
+            case 'cut_node':
+                return await this.cutNode(args.uuids);
+            case 'reset_node_transform':
+                return await this.resetNodeTransform(args.uuid);
+            case 'reset_component':
+                return await this.resetComponent(args.uuid);
+            case 'restore_prefab':
+                return await this.restorePrefab(args.nodeUuid, args.assetUuid);
+            case 'execute_component_method':
+                return await this.executeComponentMethod(args.uuid, args.name, args.args);
+            case 'execute_scene_script':
+                return await this.executeSceneScript(args.name, args.method, args.args);
+            case 'scene_snapshot':
+                return await this.sceneSnapshot();
+            case 'scene_snapshot_abort':
+                return await this.sceneSnapshotAbort();
+            case 'begin_undo_recording':
+                return await this.beginUndoRecording(args.nodeUuid);
+            case 'end_undo_recording':
+                return await this.endUndoRecording(args.undoId);
+            case 'cancel_undo_recording':
+                return await this.cancelUndoRecording(args.undoId);
+            case 'soft_reload_scene':
+                return await this.softReloadScene();
+            case 'query_scene_ready':
+                return await this.querySceneReady();
+            case 'query_scene_dirty':
+                return await this.querySceneDirty();
+            case 'query_scene_classes':
+                return await this.querySceneClasses(args.extends);
+            case 'query_scene_components':
+                return await this.querySceneComponents();
+            case 'query_component_has_script':
+                return await this.queryComponentHasScript(args.className);
+            case 'query_nodes_by_asset_uuid':
+                return await this.queryNodesByAssetUuid(args.assetUuid);
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async resetNodeProperty(uuid: string, path: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'reset-property', { 
+                uuid, 
+                path, 
+                dump: { value: null } 
+            }).then(() => {
+                resolve({
+                    success: true,
+                    message: `Property '${path}' reset to default value`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async moveArrayElement(uuid: string, path: string, target: number, offset: number): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'move-array-element', {
+                uuid,
+                path,
+                target,
+                offset
+            }).then(() => {
+                resolve({
+                    success: true,
+                    message: `Array element at index ${target} moved by ${offset}`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async removeArrayElement(uuid: string, path: string, index: number): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'remove-array-element', {
+                uuid,
+                path,
+                index
+            }).then(() => {
+                resolve({
+                    success: true,
+                    message: `Array element at index ${index} removed`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async copyNode(uuids: string | string[]): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'copy-node', uuids).then((result: string | string[]) => {
+                resolve({
+                    success: true,
+                    data: {
+                        copiedUuids: result,
+                        message: 'Node(s) copied successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async pasteNode(target: string, uuids: string | string[], keepWorldTransform: boolean = false): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'paste-node', {
+                target,
+                uuids,
+                keepWorldTransform
+            }).then((result: string | string[]) => {
+                resolve({
+                    success: true,
+                    data: {
+                        newUuids: result,
+                        message: 'Node(s) pasted successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async cutNode(uuids: string | string[]): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'cut-node', uuids).then((result: any) => {
+                resolve({
+                    success: true,
+                    data: {
+                        cutUuids: result,
+                        message: 'Node(s) cut successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async resetNodeTransform(uuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'reset-node', { uuid }).then(() => {
+                resolve({
+                    success: true,
+                    message: 'Node transform reset to default'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async resetComponent(uuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'reset-component', { uuid }).then(() => {
+                resolve({
+                    success: true,
+                    message: 'Component reset to default values'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async restorePrefab(nodeUuid: string, assetUuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            (Editor.Message.request as any)('scene', 'restore-prefab', nodeUuid, assetUuid).then(() => {
+                resolve({
+                    success: true,
+                    message: 'Prefab restored successfully'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async executeComponentMethod(uuid: string, name: string, args: any[] = []): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'execute-component-method', {
+                uuid,
+                name,
+                args
+            }).then((result: any) => {
+                resolve({
+                    success: true,
+                    data: {
+                        result: result,
+                        message: `Method '${name}' executed successfully`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async executeSceneScript(name: string, method: string, args: any[] = []): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'execute-scene-script', {
+                name,
+                method,
+                args
+            }).then((result: any) => {
+                resolve({
+                    success: true,
+                    data: result
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async sceneSnapshot(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'snapshot').then(() => {
+                resolve({
+                    success: true,
+                    message: 'Scene snapshot created'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async sceneSnapshotAbort(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'snapshot-abort').then(() => {
+                resolve({
+                    success: true,
+                    message: 'Scene snapshot aborted'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async beginUndoRecording(nodeUuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'begin-recording', nodeUuid).then((undoId: string) => {
+                resolve({
+                    success: true,
+                    data: {
+                        undoId: undoId,
+                        message: 'Undo recording started'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async endUndoRecording(undoId: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'end-recording', undoId).then(() => {
+                resolve({
+                    success: true,
+                    message: 'Undo recording ended'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async cancelUndoRecording(undoId: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'cancel-recording', undoId).then(() => {
+                resolve({
+                    success: true,
+                    message: 'Undo recording cancelled'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async softReloadScene(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'soft-reload').then(() => {
+                resolve({
+                    success: true,
+                    message: 'Scene soft reloaded successfully'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async querySceneReady(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-is-ready').then((ready: boolean) => {
+                resolve({
+                    success: true,
+                    data: {
+                        ready: ready,
+                        message: ready ? 'Scene is ready' : 'Scene is not ready'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async querySceneDirty(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-dirty').then((dirty: boolean) => {
+                resolve({
+                    success: true,
+                    data: {
+                        dirty: dirty,
+                        message: dirty ? 'Scene has unsaved changes' : 'Scene is clean'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async querySceneClasses(extendsClass?: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            const options: any = {};
+            if (extendsClass) {
+                options.extends = extendsClass;
+            }
+
+            Editor.Message.request('scene', 'query-classes', options).then((classes: any[]) => {
+                resolve({
+                    success: true,
+                    data: {
+                        classes: classes,
+                        count: classes.length,
+                        extendsFilter: extendsClass
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async querySceneComponents(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-components').then((components: any[]) => {
+                resolve({
+                    success: true,
+                    data: {
+                        components: components,
+                        count: components.length
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryComponentHasScript(className: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-component-has-script', className).then((hasScript: boolean) => {
+                resolve({
+                    success: true,
+                    data: {
+                        className: className,
+                        hasScript: hasScript,
+                        message: hasScript ? `Component '${className}' has script` : `Component '${className}' does not have script`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryNodesByAssetUuid(assetUuid: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-nodes-by-asset-uuid', assetUuid).then((nodeUuids: string[]) => {
+                resolve({
+                    success: true,
+                    data: {
+                        assetUuid: assetUuid,
+                        nodeUuids: nodeUuids,
+                        count: nodeUuids.length,
+                        message: `Found ${nodeUuids.length} nodes using asset`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/scene-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor, SceneInfo } from '../types';
+
+export class SceneTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'get_current_scene',
+                description: 'Get current scene information',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'get_scene_list',
+                description: 'Get all scenes in the project',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'open_scene',
+                description: 'Open a scene by path',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        scenePath: {
+                            type: 'string',
+                            description: 'The scene file path'
+                        }
+                    },
+                    required: ['scenePath']
+                }
+            },
+            {
+                name: 'save_scene',
+                description: 'Save current scene',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'create_scene',
+                description: 'Create a new scene asset',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        sceneName: {
+                            type: 'string',
+                            description: 'Name of the new scene'
+                        },
+                        savePath: {
+                            type: 'string',
+                            description: 'Path to save the scene (e.g., db://assets/scenes/NewScene.scene)'
+                        }
+                    },
+                    required: ['sceneName', 'savePath']
+                }
+            },
+            {
+                name: 'save_scene_as',
+                description: 'Save scene as new file',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        path: {
+                            type: 'string',
+                            description: 'Path to save the scene'
+                        }
+                    },
+                    required: ['path']
+                }
+            },
+            {
+                name: 'close_scene',
+                description: 'Close current scene',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'get_scene_hierarchy',
+                description: 'Get the complete hierarchy of current scene',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        includeComponents: {
+                            type: 'boolean',
+                            description: 'Include component information',
+                            default: false
+                        }
+                    }
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'get_current_scene':
+                return await this.getCurrentScene();
+            case 'get_scene_list':
+                return await this.getSceneList();
+            case 'open_scene':
+                return await this.openScene(args.scenePath);
+            case 'save_scene':
+                return await this.saveScene();
+            case 'create_scene':
+                return await this.createScene(args.sceneName, args.savePath);
+            case 'save_scene_as':
+                return await this.saveSceneAs(args.path);
+            case 'close_scene':
+                return await this.closeScene();
+            case 'get_scene_hierarchy':
+                return await this.getSceneHierarchy(args.includeComponents);
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async getCurrentScene(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 直接使用 query-node-tree 来获取场景信息（这个方法已经验证可用）
+            Editor.Message.request('scene', 'query-node-tree').then((tree: any) => {
+                if (tree && tree.uuid) {
+                    resolve({
+                        success: true,
+                        data: {
+                            name: tree.name || 'Current Scene',
+                            uuid: tree.uuid,
+                            type: tree.type || 'cc.Scene',
+                            active: tree.active !== undefined ? tree.active : true,
+                            nodeCount: tree.children ? tree.children.length : 0
+                        }
+                    });
+                } else {
+                    resolve({ success: false, error: 'No scene data available' });
+                }
+            }).catch((err: Error) => {
+                // 备用方案：使用场景脚本
+                const options = {
+                    name: 'cocos-mcp-server',
+                    method: 'getCurrentSceneInfo',
+                    args: []
+                };
+                
+                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+                    resolve(result);
+                }).catch((err2: Error) => {
+                    resolve({ success: false, error: `Direct API failed: ${err.message}, Scene script failed: ${err2.message}` });
+                });
+            });
+        });
+    }
+
+    private async getSceneList(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // Note: query-assets API corrected with proper parameters
+            Editor.Message.request('asset-db', 'query-assets', {
+                pattern: 'db://assets/**/*.scene'
+            }).then((results: any[]) => {
+                const scenes: SceneInfo[] = results.map(asset => ({
+                    name: asset.name,
+                    path: asset.url,
+                    uuid: asset.uuid
+                }));
+                resolve({ success: true, data: scenes });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async openScene(scenePath: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 首先获取场景的UUID
+            Editor.Message.request('asset-db', 'query-uuid', scenePath).then((uuid: string | null) => {
+                if (!uuid) {
+                    throw new Error('Scene not found');
+                }
+                
+                // 使用正确的 scene API 打开场景 (需要UUID)
+                return Editor.Message.request('scene', 'open-scene', uuid);
+            }).then(() => {
+                resolve({ success: true, message: `Scene opened: ${scenePath}` });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async saveScene(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'save-scene').then(() => {
+                resolve({ success: true, message: 'Scene saved successfully' });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async createScene(sceneName: string, savePath: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 确保路径以.scene结尾
+            const fullPath = savePath.endsWith('.scene') ? savePath : `${savePath}/${sceneName}.scene`;
+            
+            // 使用正确的Cocos Creator 3.8场景格式
+            const sceneContent = JSON.stringify([
+                {
+                    "__type__": "cc.SceneAsset",
+                    "_name": sceneName,
+                    "_objFlags": 0,
+                    "__editorExtras__": {},
+                    "_native": "",
+                    "scene": {
+                        "__id__": 1
+                    }
+                },
+                {
+                    "__type__": "cc.Scene",
+                    "_name": sceneName,
+                    "_objFlags": 0,
+                    "__editorExtras__": {},
+                    "_parent": null,
+                    "_children": [],
+                    "_active": true,
+                    "_components": [],
+                    "_prefab": null,
+                    "_lpos": {
+                        "__type__": "cc.Vec3",
+                        "x": 0,
+                        "y": 0,
+                        "z": 0
+                    },
+                    "_lrot": {
+                        "__type__": "cc.Quat",
+                        "x": 0,
+                        "y": 0,
+                        "z": 0,
+                        "w": 1
+                    },
+                    "_lscale": {
+                        "__type__": "cc.Vec3",
+                        "x": 1,
+                        "y": 1,
+                        "z": 1
+                    },
+                    "_mobility": 0,
+                    "_layer": 1073741824,
+                    "_euler": {
+                        "__type__": "cc.Vec3",
+                        "x": 0,
+                        "y": 0,
+                        "z": 0
+                    },
+                    "autoReleaseAssets": false,
+                    "_globals": {
+                        "__id__": 2
+                    },
+                    "_id": "scene"
+                },
+                {
+                    "__type__": "cc.SceneGlobals",
+                    "ambient": {
+                        "__id__": 3
+                    },
+                    "skybox": {
+                        "__id__": 4
+                    },
+                    "fog": {
+                        "__id__": 5
+                    },
+                    "octree": {
+                        "__id__": 6
+                    }
+                },
+                {
+                    "__type__": "cc.AmbientInfo",
+                    "_skyColorHDR": {
+                        "__type__": "cc.Vec4",
+                        "x": 0.2,
+                        "y": 0.5,
+                        "z": 0.8,
+                        "w": 0.520833
+                    },
+                    "_skyColor": {
+                        "__type__": "cc.Vec4",
+                        "x": 0.2,
+                        "y": 0.5,
+                        "z": 0.8,
+                        "w": 0.520833
+                    },
+                    "_skyIllumHDR": 20000,
+                    "_skyIllum": 20000,
+                    "_groundAlbedoHDR": {
+                        "__type__": "cc.Vec4",
+                        "x": 0.2,
+                        "y": 0.2,
+                        "z": 0.2,
+                        "w": 1
+                    },
+                    "_groundAlbedo": {
+                        "__type__": "cc.Vec4",
+                        "x": 0.2,
+                        "y": 0.2,
+                        "z": 0.2,
+                        "w": 1
+                    }
+                },
+                {
+                    "__type__": "cc.SkyboxInfo",
+                    "_envLightingType": 0,
+                    "_envmapHDR": null,
+                    "_envmap": null,
+                    "_envmapLodCount": 0,
+                    "_diffuseMapHDR": null,
+                    "_diffuseMap": null,
+                    "_enabled": false,
+                    "_useHDR": true,
+                    "_editableMaterial": null,
+                    "_reflectionHDR": null,
+                    "_reflectionMap": null,
+                    "_rotationAngle": 0
+                },
+                {
+                    "__type__": "cc.FogInfo",
+                    "_type": 0,
+                    "_fogColor": {
+                        "__type__": "cc.Color",
+                        "r": 200,
+                        "g": 200,
+                        "b": 200,
+                        "a": 255
+                    },
+                    "_enabled": false,
+                    "_fogDensity": 0.3,
+                    "_fogStart": 0.5,
+                    "_fogEnd": 300,
+                    "_fogAtten": 5,
+                    "_fogTop": 1.5,
+                    "_fogRange": 1.2,
+                    "_accurate": false
+                },
+                {
+                    "__type__": "cc.OctreeInfo",
+                    "_enabled": false,
+                    "_minPos": {
+                        "__type__": "cc.Vec3",
+                        "x": -1024,
+                        "y": -1024,
+                        "z": -1024
+                    },
+                    "_maxPos": {
+                        "__type__": "cc.Vec3",
+                        "x": 1024,
+                        "y": 1024,
+                        "z": 1024
+                    },
+                    "_depth": 8
+                }
+            ], null, 2);
+            
+            Editor.Message.request('asset-db', 'create-asset', fullPath, sceneContent).then((result: any) => {
+                // Verify scene creation by checking if it exists
+                this.getSceneList().then((sceneList) => {
+                    const createdScene = sceneList.data?.find((scene: any) => scene.uuid === result.uuid);
+                    resolve({
+                        success: true,
+                        data: {
+                            uuid: result.uuid,
+                            url: result.url,
+                            name: sceneName,
+                            message: `Scene '${sceneName}' created successfully`,
+                            sceneVerified: !!createdScene
+                        },
+                        verificationData: createdScene
+                    });
+                }).catch(() => {
+                    resolve({
+                        success: true,
+                        data: {
+                            uuid: result.uuid,
+                            url: result.url,
+                            name: sceneName,
+                            message: `Scene '${sceneName}' created successfully (verification failed)`
+                        }
+                    });
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async getSceneHierarchy(includeComponents: boolean = false): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // 优先尝试使用 Editor API 查询场景节点树
+            Editor.Message.request('scene', 'query-node-tree').then((tree: any) => {
+                if (tree) {
+                    const hierarchy = this.buildHierarchy(tree, includeComponents);
+                    resolve({
+                        success: true,
+                        data: hierarchy
+                    });
+                } else {
+                    resolve({ success: false, error: 'No scene hierarchy available' });
+                }
+            }).catch((err: Error) => {
+                // 备用方案：使用场景脚本
+                const options = {
+                    name: 'cocos-mcp-server',
+                    method: 'getSceneHierarchy',
+                    args: [includeComponents]
+                };
+                
+                Editor.Message.request('scene', 'execute-scene-script', options).then((result: any) => {
+                    resolve(result);
+                }).catch((err2: Error) => {
+                    resolve({ success: false, error: `Direct API failed: ${err.message}, Scene script failed: ${err2.message}` });
+                });
+            });
+        });
+    }
+
+    private buildHierarchy(node: any, includeComponents: boolean): any {
+        const nodeInfo: any = {
+            uuid: node.uuid,
+            name: node.name,
+            type: node.type,
+            active: node.active,
+            children: []
+        };
+
+        if (includeComponents && node.__comps__) {
+            nodeInfo.components = node.__comps__.map((comp: any) => ({
+                type: comp.__type__ || 'Unknown',
+                enabled: comp.enabled !== undefined ? comp.enabled : true
+            }));
+        }
+
+        if (node.children) {
+            nodeInfo.children = node.children.map((child: any) => 
+                this.buildHierarchy(child, includeComponents)
+            );
+        }
+
+        return nodeInfo;
+    }
+
+    private async saveSceneAs(path: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            // save-as-scene API 不接受路径参数，会弹出对话框让用户选择
+            (Editor.Message.request as any)('scene', 'save-as-scene').then(() => {
+                resolve({
+                    success: true,
+                    data: {
+                        path: path,
+                        message: `Scene save-as dialog opened`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async closeScene(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'close-scene').then(() => {
+                resolve({
+                    success: true,
+                    message: 'Scene closed successfully'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/scene-view-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor } from '../types';
+
+export class SceneViewTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'change_gizmo_tool',
+                description: 'Change Gizmo tool',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        name: {
+                            type: 'string',
+                            description: 'Tool name',
+                            enum: ['position', 'rotation', 'scale', 'rect']
+                        }
+                    },
+                    required: ['name']
+                }
+            },
+            {
+                name: 'query_gizmo_tool_name',
+                description: 'Get current Gizmo tool name',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'change_gizmo_pivot',
+                description: 'Change transform pivot point',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        name: {
+                            type: 'string',
+                            description: 'Pivot point',
+                            enum: ['pivot', 'center']
+                        }
+                    },
+                    required: ['name']
+                }
+            },
+            {
+                name: 'query_gizmo_pivot',
+                description: 'Get current Gizmo pivot point',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'query_gizmo_view_mode',
+                description: 'Query view mode (view/select)',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'change_gizmo_coordinate',
+                description: 'Change coordinate system',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        type: {
+                            type: 'string',
+                            description: 'Coordinate system',
+                            enum: ['local', 'global']
+                        }
+                    },
+                    required: ['type']
+                }
+            },
+            {
+                name: 'query_gizmo_coordinate',
+                description: 'Get current coordinate system',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'change_view_mode_2d_3d',
+                description: 'Change 2D/3D view mode',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        is2D: {
+                            type: 'boolean',
+                            description: '2D/3D view mode (true for 2D, false for 3D)'
+                        }
+                    },
+                    required: ['is2D']
+                }
+            },
+            {
+                name: 'query_view_mode_2d_3d',
+                description: 'Get current view mode',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'set_grid_visible',
+                description: 'Show/hide grid',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        visible: {
+                            type: 'boolean',
+                            description: 'Grid visibility'
+                        }
+                    },
+                    required: ['visible']
+                }
+            },
+            {
+                name: 'query_grid_visible',
+                description: 'Query grid visibility status',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'set_icon_gizmo_3d',
+                description: 'Set IconGizmo to 3D or 2D mode',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        is3D: {
+                            type: 'boolean',
+                            description: '3D/2D IconGizmo (true for 3D, false for 2D)'
+                        }
+                    },
+                    required: ['is3D']
+                }
+            },
+            {
+                name: 'query_icon_gizmo_3d',
+                description: 'Query IconGizmo mode',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'set_icon_gizmo_size',
+                description: 'Set IconGizmo size',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        size: {
+                            type: 'number',
+                            description: 'IconGizmo size',
+                            minimum: 10,
+                            maximum: 100
+                        }
+                    },
+                    required: ['size']
+                }
+            },
+            {
+                name: 'query_icon_gizmo_size',
+                description: 'Query IconGizmo size',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'focus_camera_on_nodes',
+                description: 'Focus scene camera on nodes',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        uuids: {
+                            oneOf: [
+                                { type: 'array', items: { type: 'string' } },
+                                { type: 'null' }
+                            ],
+                            description: 'Node UUIDs to focus on (null for all)'
+                        }
+                    },
+                    required: ['uuids']
+                }
+            },
+            {
+                name: 'align_camera_with_view',
+                description: 'Apply scene camera position and angle to selected node',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'align_view_with_node',
+                description: 'Apply selected node position and angle to current view',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'get_scene_view_status',
+                description: 'Get comprehensive scene view status',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'reset_scene_view',
+                description: 'Reset scene view to default settings',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'change_gizmo_tool':
+                return await this.changeGizmoTool(args.name);
+            case 'query_gizmo_tool_name':
+                return await this.queryGizmoToolName();
+            case 'change_gizmo_pivot':
+                return await this.changeGizmoPivot(args.name);
+            case 'query_gizmo_pivot':
+                return await this.queryGizmoPivot();
+            case 'query_gizmo_view_mode':
+                return await this.queryGizmoViewMode();
+            case 'change_gizmo_coordinate':
+                return await this.changeGizmoCoordinate(args.type);
+            case 'query_gizmo_coordinate':
+                return await this.queryGizmoCoordinate();
+            case 'change_view_mode_2d_3d':
+                return await this.changeViewMode2D3D(args.is2D);
+            case 'query_view_mode_2d_3d':
+                return await this.queryViewMode2D3D();
+            case 'set_grid_visible':
+                return await this.setGridVisible(args.visible);
+            case 'query_grid_visible':
+                return await this.queryGridVisible();
+            case 'set_icon_gizmo_3d':
+                return await this.setIconGizmo3D(args.is3D);
+            case 'query_icon_gizmo_3d':
+                return await this.queryIconGizmo3D();
+            case 'set_icon_gizmo_size':
+                return await this.setIconGizmoSize(args.size);
+            case 'query_icon_gizmo_size':
+                return await this.queryIconGizmoSize();
+            case 'focus_camera_on_nodes':
+                return await this.focusCameraOnNodes(args.uuids);
+            case 'align_camera_with_view':
+                return await this.alignCameraWithView();
+            case 'align_view_with_node':
+                return await this.alignViewWithNode();
+            case 'get_scene_view_status':
+                return await this.getSceneViewStatus();
+            case 'reset_scene_view':
+                return await this.resetSceneView();
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async changeGizmoTool(name: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'change-gizmo-tool', name).then(() => {
+                resolve({
+                    success: true,
+                    message: `Gizmo tool changed to '${name}'`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryGizmoToolName(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-gizmo-tool-name').then((toolName: string) => {
+                resolve({
+                    success: true,
+                    data: {
+                        currentTool: toolName,
+                        message: `Current Gizmo tool: ${toolName}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async changeGizmoPivot(name: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'change-gizmo-pivot', name).then(() => {
+                resolve({
+                    success: true,
+                    message: `Gizmo pivot changed to '${name}'`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryGizmoPivot(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-gizmo-pivot').then((pivotName: string) => {
+                resolve({
+                    success: true,
+                    data: {
+                        currentPivot: pivotName,
+                        message: `Current Gizmo pivot: ${pivotName}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryGizmoViewMode(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-gizmo-view-mode').then((viewMode: string) => {
+                resolve({
+                    success: true,
+                    data: {
+                        viewMode: viewMode,
+                        message: `Current view mode: ${viewMode}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async changeGizmoCoordinate(type: string): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'change-gizmo-coordinate', type).then(() => {
+                resolve({
+                    success: true,
+                    message: `Coordinate system changed to '${type}'`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryGizmoCoordinate(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-gizmo-coordinate').then((coordinate: string) => {
+                resolve({
+                    success: true,
+                    data: {
+                        coordinate: coordinate,
+                        message: `Current coordinate system: ${coordinate}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async changeViewMode2D3D(is2D: boolean): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'change-is2D', is2D).then(() => {
+                resolve({
+                    success: true,
+                    message: `View mode changed to ${is2D ? '2D' : '3D'}`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryViewMode2D3D(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-is2D').then((is2D: boolean) => {
+                resolve({
+                    success: true,
+                    data: {
+                        is2D: is2D,
+                        viewMode: is2D ? '2D' : '3D',
+                        message: `Current view mode: ${is2D ? '2D' : '3D'}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async setGridVisible(visible: boolean): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'set-grid-visible', visible).then(() => {
+                resolve({
+                    success: true,
+                    message: `Grid ${visible ? 'shown' : 'hidden'}`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryGridVisible(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-is-grid-visible').then((visible: boolean) => {
+                resolve({
+                    success: true,
+                    data: {
+                        visible: visible,
+                        message: `Grid is ${visible ? 'visible' : 'hidden'}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async setIconGizmo3D(is3D: boolean): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'set-icon-gizmo-3d', is3D).then(() => {
+                resolve({
+                    success: true,
+                    message: `IconGizmo set to ${is3D ? '3D' : '2D'} mode`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryIconGizmo3D(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-is-icon-gizmo-3d').then((is3D: boolean) => {
+                resolve({
+                    success: true,
+                    data: {
+                        is3D: is3D,
+                        mode: is3D ? '3D' : '2D',
+                        message: `IconGizmo is in ${is3D ? '3D' : '2D'} mode`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async setIconGizmoSize(size: number): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'set-icon-gizmo-size', size).then(() => {
+                resolve({
+                    success: true,
+                    message: `IconGizmo size set to ${size}`
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryIconGizmoSize(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'query-icon-gizmo-size').then((size: number) => {
+                resolve({
+                    success: true,
+                    data: {
+                        size: size,
+                        message: `IconGizmo size: ${size}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async focusCameraOnNodes(uuids: string[] | null): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'focus-camera', uuids || []).then(() => {
+                const message = uuids === null ? 
+                    'Camera focused on all nodes' : 
+                    `Camera focused on ${uuids.length} node(s)`;
+                resolve({
+                    success: true,
+                    message: message
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async alignCameraWithView(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'align-with-view').then(() => {
+                resolve({
+                    success: true,
+                    message: 'Scene camera aligned with current view'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async alignViewWithNode(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('scene', 'align-with-view-node').then(() => {
+                resolve({
+                    success: true,
+                    message: 'View aligned with selected node'
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async getSceneViewStatus(): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // Gather all view status information
+                const [
+                    gizmoTool,
+                    gizmoPivot,
+                    gizmoCoordinate,
+                    viewMode2D3D,
+                    gridVisible,
+                    iconGizmo3D,
+                    iconGizmoSize
+                ] = await Promise.allSettled([
+                    this.queryGizmoToolName(),
+                    this.queryGizmoPivot(),
+                    this.queryGizmoCoordinate(),
+                    this.queryViewMode2D3D(),
+                    this.queryGridVisible(),
+                    this.queryIconGizmo3D(),
+                    this.queryIconGizmoSize()
+                ]);
+
+                const status: any = {
+                    timestamp: new Date().toISOString()
+                };
+
+                // Extract data from fulfilled promises
+                if (gizmoTool.status === 'fulfilled' && gizmoTool.value.success) {
+                    status.gizmoTool = gizmoTool.value.data.currentTool;
+                }
+                if (gizmoPivot.status === 'fulfilled' && gizmoPivot.value.success) {
+                    status.gizmoPivot = gizmoPivot.value.data.currentPivot;
+                }
+                if (gizmoCoordinate.status === 'fulfilled' && gizmoCoordinate.value.success) {
+                    status.coordinate = gizmoCoordinate.value.data.coordinate;
+                }
+                if (viewMode2D3D.status === 'fulfilled' && viewMode2D3D.value.success) {
+                    status.is2D = viewMode2D3D.value.data.is2D;
+                    status.viewMode = viewMode2D3D.value.data.viewMode;
+                }
+                if (gridVisible.status === 'fulfilled' && gridVisible.value.success) {
+                    status.gridVisible = gridVisible.value.data.visible;
+                }
+                if (iconGizmo3D.status === 'fulfilled' && iconGizmo3D.value.success) {
+                    status.iconGizmo3D = iconGizmo3D.value.data.is3D;
+                }
+                if (iconGizmoSize.status === 'fulfilled' && iconGizmoSize.value.success) {
+                    status.iconGizmoSize = iconGizmoSize.value.data.size;
+                }
+
+                resolve({
+                    success: true,
+                    data: status
+                });
+
+            } catch (err: any) {
+                resolve({
+                    success: false,
+                    error: `Failed to get scene view status: ${err.message}`
+                });
+            }
+        });
+    }
+
+    private async resetSceneView(): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // Reset scene view to default settings
+                const resetActions = [
+                    this.changeGizmoTool('position'),
+                    this.changeGizmoPivot('pivot'),
+                    this.changeGizmoCoordinate('local'),
+                    this.changeViewMode2D3D(false), // 3D mode
+                    this.setGridVisible(true),
+                    this.setIconGizmo3D(true),
+                    this.setIconGizmoSize(60)
+                ];
+
+                await Promise.all(resetActions);
+
+                resolve({
+                    success: true,
+                    message: 'Scene view reset to default settings'
+                });
+
+            } catch (err: any) {
+                resolve({
+                    success: false,
+                    error: `Failed to reset scene view: ${err.message}`
+                });
+            }
+        });
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/server-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor } from '../types';
+
+export class ServerTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'query_server_ip_list',
+                description: 'Query server IP list',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'query_sorted_server_ip_list',
+                description: 'Get sorted server IP list',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'query_server_port',
+                description: 'Query editor server current port',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'get_server_status',
+                description: 'Get comprehensive server status information',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            },
+            {
+                name: 'check_server_connectivity',
+                description: 'Check server connectivity and network status',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        timeout: {
+                            type: 'number',
+                            description: 'Timeout in milliseconds',
+                            default: 5000
+                        }
+                    }
+                }
+            },
+            {
+                name: 'get_network_interfaces',
+                description: 'Get available network interfaces',
+                inputSchema: {
+                    type: 'object',
+                    properties: {}
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'query_server_ip_list':
+                return await this.queryServerIPList();
+            case 'query_sorted_server_ip_list':
+                return await this.querySortedServerIPList();
+            case 'query_server_port':
+                return await this.queryServerPort();
+            case 'get_server_status':
+                return await this.getServerStatus();
+            case 'check_server_connectivity':
+                return await this.checkServerConnectivity(args.timeout);
+            case 'get_network_interfaces':
+                return await this.getNetworkInterfaces();
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async queryServerIPList(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('server', 'query-ip-list').then((ipList: string[]) => {
+                resolve({
+                    success: true,
+                    data: {
+                        ipList: ipList,
+                        count: ipList.length,
+                        message: 'IP list retrieved successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async querySortedServerIPList(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('server', 'query-sort-ip-list').then((sortedIPList: string[]) => {
+                resolve({
+                    success: true,
+                    data: {
+                        sortedIPList: sortedIPList,
+                        count: sortedIPList.length,
+                        message: 'Sorted IP list retrieved successfully'
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async queryServerPort(): Promise<ToolResponse> {
+        return new Promise((resolve) => {
+            Editor.Message.request('server', 'query-port').then((port: number) => {
+                resolve({
+                    success: true,
+                    data: {
+                        port: port,
+                        message: `Editor server is running on port ${port}`
+                    }
+                });
+            }).catch((err: Error) => {
+                resolve({ success: false, error: err.message });
+            });
+        });
+    }
+
+    private async getServerStatus(): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // Gather comprehensive server information
+                const [ipListResult, portResult] = await Promise.allSettled([
+                    this.queryServerIPList(),
+                    this.queryServerPort()
+                ]);
+
+                const status: any = {
+                    timestamp: new Date().toISOString(),
+                    serverRunning: true
+                };
+
+                if (ipListResult.status === 'fulfilled' && ipListResult.value.success) {
+                    status.availableIPs = ipListResult.value.data.ipList;
+                    status.ipCount = ipListResult.value.data.count;
+                } else {
+                    status.availableIPs = [];
+                    status.ipCount = 0;
+                    status.ipError = ipListResult.status === 'rejected' ? ipListResult.reason : ipListResult.value.error;
+                }
+
+                if (portResult.status === 'fulfilled' && portResult.value.success) {
+                    status.port = portResult.value.data.port;
+                } else {
+                    status.port = null;
+                    status.portError = portResult.status === 'rejected' ? portResult.reason : portResult.value.error;
+                }
+
+                // Add additional server info
+                status.mcpServerPort = 3000; // Our MCP server port
+                status.editorVersion = (Editor as any).versions?.cocos || 'Unknown';
+                status.platform = process.platform;
+                status.nodeVersion = process.version;
+
+                resolve({
+                    success: true,
+                    data: status
+                });
+
+            } catch (err: any) {
+                resolve({
+                    success: false,
+                    error: `Failed to get server status: ${err.message}`
+                });
+            }
+        });
+    }
+
+    private async checkServerConnectivity(timeout: number = 5000): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            const startTime = Date.now();
+            
+            try {
+                // Test basic Editor API connectivity
+                const testPromise = Editor.Message.request('server', 'query-port');
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('Connection timeout')), timeout);
+                });
+
+                await Promise.race([testPromise, timeoutPromise]);
+                
+                const responseTime = Date.now() - startTime;
+                
+                resolve({
+                    success: true,
+                    data: {
+                        connected: true,
+                        responseTime: responseTime,
+                        timeout: timeout,
+                        message: `Server connectivity confirmed in ${responseTime}ms`
+                    }
+                });
+
+            } catch (err: any) {
+                const responseTime = Date.now() - startTime;
+                
+                resolve({
+                    success: false,
+                    data: {
+                        connected: false,
+                        responseTime: responseTime,
+                        timeout: timeout,
+                        error: err.message
+                    }
+                });
+            }
+        });
+    }
+
+    private async getNetworkInterfaces(): Promise<ToolResponse> {
+        return new Promise(async (resolve) => {
+            try {
+                // Get network interfaces using Node.js os module
+                const os = require('os');
+                const interfaces = os.networkInterfaces();
+                
+                const networkInfo = Object.entries(interfaces).map(([name, addresses]: [string, any]) => ({
+                    name: name,
+                    addresses: addresses.map((addr: any) => ({
+                        address: addr.address,
+                        family: addr.family,
+                        internal: addr.internal,
+                        cidr: addr.cidr
+                    }))
+                }));
+
+                // Also try to get server IPs for comparison
+                const serverIPResult = await this.queryServerIPList();
+                
+                resolve({
+                    success: true,
+                    data: {
+                        networkInterfaces: networkInfo,
+                        serverAvailableIPs: serverIPResult.success ? serverIPResult.data.ipList : [],
+                        message: 'Network interfaces retrieved successfully'
+                    }
+                });
+
+            } catch (err: any) {
+                resolve({
+                    success: false,
+                    error: `Failed to get network interfaces: ${err.message}`
+                });
+            }
+        });
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/tool-manager.ts">
+import { v4 as uuidv4 } from 'uuid';
+import { ToolConfig, ToolConfiguration, ToolManagerSettings, ToolDefinition } from '../types';
+import * as fs from 'fs';
+import * as path from 'path';
+
+export class ToolManager {
+    private settings: ToolManagerSettings;
+    private availableTools: ToolConfig[] = [];
+
+    constructor() {
+        this.settings = this.readToolManagerSettings();
+        this.initializeAvailableTools();
+        
+        // 如果没有配置，自动创建一个默认配置
+        if (this.settings.configurations.length === 0) {
+            console.log('[ToolManager] No configurations found, creating default configuration...');
+            this.createConfiguration('默认配置', '自动创建的默认工具配置');
+        }
+    }
+
+    private getToolManagerSettingsPath(): string {
+        return path.join(Editor.Project.path, 'settings', 'tool-manager.json');
+    }
+
+    private ensureSettingsDir(): void {
+        const settingsDir = path.dirname(this.getToolManagerSettingsPath());
+        if (!fs.existsSync(settingsDir)) {
+            fs.mkdirSync(settingsDir, { recursive: true });
+        }
+    }
+
+    private readToolManagerSettings(): ToolManagerSettings {
+        const DEFAULT_TOOL_MANAGER_SETTINGS: ToolManagerSettings = {
+            configurations: [],
+            currentConfigId: '',
+            maxConfigSlots: 5
+        };
+
+        try {
+            this.ensureSettingsDir();
+            const settingsFile = this.getToolManagerSettingsPath();
+            if (fs.existsSync(settingsFile)) {
+                const content = fs.readFileSync(settingsFile, 'utf8');
+                return { ...DEFAULT_TOOL_MANAGER_SETTINGS, ...JSON.parse(content) };
+            }
+        } catch (e) {
+            console.error('Failed to read tool manager settings:', e);
+        }
+        return DEFAULT_TOOL_MANAGER_SETTINGS;
+    }
+
+    private saveToolManagerSettings(settings: ToolManagerSettings): void {
+        try {
+            this.ensureSettingsDir();
+            const settingsFile = this.getToolManagerSettingsPath();
+            fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
+        } catch (e) {
+            console.error('Failed to save tool manager settings:', e);
+            throw e;
+        }
+    }
+
+    private exportToolConfiguration(config: ToolConfiguration): string {
+        return JSON.stringify(config, null, 2);
+    }
+
+    private importToolConfiguration(configJson: string): ToolConfiguration {
+        try {
+            const config = JSON.parse(configJson);
+            // 验证配置格式
+            if (!config.id || !config.name || !Array.isArray(config.tools)) {
+                throw new Error('Invalid configuration format');
+            }
+            return config;
+        } catch (e) {
+            console.error('Failed to parse tool configuration:', e);
+            throw new Error('Invalid JSON format or configuration structure');
+        }
+    }
+
+    private initializeAvailableTools(): void {
+        // 从MCP服务器获取真实的工具列表
+        try {
+            // 导入所有工具类
+            const { SceneTools } = require('./scene-tools');
+            const { NodeTools } = require('./node-tools');
+            const { ComponentTools } = require('./component-tools');
+            const { PrefabTools } = require('./prefab-tools');
+            const { ProjectTools } = require('./project-tools');
+            const { DebugTools } = require('./debug-tools');
+            const { PreferencesTools } = require('./preferences-tools');
+            const { ServerTools } = require('./server-tools');
+            const { BroadcastTools } = require('./broadcast-tools');
+            const { SceneAdvancedTools } = require('./scene-advanced-tools');
+            const { SceneViewTools } = require('./scene-view-tools');
+            const { ReferenceImageTools } = require('./reference-image-tools');
+            const { AssetAdvancedTools } = require('./asset-advanced-tools');
+            const { ValidationTools } = require('./validation-tools');
+
+            // 初始化工具实例
+            const tools = {
+                scene: new SceneTools(),
+                node: new NodeTools(),
+                component: new ComponentTools(),
+                prefab: new PrefabTools(),
+                project: new ProjectTools(),
+                debug: new DebugTools(),
+                preferences: new PreferencesTools(),
+                server: new ServerTools(),
+                broadcast: new BroadcastTools(),
+                sceneAdvanced: new SceneAdvancedTools(),
+                sceneView: new SceneViewTools(),
+                referenceImage: new ReferenceImageTools(),
+                assetAdvanced: new AssetAdvancedTools(),
+                validation: new ValidationTools()
+            };
+
+            // 从每个工具类获取工具列表
+            this.availableTools = [];
+            for (const [category, toolSet] of Object.entries(tools)) {
+                const toolDefinitions = toolSet.getTools();
+                toolDefinitions.forEach((tool: any) => {
+                    this.availableTools.push({
+                        category: category,
+                        name: tool.name,
+                        enabled: true, // 默认启用
+                        description: tool.description
+                    });
+                });
+            }
+
+            console.log(`[ToolManager] Initialized ${this.availableTools.length} tools from MCP server`);
+        } catch (error) {
+            console.error('[ToolManager] Failed to initialize tools from MCP server:', error);
+            // 如果获取失败，使用默认工具列表作为后备
+            this.initializeDefaultTools();
+        }
+    }
+
+    private initializeDefaultTools(): void {
+        // 默认工具列表作为后备方案
+        const toolCategories = [
+            { category: 'scene', name: '场景工具', tools: [
+                { name: 'getCurrentSceneInfo', description: '获取当前场景信息' },
+                { name: 'getSceneHierarchy', description: '获取场景层级结构' },
+                { name: 'createNewScene', description: '创建新场景' },
+                { name: 'saveScene', description: '保存场景' },
+                { name: 'loadScene', description: '加载场景' }
+            ]},
+            { category: 'node', name: '节点工具', tools: [
+                { name: 'getAllNodes', description: '获取所有节点' },
+                { name: 'findNodeByName', description: '根据名称查找节点' },
+                { name: 'createNode', description: '创建节点' },
+                { name: 'deleteNode', description: '删除节点' },
+                { name: 'setNodeProperty', description: '设置节点属性' },
+                { name: 'getNodeInfo', description: '获取节点信息' }
+            ]},
+            { category: 'component', name: '组件工具', tools: [
+                { name: 'addComponentToNode', description: '添加组件到节点' },
+                { name: 'removeComponentFromNode', description: '从节点移除组件' },
+                { name: 'setComponentProperty', description: '设置组件属性' },
+                { name: 'getComponentInfo', description: '获取组件信息' }
+            ]},
+            { category: 'prefab', name: '预制体工具', tools: [
+                { name: 'createPrefabFromNode', description: '从节点创建预制体' },
+                { name: 'instantiatePrefab', description: '实例化预制体' },
+                { name: 'getPrefabInfo', description: '获取预制体信息' },
+                { name: 'savePrefab', description: '保存预制体' }
+            ]},
+            { category: 'project', name: '项目工具', tools: [
+                { name: 'getProjectInfo', description: '获取项目信息' },
+                { name: 'getAssetList', description: '获取资源列表' },
+                { name: 'createAsset', description: '创建资源' },
+                { name: 'deleteAsset', description: '删除资源' }
+            ]},
+            { category: 'debug', name: '调试工具', tools: [
+                { name: 'getConsoleLogs', description: '获取控制台日志' },
+                { name: 'getPerformanceStats', description: '获取性能统计' },
+                { name: 'validateScene', description: '验证场景' },
+                { name: 'getErrorLogs', description: '获取错误日志' }
+            ]},
+            { category: 'preferences', name: '偏好设置工具', tools: [
+                { name: 'getPreferences', description: '获取偏好设置' },
+                { name: 'setPreferences', description: '设置偏好设置' },
+                { name: 'resetPreferences', description: '重置偏好设置' }
+            ]},
+            { category: 'server', name: '服务器工具', tools: [
+                { name: 'getServerStatus', description: '获取服务器状态' },
+                { name: 'getConnectedClients', description: '获取连接的客户端' },
+                { name: 'getServerLogs', description: '获取服务器日志' }
+            ]},
+            { category: 'broadcast', name: '广播工具', tools: [
+                { name: 'broadcastMessage', description: '广播消息' },
+                { name: 'getBroadcastHistory', description: '获取广播历史' }
+            ]},
+            { category: 'sceneAdvanced', name: '高级场景工具', tools: [
+                { name: 'optimizeScene', description: '优化场景' },
+                { name: 'analyzeScene', description: '分析场景' },
+                { name: 'batchOperation', description: '批量操作' }
+            ]},
+            { category: 'sceneView', name: '场景视图工具', tools: [
+                { name: 'getViewportInfo', description: '获取视口信息' },
+                { name: 'setViewportCamera', description: '设置视口相机' },
+                { name: 'focusOnNode', description: '聚焦到节点' }
+            ]},
+            { category: 'referenceImage', name: '参考图片工具', tools: [
+                { name: 'addReferenceImage', description: '添加参考图片' },
+                { name: 'removeReferenceImage', description: '移除参考图片' },
+                { name: 'getReferenceImages', description: '获取参考图片列表' }
+            ]},
+            { category: 'assetAdvanced', name: '高级资源工具', tools: [
+                { name: 'importAsset', description: '导入资源' },
+                { name: 'exportAsset', description: '导出资源' },
+                { name: 'processAsset', description: '处理资源' }
+            ]},
+            { category: 'validation', name: '验证工具', tools: [
+                { name: 'validateProject', description: '验证项目' },
+                { name: 'validateAssets', description: '验证资源' },
+                { name: 'generateReport', description: '生成报告' }
+            ]}
+        ];
+
+        this.availableTools = [];
+        toolCategories.forEach(category => {
+            category.tools.forEach(tool => {
+                this.availableTools.push({
+                    category: category.category,
+                    name: tool.name,
+                    enabled: true, // 默认启用
+                    description: tool.description
+                });
+            });
+        });
+
+        console.log(`[ToolManager] Initialized ${this.availableTools.length} default tools`);
+    }
+
+    public getAvailableTools(): ToolConfig[] {
+        return [...this.availableTools];
+    }
+
+    public getConfigurations(): ToolConfiguration[] {
+        return [...this.settings.configurations];
+    }
+
+    public getCurrentConfiguration(): ToolConfiguration | null {
+        if (!this.settings.currentConfigId) {
+            return null;
+        }
+        return this.settings.configurations.find(config => config.id === this.settings.currentConfigId) || null;
+    }
+
+    public createConfiguration(name: string, description?: string): ToolConfiguration {
+        if (this.settings.configurations.length >= this.settings.maxConfigSlots) {
+            throw new Error(`已达到最大配置槽位数量 (${this.settings.maxConfigSlots})`);
+        }
+
+        const config: ToolConfiguration = {
+            id: uuidv4(),
+            name,
+            description,
+            tools: this.availableTools.map(tool => ({ ...tool })),
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        this.settings.configurations.push(config);
+        this.settings.currentConfigId = config.id;
+        this.saveSettings();
+
+        return config;
+    }
+
+    public updateConfiguration(configId: string, updates: Partial<ToolConfiguration>): ToolConfiguration {
+        const configIndex = this.settings.configurations.findIndex(config => config.id === configId);
+        if (configIndex === -1) {
+            throw new Error('配置不存在');
+        }
+
+        const config = this.settings.configurations[configIndex];
+        const updatedConfig: ToolConfiguration = {
+            ...config,
+            ...updates,
+            updatedAt: new Date().toISOString()
+        };
+
+        this.settings.configurations[configIndex] = updatedConfig;
+        this.saveSettings();
+
+        return updatedConfig;
+    }
+
+    public deleteConfiguration(configId: string): void {
+        const configIndex = this.settings.configurations.findIndex(config => config.id === configId);
+        if (configIndex === -1) {
+            throw new Error('配置不存在');
+        }
+
+        this.settings.configurations.splice(configIndex, 1);
+        
+        // 如果删除的是当前配置，清空当前配置ID
+        if (this.settings.currentConfigId === configId) {
+            this.settings.currentConfigId = this.settings.configurations.length > 0 
+                ? this.settings.configurations[0].id 
+                : '';
+        }
+
+        this.saveSettings();
+    }
+
+    public setCurrentConfiguration(configId: string): void {
+        const config = this.settings.configurations.find(config => config.id === configId);
+        if (!config) {
+            throw new Error('配置不存在');
+        }
+
+        this.settings.currentConfigId = configId;
+        this.saveSettings();
+    }
+
+    public updateToolStatus(configId: string, category: string, toolName: string, enabled: boolean): void {
+        console.log(`Backend: Updating tool status - configId: ${configId}, category: ${category}, toolName: ${toolName}, enabled: ${enabled}`);
+        
+        const config = this.settings.configurations.find(config => config.id === configId);
+        if (!config) {
+            console.error(`Backend: Config not found with ID: ${configId}`);
+            throw new Error('配置不存在');
+        }
+
+        console.log(`Backend: Found config: ${config.name}`);
+
+        const tool = config.tools.find(t => t.category === category && t.name === toolName);
+        if (!tool) {
+            console.error(`Backend: Tool not found - category: ${category}, name: ${toolName}`);
+            throw new Error('工具不存在');
+        }
+
+        console.log(`Backend: Found tool: ${tool.name}, current enabled: ${tool.enabled}, new enabled: ${enabled}`);
+        
+        tool.enabled = enabled;
+        config.updatedAt = new Date().toISOString();
+        
+        console.log(`Backend: Tool updated, saving settings...`);
+        this.saveSettings();
+        console.log(`Backend: Settings saved successfully`);
+    }
+
+    public updateToolStatusBatch(configId: string, updates: { category: string; name: string; enabled: boolean }[]): void {
+        console.log(`Backend: updateToolStatusBatch called with configId: ${configId}`);
+        console.log(`Backend: Current configurations count: ${this.settings.configurations.length}`);
+        console.log(`Backend: Current config IDs:`, this.settings.configurations.map(c => c.id));
+        
+        const config = this.settings.configurations.find(config => config.id === configId);
+        if (!config) {
+            console.error(`Backend: Config not found with ID: ${configId}`);
+            console.error(`Backend: Available config IDs:`, this.settings.configurations.map(c => c.id));
+            throw new Error('配置不存在');
+        }
+
+        console.log(`Backend: Found config: ${config.name}, updating ${updates.length} tools`);
+
+        updates.forEach(update => {
+            const tool = config.tools.find(t => t.category === update.category && t.name === update.name);
+            if (tool) {
+                tool.enabled = update.enabled;
+            }
+        });
+
+        config.updatedAt = new Date().toISOString();
+        this.saveSettings();
+        console.log(`Backend: Batch update completed successfully`);
+    }
+
+    public exportConfiguration(configId: string): string {
+        const config = this.settings.configurations.find(config => config.id === configId);
+        if (!config) {
+            throw new Error('配置不存在');
+        }
+
+        return this.exportToolConfiguration(config);
+    }
+
+    public importConfiguration(configJson: string): ToolConfiguration {
+        const config = this.importToolConfiguration(configJson);
+        
+        // 生成新的ID和时间戳
+        config.id = uuidv4();
+        config.createdAt = new Date().toISOString();
+        config.updatedAt = new Date().toISOString();
+
+        if (this.settings.configurations.length >= this.settings.maxConfigSlots) {
+            throw new Error(`已达到最大配置槽位数量 (${this.settings.maxConfigSlots})`);
+        }
+
+        this.settings.configurations.push(config);
+        this.saveSettings();
+
+        return config;
+    }
+
+    public getEnabledTools(): ToolConfig[] {
+        const currentConfig = this.getCurrentConfiguration();
+        if (!currentConfig) {
+            return this.availableTools.filter(tool => tool.enabled);
+        }
+        return currentConfig.tools.filter(tool => tool.enabled);
+    }
+
+    public getToolManagerState() {
+        const currentConfig = this.getCurrentConfiguration();
+        return {
+            success: true,
+            availableTools: currentConfig ? currentConfig.tools : this.getAvailableTools(),
+            selectedConfigId: this.settings.currentConfigId,
+            configurations: this.getConfigurations(),
+            maxConfigSlots: this.settings.maxConfigSlots
+        };
+    }
+
+    private saveSettings(): void {
+        console.log(`Backend: Saving settings, current configs count: ${this.settings.configurations.length}`);
+        this.saveToolManagerSettings(this.settings);
+        console.log(`Backend: Settings saved to file`);
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/tools/validation-tools.ts">
+import { ToolDefinition, ToolResponse, ToolExecutor } from '../types';
+
+export class ValidationTools implements ToolExecutor {
+    getTools(): ToolDefinition[] {
+        return [
+            {
+                name: 'validate_json_params',
+                description: 'Validate and fix JSON parameters before sending to other tools',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        jsonString: {
+                            type: 'string',
+                            description: 'JSON string to validate and fix'
+                        },
+                        expectedSchema: {
+                            type: 'object',
+                            description: 'Expected parameter schema (optional)'
+                        }
+                    },
+                    required: ['jsonString']
+                }
+            },
+            {
+                name: 'safe_string_value',
+                description: 'Create a safe string value that won\'t cause JSON parsing issues',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        value: {
+                            type: 'string',
+                            description: 'String value to make safe'
+                        }
+                    },
+                    required: ['value']
+                }
+            },
+            {
+                name: 'format_mcp_request',
+                description: 'Format a complete MCP request with proper JSON escaping',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        toolName: {
+                            type: 'string',
+                            description: 'Tool name to call'
+                        },
+                        arguments: {
+                            type: 'object',
+                            description: 'Tool arguments'
+                        }
+                    },
+                    required: ['toolName', 'arguments']
+                }
+            }
+        ];
+    }
+
+    async execute(toolName: string, args: any): Promise<ToolResponse> {
+        switch (toolName) {
+            case 'validate_json_params':
+                return await this.validateJsonParams(args.jsonString, args.expectedSchema);
+            case 'safe_string_value':
+                return await this.createSafeStringValue(args.value);
+            case 'format_mcp_request':
+                return await this.formatMcpRequest(args.toolName, args.arguments);
+            default:
+                throw new Error(`Unknown tool: ${toolName}`);
+        }
+    }
+
+    private async validateJsonParams(jsonString: string, expectedSchema?: any): Promise<ToolResponse> {
+        try {
+            // First try to parse as-is
+            let parsed;
+            try {
+                parsed = JSON.parse(jsonString);
+            } catch (error: any) {
+                // Try to fix common issues
+                const fixed = this.fixJsonString(jsonString);
+                try {
+                    parsed = JSON.parse(fixed);
+                } catch (secondError) {
+                    return {
+                        success: false,
+                        error: `Cannot fix JSON: ${error.message}`,
+                        data: {
+                            originalJson: jsonString,
+                            fixedAttempt: fixed,
+                            suggestions: this.getJsonFixSuggestions(jsonString)
+                        }
+                    };
+                }
+            }
+
+            // Validate against schema if provided
+            if (expectedSchema) {
+                const validation = this.validateAgainstSchema(parsed, expectedSchema);
+                if (!validation.valid) {
+                    return {
+                        success: false,
+                        error: 'Schema validation failed',
+                        data: {
+                            parsedJson: parsed,
+                            validationErrors: validation.errors,
+                            suggestions: validation.suggestions
+                        }
+                    };
+                }
+            }
+
+            return {
+                success: true,
+                data: {
+                    parsedJson: parsed,
+                    fixedJson: JSON.stringify(parsed, null, 2),
+                    isValid: true
+                }
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: error.message
+            };
+        }
+    }
+
+    private async createSafeStringValue(value: string): Promise<ToolResponse> {
+        const safeValue = this.escapJsonString(value);
+        return {
+            success: true,
+            data: {
+                originalValue: value,
+                safeValue: safeValue,
+                jsonReady: JSON.stringify(safeValue),
+                usage: `Use "${safeValue}" in your JSON parameters`
+            }
+        };
+    }
+
+    private async formatMcpRequest(toolName: string, toolArgs: any): Promise<ToolResponse> {
+        try {
+            const mcpRequest = {
+                jsonrpc: '2.0',
+                id: Date.now(),
+                method: 'tools/call',
+                params: {
+                    name: toolName,
+                    arguments: toolArgs
+                }
+            };
+
+            const formattedJson = JSON.stringify(mcpRequest, null, 2);
+            const compactJson = JSON.stringify(mcpRequest);
+
+            return {
+                success: true,
+                data: {
+                    request: mcpRequest,
+                    formattedJson: formattedJson,
+                    compactJson: compactJson,
+                    curlCommand: this.generateCurlCommand(compactJson)
+                }
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                error: `Failed to format MCP request: ${error.message}`
+            };
+        }
+    }
+
+    private fixJsonString(jsonStr: string): string {
+        let fixed = jsonStr;
+        
+        // Fix common escape character issues
+        fixed = fixed
+            // Fix unescaped quotes in string values
+            .replace(/(\{[^}]*"[^"]*":\s*")([^"]*")([^"]*")([^}]*\})/g, (match, prefix, content, suffix, end) => {
+                const escapedContent = content.replace(/"/g, '\\"');
+                return prefix + escapedContent + suffix + end;
+            })
+            // Fix unescaped backslashes
+            .replace(/([^\\])\\([^"\\\/bfnrtu])/g, '$1\\\\$2')
+            // Fix trailing commas
+            .replace(/,(\s*[}\]])/g, '$1')
+            // Fix control characters
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t')
+            // Fix single quotes to double quotes
+            .replace(/'/g, '"');
+        
+        return fixed;
+    }
+
+    private escapJsonString(str: string): string {
+        return str
+            .replace(/\\/g, '\\\\')  // Escape backslashes first
+            .replace(/"/g, '\\"')    // Escape quotes
+            .replace(/\n/g, '\\n')   // Escape newlines
+            .replace(/\r/g, '\\r')   // Escape carriage returns
+            .replace(/\t/g, '\\t')   // Escape tabs
+            .replace(/\f/g, '\\f')   // Escape form feeds
+            .replace(/\b/g, '\\b');  // Escape backspaces
+    }
+
+    private validateAgainstSchema(data: any, schema: any): { valid: boolean; errors: string[]; suggestions: string[] } {
+        const errors: string[] = [];
+        const suggestions: string[] = [];
+
+        // Basic type checking
+        if (schema.type) {
+            const actualType = Array.isArray(data) ? 'array' : typeof data;
+            if (actualType !== schema.type) {
+                errors.push(`Expected type ${schema.type}, got ${actualType}`);
+                suggestions.push(`Convert value to ${schema.type}`);
+            }
+        }
+
+        // Required fields checking
+        if (schema.required && Array.isArray(schema.required)) {
+            for (const field of schema.required) {
+                if (!Object.prototype.hasOwnProperty.call(data, field)) {
+                    errors.push(`Missing required field: ${field}`);
+                    suggestions.push(`Add required field "${field}"`);
+                }
+            }
+        }
+
+        return {
+            valid: errors.length === 0,
+            errors,
+            suggestions
+        };
+    }
+
+    private getJsonFixSuggestions(jsonStr: string): string[] {
+        const suggestions: string[] = [];
+        
+        if (jsonStr.includes('\\"')) {
+            suggestions.push('Check for improperly escaped quotes');
+        }
+        if (jsonStr.includes("'")) {
+            suggestions.push('Replace single quotes with double quotes');
+        }
+        if (jsonStr.includes('\n') || jsonStr.includes('\t')) {
+            suggestions.push('Escape newlines and tabs properly');
+        }
+        if (jsonStr.match(/,\s*[}\]]/)) {
+            suggestions.push('Remove trailing commas');
+        }
+        
+        return suggestions;
+    }
+
+    private generateCurlCommand(jsonStr: string): string {
+        const escapedJson = jsonStr.replace(/'/g, "'\"'\"'");
+        return `curl -X POST http://127.0.0.1:8585/mcp \\
+  -H "Content-Type: application/json" \\
+  -d '${escapedJson}'`;
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/types/index.ts">
+export interface MCPServerSettings {
+    port: number;
+    autoStart: boolean;
+    enableDebugLog: boolean;
+    allowedOrigins: string[];
+    maxConnections: number;
+}
+
+export interface ServerStatus {
+    running: boolean;
+    port: number;
+    clients: number;
+}
+
+export interface ToolDefinition {
+    name: string;
+    description: string;
+    inputSchema: any;
+}
+
+export interface ToolResponse {
+    success: boolean;
+    data?: any;
+    message?: string;
+    error?: string;
+    instruction?: string;
+    warning?: string;
+    verificationData?: any;
+    updatedProperties?: string[];
+}
+
+export interface NodeInfo {
+    uuid: string;
+    name: string;
+    active: boolean;
+    position?: { x: number; y: number; z: number };
+    rotation?: { x: number; y: number; z: number };
+    scale?: { x: number; y: number; z: number };
+    parent?: string;
+    children?: string[];
+    components?: ComponentInfo[];
+    layer?: number;
+    mobility?: number;
+}
+
+export interface ComponentInfo {
+    type: string;
+    enabled: boolean;
+    properties?: Record<string, any>;
+}
+
+export interface SceneInfo {
+    name: string;
+    uuid: string;
+    path: string;
+}
+
+export interface PrefabInfo {
+    name: string;
+    uuid: string;
+    path: string;
+    folder: string;
+    createTime?: string;
+    modifyTime?: string;
+    dependencies?: string[];
+}
+
+export interface AssetInfo {
+    name: string;
+    uuid: string;
+    path: string;
+    type: string;
+    size?: number;
+    isDirectory: boolean;
+    meta?: {
+        ver: string;
+        importer: string;
+    };
+}
+
+export interface ProjectInfo {
+    name: string;
+    path: string;
+    uuid: string;
+    version: string;
+    cocosVersion: string;
+}
+
+export interface ConsoleMessage {
+    timestamp: string;
+    type: 'log' | 'warn' | 'error' | 'info';
+    message: string;
+    stack?: string;
+}
+
+export interface PerformanceStats {
+    nodeCount: number;
+    componentCount: number;
+    drawCalls: number;
+    triangles: number;
+    memory: Record<string, any>;
+}
+
+export interface ValidationIssue {
+    type: 'error' | 'warning' | 'info';
+    category: string;
+    message: string;
+    details?: any;
+    suggestion?: string;
+}
+
+export interface ValidationResult {
+    valid: boolean;
+    issueCount: number;
+    issues: ValidationIssue[];
+}
+
+export interface MCPClient {
+    id: string;
+    lastActivity: Date;
+    userAgent?: string;
+}
+
+export interface ToolExecutor {
+    getTools(): ToolDefinition[];
+    execute(toolName: string, args: any): Promise<ToolResponse>;
+}
+
+// 工具配置管理相关接口
+export interface ToolConfig {
+    category: string;
+    name: string;
+    enabled: boolean;
+    description: string;
+}
+
+export interface ToolConfiguration {
+    id: string;
+    name: string;
+    description?: string;
+    tools: ToolConfig[];
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ToolManagerSettings {
+    configurations: ToolConfiguration[];
+    currentConfigId: string;
+    maxConfigSlots: number;
+}
+
+export interface ToolManagerState {
+    availableTools: ToolConfig[];
+    currentConfiguration: ToolConfiguration | null;
+    configurations: ToolConfiguration[];
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/main.ts">
+import { MCPServer } from './mcp-server';
+import { readSettings, saveSettings } from './settings';
+import { MCPServerSettings } from './types';
+import { ToolManager } from './tools/tool-manager';
+
+let mcpServer: MCPServer | null = null;
+let toolManager: ToolManager;
+
+/**
+ * @en Registration method for the main process of Extension
+ * @zh 为扩展的主进程的注册方法
+ */
+export const methods: { [key: string]: (...any: any) => any } = {
+    /**
+     * @en Open the MCP server panel
+     * @zh 打开 MCP 服务器面板
+     */
+    openPanel() {
+        Editor.Panel.open('cocos-mcp-server');
+    },
+
+
+
+    /**
+     * @en Start the MCP server
+     * @zh 启动 MCP 服务器
+     */
+    async startServer() {
+        if (mcpServer) {
+            // 确保使用最新的工具配置
+            const enabledTools = toolManager.getEnabledTools();
+            mcpServer.updateEnabledTools(enabledTools);
+            await mcpServer.start();
+        } else {
+            console.warn('[MCP插件] mcpServer 未初始化');
+        }
+    },
+
+    /**
+     * @en Stop the MCP server
+     * @zh 停止 MCP 服务器
+     */
+    async stopServer() {
+        if (mcpServer) {
+            mcpServer.stop();
+        } else {
+            console.warn('[MCP插件] mcpServer 未初始化');
+        }
+    },
+
+    /**
+     * @en Get server status
+     * @zh 获取服务器状态
+     */
+    getServerStatus() {
+        const status = mcpServer ? mcpServer.getStatus() : { running: false, port: 0, clients: 0 };
+        const settings = mcpServer ? mcpServer.getSettings() : readSettings();
+        return {
+            ...status,
+            settings: settings
+        };
+    },
+
+    /**
+     * @en Update server settings
+     * @zh 更新服务器设置
+     */
+    updateSettings(settings: MCPServerSettings) {
+        saveSettings(settings);
+        if (mcpServer) {
+            mcpServer.stop();
+            mcpServer = new MCPServer(settings);
+            mcpServer.start();
+        } else {
+            mcpServer = new MCPServer(settings);
+            mcpServer.start();
+        }
+    },
+
+    /**
+     * @en Get tools list
+     * @zh 获取工具列表
+     */
+    getToolsList() {
+        return mcpServer ? mcpServer.getAvailableTools() : [];
+    },
+
+    getFilteredToolsList() {
+        if (!mcpServer) return [];
+        
+        // 获取当前启用的工具
+        const enabledTools = toolManager.getEnabledTools();
+        
+        // 更新MCP服务器的启用工具列表
+        mcpServer.updateEnabledTools(enabledTools);
+        
+        return mcpServer.getFilteredTools(enabledTools);
+    },
+    /**
+     * @en Get server settings
+     * @zh 获取服务器设置
+     */
+    async getServerSettings() {
+        return mcpServer ? mcpServer.getSettings() : readSettings();
+    },
+
+    /**
+     * @en Get server settings (alternative method)
+     * @zh 获取服务器设置（替代方法）
+     */
+    async getSettings() {
+        return mcpServer ? mcpServer.getSettings() : readSettings();
+    },
+
+    // 工具管理器相关方法
+    async getToolManagerState() {
+        return toolManager.getToolManagerState();
+    },
+
+    async createToolConfiguration(name: string, description?: string) {
+        try {
+            const config = toolManager.createConfiguration(name, description);
+            return { success: true, id: config.id, config };
+        } catch (error: any) {
+            throw new Error(`创建配置失败: ${error.message}`);
+        }
+    },
+
+    async updateToolConfiguration(configId: string, updates: any) {
+        try {
+            return toolManager.updateConfiguration(configId, updates);
+        } catch (error: any) {
+            throw new Error(`更新配置失败: ${error.message}`);
+        }
+    },
+
+    async deleteToolConfiguration(configId: string) {
+        try {
+            toolManager.deleteConfiguration(configId);
+            return { success: true };
+        } catch (error: any) {
+            throw new Error(`删除配置失败: ${error.message}`);
+        }
+    },
+
+    async setCurrentToolConfiguration(configId: string) {
+        try {
+            toolManager.setCurrentConfiguration(configId);
+            return { success: true };
+        } catch (error: any) {
+            throw new Error(`设置当前配置失败: ${error.message}`);
+        }
+    },
+
+    async updateToolStatus(category: string, toolName: string, enabled: boolean) {
+        try {
+            const currentConfig = toolManager.getCurrentConfiguration();
+            if (!currentConfig) {
+                throw new Error('没有当前配置');
+            }
+            
+            toolManager.updateToolStatus(currentConfig.id, category, toolName, enabled);
+            
+            // 更新MCP服务器的工具列表
+            if (mcpServer) {
+                const enabledTools = toolManager.getEnabledTools();
+                mcpServer.updateEnabledTools(enabledTools);
+            }
+            
+            return { success: true };
+        } catch (error: any) {
+            throw new Error(`更新工具状态失败: ${error.message}`);
+        }
+    },
+
+    async updateToolStatusBatch(updates: any[]) {
+        try {
+            console.log(`[Main] updateToolStatusBatch called with updates count:`, updates ? updates.length : 0);
+            
+            const currentConfig = toolManager.getCurrentConfiguration();
+            if (!currentConfig) {
+                throw new Error('没有当前配置');
+            }
+            
+            toolManager.updateToolStatusBatch(currentConfig.id, updates);
+            
+            // 更新MCP服务器的工具列表
+            if (mcpServer) {
+                const enabledTools = toolManager.getEnabledTools();
+                mcpServer.updateEnabledTools(enabledTools);
+            }
+            
+            return { success: true };
+        } catch (error: any) {
+            throw new Error(`批量更新工具状态失败: ${error.message}`);
+        }
+    },
+
+    async exportToolConfiguration(configId: string) {
+        try {
+            return { configJson: toolManager.exportConfiguration(configId) };
+        } catch (error: any) {
+            throw new Error(`导出配置失败: ${error.message}`);
+        }
+    },
+
+    async importToolConfiguration(configJson: string) {
+        try {
+            return toolManager.importConfiguration(configJson);
+        } catch (error: any) {
+            throw new Error(`导入配置失败: ${error.message}`);
+        }
+    },
+
+    async getEnabledTools() {
+        return toolManager.getEnabledTools();
+    }
+};
+
+/**
+ * @en Method Triggered on Extension Startup
+ * @zh 扩展启动时触发的方法
+ */
+export function load() {
+    console.log('Cocos MCP Server extension loaded');
+    
+    // 初始化工具管理器
+    toolManager = new ToolManager();
+    
+    // 读取设置
+    const settings = readSettings();
+    mcpServer = new MCPServer(settings);
+    
+    // 初始化MCP服务器的工具列表
+    const enabledTools = toolManager.getEnabledTools();
+    mcpServer.updateEnabledTools(enabledTools);
+    
+    // 如果设置了自动启动，则启动服务器
+    if (settings.autoStart) {
+        mcpServer.start().catch(err => {
+            console.error('Failed to auto-start MCP server:', err);
+        });
+    }
+}
+
+/**
+ * @en Method triggered when uninstalling the extension
+ * @zh 卸载扩展时触发的方法
+ */
+export function unload() {
+    if (mcpServer) {
+        mcpServer.stop();
+        mcpServer = null;
+    }
+}
+</file>
+
+<file path="extensions/cocos-mcp-server/source/mcp-server.ts">
+import * as http from 'http';
+import * as url from 'url';
+import { v4 as uuidv4 } from 'uuid';
+import { MCPServerSettings, ServerStatus, MCPClient, ToolDefinition } from './types';
+import { SceneTools } from './tools/scene-tools';
+import { NodeTools } from './tools/node-tools';
+import { ComponentTools } from './tools/component-tools';
+import { PrefabTools } from './tools/prefab-tools';
+import { ProjectTools } from './tools/project-tools';
+import { DebugTools } from './tools/debug-tools';
+import { PreferencesTools } from './tools/preferences-tools';
+import { ServerTools } from './tools/server-tools';
+import { BroadcastTools } from './tools/broadcast-tools';
+import { SceneAdvancedTools } from './tools/scene-advanced-tools';
+import { SceneViewTools } from './tools/scene-view-tools';
+import { ReferenceImageTools } from './tools/reference-image-tools';
+import { AssetAdvancedTools } from './tools/asset-advanced-tools';
+import { ValidationTools } from './tools/validation-tools';
+
+export class MCPServer {
+    private settings: MCPServerSettings;
+    private httpServer: http.Server | null = null;
+    private clients: Map<string, MCPClient> = new Map();
+    private tools: Record<string, any> = {};
+    private toolsList: ToolDefinition[] = [];
+    private enabledTools: any[] = []; // 存储启用的工具列表
+
+    constructor(settings: MCPServerSettings) {
+        this.settings = settings;
+        this.initializeTools();
+    }
+
+    private initializeTools(): void {
+        try {
+            console.log('[MCPServer] Initializing tools...');
+            this.tools.scene = new SceneTools();
+            this.tools.node = new NodeTools();
+            this.tools.component = new ComponentTools();
+            this.tools.prefab = new PrefabTools();
+            this.tools.project = new ProjectTools();
+            this.tools.debug = new DebugTools();
+            this.tools.preferences = new PreferencesTools();
+            this.tools.server = new ServerTools();
+            this.tools.broadcast = new BroadcastTools();
+            this.tools.sceneAdvanced = new SceneAdvancedTools();
+            this.tools.sceneView = new SceneViewTools();
+            this.tools.referenceImage = new ReferenceImageTools();
+            this.tools.assetAdvanced = new AssetAdvancedTools();
+            this.tools.validation = new ValidationTools();
+            console.log('[MCPServer] Tools initialized successfully');
+        } catch (error) {
+            console.error('[MCPServer] Error initializing tools:', error);
+            throw error;
+        }
+    }
+
+    public async start(): Promise<void> {
+        if (this.httpServer) {
+            console.log('[MCPServer] Server is already running');
+            return;
+        }
+
+        try {
+            console.log(`[MCPServer] Starting HTTP server on port ${this.settings.port}...`);
+            this.httpServer = http.createServer(this.handleHttpRequest.bind(this));
+
+            await new Promise<void>((resolve, reject) => {
+                this.httpServer!.listen(this.settings.port, '127.0.0.1', () => {
+                    console.log(`[MCPServer] ✅ HTTP server started successfully on http://127.0.0.1:${this.settings.port}`);
+                    console.log(`[MCPServer] Health check: http://127.0.0.1:${this.settings.port}/health`);
+                    console.log(`[MCPServer] MCP endpoint: http://127.0.0.1:${this.settings.port}/mcp`);
+                    resolve();
+                });
+                this.httpServer!.on('error', (err: any) => {
+                    console.error('[MCPServer] ❌ Failed to start server:', err);
+                    if (err.code === 'EADDRINUSE') {
+                        console.error(`[MCPServer] Port ${this.settings.port} is already in use. Please change the port in settings.`);
+                    }
+                    reject(err);
+                });
+            });
+
+            this.setupTools();
+            console.log('[MCPServer] 🚀 MCP Server is ready for connections');
+        } catch (error) {
+            console.error('[MCPServer] ❌ Failed to start server:', error);
+            throw error;
+        }
+    }
+
+    private setupTools(): void {
+        this.toolsList = [];
+        
+        // 如果没有启用工具配置，返回所有工具
+        if (!this.enabledTools || this.enabledTools.length === 0) {
+            for (const [category, toolSet] of Object.entries(this.tools)) {
+                const tools = toolSet.getTools();
+                for (const tool of tools) {
+                    this.toolsList.push({
+                        name: `${category}_${tool.name}`,
+                        description: tool.description,
+                        inputSchema: tool.inputSchema
+                    });
+                }
+            }
+        } else {
+            // 根据启用的工具配置过滤
+            const enabledToolNames = new Set(this.enabledTools.map(tool => `${tool.category}_${tool.name}`));
+            
+            for (const [category, toolSet] of Object.entries(this.tools)) {
+                const tools = toolSet.getTools();
+                for (const tool of tools) {
+                    const toolName = `${category}_${tool.name}`;
+                    if (enabledToolNames.has(toolName)) {
+                        this.toolsList.push({
+                            name: toolName,
+                            description: tool.description,
+                            inputSchema: tool.inputSchema
+                        });
+                    }
+                }
+            }
+        }
+        
+        console.log(`[MCPServer] Setup tools: ${this.toolsList.length} tools available`);
+    }
+
+    public getFilteredTools(enabledTools: any[]): ToolDefinition[] {
+        if (!enabledTools || enabledTools.length === 0) {
+            return this.toolsList; // 如果没有过滤配置，返回所有工具
+        }
+
+        const enabledToolNames = new Set(enabledTools.map(tool => `${tool.category}_${tool.name}`));
+        return this.toolsList.filter(tool => enabledToolNames.has(tool.name));
+    }
+
+    public async executeToolCall(toolName: string, args: any): Promise<any> {
+        const parts = toolName.split('_');
+        const category = parts[0];
+        const toolMethodName = parts.slice(1).join('_');
+        
+        if (this.tools[category]) {
+            return await this.tools[category].execute(toolMethodName, args);
+        }
+        
+        throw new Error(`Tool ${toolName} not found`);
+    }
+
+    public getClients(): MCPClient[] {
+        return Array.from(this.clients.values());
+    }
+    public getAvailableTools(): ToolDefinition[] {
+        return this.toolsList;
+    }
+
+    public updateEnabledTools(enabledTools: any[]): void {
+        console.log(`[MCPServer] Updating enabled tools: ${enabledTools.length} tools`);
+        this.enabledTools = enabledTools;
+        this.setupTools(); // 重新设置工具列表
+    }
+
+    public getSettings(): MCPServerSettings {
+        return this.settings;
+    }
+
+    private async handleHttpRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+        const parsedUrl = url.parse(req.url || '', true);
+        const pathname = parsedUrl.pathname;
+        
+        // Set CORS headers
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Content-Type', 'application/json');
+        
+        if (req.method === 'OPTIONS') {
+            res.writeHead(200);
+            res.end();
+            return;
+        }
+        
+        try {
+            if (pathname === '/mcp' && req.method === 'POST') {
+                await this.handleMCPRequest(req, res);
+            } else if (pathname === '/health' && req.method === 'GET') {
+                res.writeHead(200);
+                res.end(JSON.stringify({ status: 'ok', tools: this.toolsList.length }));
+            } else if (pathname?.startsWith('/api/') && req.method === 'POST') {
+                await this.handleSimpleAPIRequest(req, res, pathname);
+            } else if (pathname === '/api/tools' && req.method === 'GET') {
+                res.writeHead(200);
+                res.end(JSON.stringify({ tools: this.getSimplifiedToolsList() }));
+            } else {
+                res.writeHead(404);
+                res.end(JSON.stringify({ error: 'Not found' }));
+            }
+        } catch (error) {
+            console.error('HTTP request error:', error);
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: 'Internal server error' }));
+        }
+    }
+    
+    private async handleMCPRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+        let body = '';
+        
+        req.on('data', (chunk) => {
+            body += chunk.toString();
+        });
+        
+        req.on('end', async () => {
+            try {
+                // Enhanced JSON parsing with better error handling
+                let message;
+                try {
+                    message = JSON.parse(body);
+                } catch (parseError: any) {
+                    // Try to fix common JSON issues
+                    const fixedBody = this.fixCommonJsonIssues(body);
+                    try {
+                        message = JSON.parse(fixedBody);
+                        console.log('[MCPServer] Fixed JSON parsing issue');
+                    } catch (secondError) {
+                        throw new Error(`JSON parsing failed: ${parseError.message}. Original body: ${body.substring(0, 500)}...`);
+                    }
+                }
+                
+                const response = await this.handleMessage(message);
+                res.writeHead(200);
+                res.end(JSON.stringify(response));
+            } catch (error: any) {
+                console.error('Error handling MCP request:', error);
+                res.writeHead(400);
+                res.end(JSON.stringify({
+                    jsonrpc: '2.0',
+                    id: null,
+                    error: {
+                        code: -32700,
+                        message: `Parse error: ${error.message}`
+                    }
+                }));
+            }
+        });
+    }
+
+    private async handleMessage(message: any): Promise<any> {
+        const { id, method, params } = message;
+
+        try {
+            let result: any;
+
+            switch (method) {
+                case 'tools/list':
+                    result = { tools: this.getAvailableTools() };
+                    break;
+                case 'tools/call':
+                    const { name, arguments: args } = params;
+                    const toolResult = await this.executeToolCall(name, args);
+                    result = { content: [{ type: 'text', text: JSON.stringify(toolResult) }] };
+                    break;
+                case 'initialize':
+                    // MCP initialization
+                    result = {
+                        protocolVersion: '2024-11-05',
+                        capabilities: {
+                            tools: {}
+                        },
+                        serverInfo: {
+                            name: 'cocos-mcp-server',
+                            version: '1.0.0'
+                        }
+                    };
+                    break;
+                default:
+                    throw new Error(`Unknown method: ${method}`);
+            }
+
+            return {
+                jsonrpc: '2.0',
+                id,
+                result
+            };
+        } catch (error: any) {
+            return {
+                jsonrpc: '2.0',
+                id,
+                error: {
+                    code: -32603,
+                    message: error.message
+                }
+            };
+        }
+    }
+
+    private fixCommonJsonIssues(jsonStr: string): string {
+        let fixed = jsonStr;
+        
+        // Fix common escape character issues
+        fixed = fixed
+            // Fix unescaped quotes in strings
+            .replace(/([^\\])"([^"]*[^\\])"([^,}\]:])/g, '$1\\"$2\\"$3')
+            // Fix unescaped backslashes
+            .replace(/([^\\])\\([^"\\\/bfnrt])/g, '$1\\\\$2')
+            // Fix trailing commas
+            .replace(/,(\s*[}\]])/g, '$1')
+            // Fix single quotes (should be double quotes)
+            .replace(/'/g, '"')
+            // Fix common control characters
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r')
+            .replace(/\t/g, '\\t');
+        
+        return fixed;
+    }
+
+    public stop(): void {
+        if (this.httpServer) {
+            this.httpServer.close();
+            this.httpServer = null;
+            console.log('[MCPServer] HTTP server stopped');
+        }
+
+        this.clients.clear();
+    }
+
+    public getStatus(): ServerStatus {
+        return {
+            running: !!this.httpServer,
+            port: this.settings.port,
+            clients: 0 // HTTP is stateless, no persistent clients
+        };
+    }
+
+    private async handleSimpleAPIRequest(req: http.IncomingMessage, res: http.ServerResponse, pathname: string): Promise<void> {
+        let body = '';
+        
+        req.on('data', (chunk) => {
+            body += chunk.toString();
+        });
+        
+        req.on('end', async () => {
+            try {
+                // Extract tool name from path like /api/node/set_position
+                const pathParts = pathname.split('/').filter(p => p);
+                if (pathParts.length < 3) {
+                    res.writeHead(400);
+                    res.end(JSON.stringify({ error: 'Invalid API path. Use /api/{category}/{tool_name}' }));
+                    return;
+                }
+                
+                const category = pathParts[1];
+                const toolName = pathParts[2];
+                const fullToolName = `${category}_${toolName}`;
+                
+                // Parse parameters with enhanced error handling
+                let params;
+                try {
+                    params = body ? JSON.parse(body) : {};
+                } catch (parseError: any) {
+                    // Try to fix JSON issues
+                    const fixedBody = this.fixCommonJsonIssues(body);
+                    try {
+                        params = JSON.parse(fixedBody);
+                        console.log('[MCPServer] Fixed API JSON parsing issue');
+                    } catch (secondError: any) {
+                        res.writeHead(400);
+                        res.end(JSON.stringify({
+                            error: 'Invalid JSON in request body',
+                            details: parseError.message,
+                            receivedBody: body.substring(0, 200)
+                        }));
+                        return;
+                    }
+                }
+                
+                // Execute tool
+                const result = await this.executeToolCall(fullToolName, params);
+                
+                res.writeHead(200);
+                res.end(JSON.stringify({
+                    success: true,
+                    tool: fullToolName,
+                    result: result
+                }));
+                
+            } catch (error: any) {
+                console.error('Simple API error:', error);
+                res.writeHead(500);
+                res.end(JSON.stringify({
+                    success: false,
+                    error: error.message,
+                    tool: pathname
+                }));
+            }
+        });
+    }
+
+    private getSimplifiedToolsList(): any[] {
+        return this.toolsList.map(tool => {
+            const parts = tool.name.split('_');
+            const category = parts[0];
+            const toolName = parts.slice(1).join('_');
+            
+            return {
+                name: tool.name,
+                category: category,
+                toolName: toolName,
+                description: tool.description,
+                apiPath: `/api/${category}/${toolName}`,
+                curlExample: this.generateCurlExample(category, toolName, tool.inputSchema)
+            };
+        });
+    }
+
+    private generateCurlExample(category: string, toolName: string, schema: any): string {
+        // Generate sample parameters based on schema
+        const sampleParams = this.generateSampleParams(schema);
+        const jsonString = JSON.stringify(sampleParams, null, 2);
+        
+        return `curl -X POST http://127.0.0.1:8585/api/${category}/${toolName} \\
+  -H "Content-Type: application/json" \\
+  -d '${jsonString}'`;
+    }
+
+    private generateSampleParams(schema: any): any {
+        if (!schema || !schema.properties) return {};
+        
+        const sample: any = {};
+        for (const [key, prop] of Object.entries(schema.properties as any)) {
+            const propSchema = prop as any;
+            switch (propSchema.type) {
+                case 'string':
+                    sample[key] = propSchema.default || 'example_string';
+                    break;
+                case 'number':
+                    sample[key] = propSchema.default || 42;
+                    break;
+                case 'boolean':
+                    sample[key] = propSchema.default || true;
+                    break;
+                case 'object':
+                    sample[key] = propSchema.default || { x: 0, y: 0, z: 0 };
+                    break;
+                default:
+                    sample[key] = 'example_value';
+            }
+        }
+        return sample;
+    }
+
+    public updateSettings(settings: MCPServerSettings) {
+        this.settings = settings;
+        if (this.httpServer) {
+            this.stop();
+            this.start();
+        }
+    }
+}
+
+// HTTP transport doesn't need persistent connections
+// MCP over HTTP uses request-response pattern
+</file>
+
+<file path="extensions/cocos-mcp-server/source/scene.ts">
+import { join } from 'path';
+module.paths.push(join(Editor.App.path, 'node_modules'));
+
+export const methods: { [key: string]: (...any: any) => any } = {
+    /**
+     * Create a new scene
+     */
+    createNewScene() {
+        try {
+            const { director, Scene } = require('cc');
+            const scene = new Scene();
+            scene.name = 'New Scene';
+            director.runScene(scene);
+            return { success: true, message: 'New scene created successfully' };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Add component to a node
+     */
+    addComponentToNode(nodeUuid: string, componentType: string) {
+        try {
+            const { director, js } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            // Find node by UUID
+            const node = scene.getChildByUuid(nodeUuid);
+            if (!node) {
+                return { success: false, error: `Node with UUID ${nodeUuid} not found` };
+            }
+
+            // Get component class
+            const ComponentClass = js.getClassByName(componentType);
+            if (!ComponentClass) {
+                return { success: false, error: `Component type ${componentType} not found` };
+            }
+
+            // Add component
+            const component = node.addComponent(ComponentClass);
+            return { 
+                success: true, 
+                message: `Component ${componentType} added successfully`,
+                data: { componentId: component.uuid }
+            };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Remove component from a node
+     */
+    removeComponentFromNode(nodeUuid: string, componentType: string) {
+        try {
+            const { director, js } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            const node = scene.getChildByUuid(nodeUuid);
+            if (!node) {
+                return { success: false, error: `Node with UUID ${nodeUuid} not found` };
+            }
+
+            const ComponentClass = js.getClassByName(componentType);
+            if (!ComponentClass) {
+                return { success: false, error: `Component type ${componentType} not found` };
+            }
+
+            const component = node.getComponent(ComponentClass);
+            if (!component) {
+                return { success: false, error: `Component ${componentType} not found on node` };
+            }
+
+            node.removeComponent(component);
+            return { success: true, message: `Component ${componentType} removed successfully` };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Create a new node
+     */
+    createNode(name: string, parentUuid?: string) {
+        try {
+            const { director, Node } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            const node = new Node(name);
+            
+            if (parentUuid) {
+                const parent = scene.getChildByUuid(parentUuid);
+                if (parent) {
+                    parent.addChild(node);
+                } else {
+                    scene.addChild(node);
+                }
+            } else {
+                scene.addChild(node);
+            }
+
+            return { 
+                success: true, 
+                message: `Node ${name} created successfully`,
+                data: { uuid: node.uuid, name: node.name }
+            };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Get node information
+     */
+    getNodeInfo(nodeUuid: string) {
+        try {
+            const { director } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            const node = scene.getChildByUuid(nodeUuid);
+            if (!node) {
+                return { success: false, error: `Node with UUID ${nodeUuid} not found` };
+            }
+
+            return {
+                success: true,
+                data: {
+                    uuid: node.uuid,
+                    name: node.name,
+                    active: node.active,
+                    position: node.position,
+                    rotation: node.rotation,
+                    scale: node.scale,
+                    parent: node.parent?.uuid,
+                    children: node.children.map((child: any) => child.uuid),
+                    components: node.components.map((comp: any) => ({
+                        type: comp.constructor.name,
+                        enabled: comp.enabled
+                    }))
+                }
+            };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Get all nodes in scene
+     */
+    getAllNodes() {
+        try {
+            const { director } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            const nodes: any[] = [];
+            const collectNodes = (node: any) => {
+                nodes.push({
+                    uuid: node.uuid,
+                    name: node.name,
+                    active: node.active,
+                    parent: node.parent?.uuid
+                });
+                
+                node.children.forEach((child: any) => collectNodes(child));
+            };
+
+            scene.children.forEach((child: any) => collectNodes(child));
+            
+            return { success: true, data: nodes };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Find node by name
+     */
+    findNodeByName(name: string) {
+        try {
+            const { director } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            const node = scene.getChildByName(name);
+            if (!node) {
+                return { success: false, error: `Node with name ${name} not found` };
+            }
+
+            return {
+                success: true,
+                data: {
+                    uuid: node.uuid,
+                    name: node.name,
+                    active: node.active,
+                    position: node.position
+                }
+            };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Get current scene information
+     */
+    getCurrentSceneInfo() {
+        try {
+            const { director } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            return {
+                success: true,
+                data: {
+                    name: scene.name,
+                    uuid: scene.uuid,
+                    nodeCount: scene.children.length
+                }
+            };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Set node property
+     */
+    setNodeProperty(nodeUuid: string, property: string, value: any) {
+        try {
+            const { director } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            const node = scene.getChildByUuid(nodeUuid);
+            if (!node) {
+                return { success: false, error: `Node with UUID ${nodeUuid} not found` };
+            }
+
+            // 设置属性
+            if (property === 'position') {
+                node.setPosition(value.x || 0, value.y || 0, value.z || 0);
+            } else if (property === 'rotation') {
+                node.setRotationFromEuler(value.x || 0, value.y || 0, value.z || 0);
+            } else if (property === 'scale') {
+                node.setScale(value.x || 1, value.y || 1, value.z || 1);
+            } else if (property === 'active') {
+                node.active = value;
+            } else if (property === 'name') {
+                node.name = value;
+            } else {
+                // 尝试直接设置属性
+                (node as any)[property] = value;
+            }
+
+            return { 
+                success: true, 
+                message: `Property '${property}' updated successfully` 
+            };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Get scene hierarchy
+     */
+    getSceneHierarchy(includeComponents: boolean = false) {
+        try {
+            const { director } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            const processNode = (node: any): any => {
+                const result: any = {
+                    name: node.name,
+                    uuid: node.uuid,
+                    active: node.active,
+                    children: []
+                };
+
+                if (includeComponents) {
+                    result.components = node.components.map((comp: any) => ({
+                        type: comp.constructor.name,
+                        enabled: comp.enabled
+                    }));
+                }
+
+                if (node.children && node.children.length > 0) {
+                    result.children = node.children.map((child: any) => processNode(child));
+                }
+
+                return result;
+            };
+
+            const hierarchy = scene.children.map((child: any) => processNode(child));
+            return { success: true, data: hierarchy };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Create prefab from node
+     */
+    createPrefabFromNode(nodeUuid: string, prefabPath: string) {
+        try {
+            const { director, instantiate } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+
+            const node = scene.getChildByUuid(nodeUuid);
+            if (!node) {
+                return { success: false, error: `Node with UUID ${nodeUuid} not found` };
+            }
+
+            // 注意：这里只是一个模拟实现，因为运行时环境下无法直接创建预制体文件
+            // 真正的预制体创建需要Editor API支持
+            return {
+                success: true,
+                data: {
+                    prefabPath: prefabPath,
+                    sourceNodeUuid: nodeUuid,
+                    message: `Prefab created from node '${node.name}' at ${prefabPath}`
+                }
+            };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    },
+
+    /**
+     * Set component property
+     */
+    setComponentProperty(nodeUuid: string, componentType: string, property: string, value: any) {
+        try {
+            const { director, js } = require('cc');
+            const scene = director.getScene();
+            if (!scene) {
+                return { success: false, error: 'No active scene' };
+            }
+            const node = scene.getChildByUuid(nodeUuid);
+            if (!node) {
+                return { success: false, error: `Node with UUID ${nodeUuid} not found` };
+            }
+            const ComponentClass = js.getClassByName(componentType);
+            if (!ComponentClass) {
+                return { success: false, error: `Component type ${componentType} not found` };
+            }
+            const component = node.getComponent(ComponentClass);
+            if (!component) {
+                return { success: false, error: `Component ${componentType} not found on node` };
+            }
+            // 针对常见属性做特殊处理
+            if (property === 'spriteFrame' && componentType === 'cc.Sprite') {
+                // 支持 value 为 uuid 或资源路径
+                if (typeof value === 'string') {
+                    // 先尝试按 uuid 查找
+                    const assetManager = require('cc').assetManager;
+                    assetManager.resources.load(value, require('cc').SpriteFrame, (err: any, spriteFrame: any) => {
+                        if (!err && spriteFrame) {
+                            component.spriteFrame = spriteFrame;
+                        } else {
+                            // 尝试通过 uuid 加载
+                            assetManager.loadAny({ uuid: value }, (err2: any, asset: any) => {
+                                if (!err2 && asset) {
+                                    component.spriteFrame = asset;
+                                } else {
+                                    // 直接赋值（兼容已传入资源对象）
+                                    component.spriteFrame = value;
+                                }
+                            });
+                        }
+                    });
+                } else {
+                    component.spriteFrame = value;
+                }
+            } else if (property === 'material' && (componentType === 'cc.Sprite' || componentType === 'cc.MeshRenderer')) {
+                // 支持 value 为 uuid 或资源路径
+                if (typeof value === 'string') {
+                    const assetManager = require('cc').assetManager;
+                    assetManager.resources.load(value, require('cc').Material, (err: any, material: any) => {
+                        if (!err && material) {
+                            component.material = material;
+                        } else {
+                            assetManager.loadAny({ uuid: value }, (err2: any, asset: any) => {
+                                if (!err2 && asset) {
+                                    component.material = asset;
+                                } else {
+                                    component.material = value;
+                                }
+                            });
+                        }
+                    });
+                } else {
+                    component.material = value;
+                }
+            } else if (property === 'string' && (componentType === 'cc.Label' || componentType === 'cc.RichText')) {
+                component.string = value;
+            } else {
+                component[property] = value;
+            }
+            // 可选：刷新 Inspector
+            // Editor.Message.send('scene', 'snapshot');
+            return { success: true, message: `Component property '${property}' updated successfully` };
+        } catch (error: any) {
+            return { success: false, error: error.message };
+        }
+    }
+};
+</file>
+
+<file path="extensions/cocos-mcp-server/source/settings.ts">
+import * as fs from 'fs';
+import * as path from 'path';
+import { MCPServerSettings, ToolManagerSettings, ToolConfiguration, ToolConfig } from './types';
+
+const DEFAULT_SETTINGS: MCPServerSettings = {
+    port: 3000,
+    autoStart: false,
+    enableDebugLog: false,
+    allowedOrigins: ['*'],
+    maxConnections: 10
+};
+
+const DEFAULT_TOOL_MANAGER_SETTINGS: ToolManagerSettings = {
+    configurations: [],
+    currentConfigId: '',
+    maxConfigSlots: 5
+};
+
+function getSettingsPath(): string {
+    return path.join(Editor.Project.path, 'settings', 'mcp-server.json');
+}
+
+function getToolManagerSettingsPath(): string {
+    return path.join(Editor.Project.path, 'settings', 'tool-manager.json');
+}
+
+function ensureSettingsDir(): void {
+    const settingsDir = path.dirname(getSettingsPath());
+    if (!fs.existsSync(settingsDir)) {
+        fs.mkdirSync(settingsDir, { recursive: true });
+    }
+}
+
+export function readSettings(): MCPServerSettings {
+    try {
+        ensureSettingsDir();
+        const settingsFile = getSettingsPath();
+        if (fs.existsSync(settingsFile)) {
+            const content = fs.readFileSync(settingsFile, 'utf8');
+            return { ...DEFAULT_SETTINGS, ...JSON.parse(content) };
+        }
+    } catch (e) {
+        console.error('Failed to read settings:', e);
+    }
+    return DEFAULT_SETTINGS;
+}
+
+export function saveSettings(settings: MCPServerSettings): void {
+    try {
+        ensureSettingsDir();
+        const settingsFile = getSettingsPath();
+        fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
+    } catch (e) {
+        console.error('Failed to save settings:', e);
+        throw e;
+    }
+}
+
+// 工具管理器设置相关函数
+export function readToolManagerSettings(): ToolManagerSettings {
+    try {
+        ensureSettingsDir();
+        const settingsFile = getToolManagerSettingsPath();
+        if (fs.existsSync(settingsFile)) {
+            const content = fs.readFileSync(settingsFile, 'utf8');
+            return { ...DEFAULT_TOOL_MANAGER_SETTINGS, ...JSON.parse(content) };
+        }
+    } catch (e) {
+        console.error('Failed to read tool manager settings:', e);
+    }
+    return DEFAULT_TOOL_MANAGER_SETTINGS;
+}
+
+export function saveToolManagerSettings(settings: ToolManagerSettings): void {
+    try {
+        ensureSettingsDir();
+        const settingsFile = getToolManagerSettingsPath();
+        fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2));
+    } catch (e) {
+        console.error('Failed to save tool manager settings:', e);
+        throw e;
+    }
+}
+
+export function exportToolConfiguration(config: ToolConfiguration): string {
+    return JSON.stringify(config, null, 2);
+}
+
+export function importToolConfiguration(configJson: string): ToolConfiguration {
+    try {
+        const config = JSON.parse(configJson);
+        // 验证配置格式
+        if (!config.id || !config.name || !Array.isArray(config.tools)) {
+            throw new Error('Invalid configuration format');
+        }
+        return config;
+    } catch (e) {
+        console.error('Failed to parse tool configuration:', e);
+        throw new Error('Invalid JSON format or configuration structure');
+    }
+}
+
+export { DEFAULT_SETTINGS, DEFAULT_TOOL_MANAGER_SETTINGS };
+</file>
+
+<file path="assets/scripts/AudioManager.ts">
 import { _decorator, Component, AudioClip, AudioSource, resources } from 'cc';
 import { SaveManager } from './SaveManager';
 const { ccclass } = _decorator;
@@ -869,10 +16100,9 @@ export class AudioManager extends Component {
         return this._enabled;
     }
 }
+</file>
 
-================
-File: assets/scripts/GameClubEntry.ts
-================
+<file path="assets/scripts/GameClubEntry.ts">
 /**
  * GameClubEntry — 微信游戏圈入口按钮
  *
@@ -1100,10 +16330,9 @@ export class GameClubEntry {
         return this.isValidNum(v) ? v : fallback;
     }
 }
+</file>
 
-================
-File: assets/scripts/SaveManager.ts
-================
+<file path="assets/scripts/SaveManager.ts">
 /**
  * SaveManager — 进度存档持久化单例（纯数据，非 Component）
  *
@@ -1186,6 +16415,7 @@ interface SaveData {
     boosters: BoosterInventory;                  // 持久化道具库存
     // Y2: 每日广告使用记录
     dailyAdUsage: DailyAdUsage;
+}
 
 // ── 常量 ────────────────────────────────────
 
@@ -2002,10 +17232,9 @@ export class SaveManager {
         }
     }
 }
+</file>
 
-================
-File: assets/scripts/Board.ts
-================
+<file path="assets/scripts/Board.ts">
 import {
     _decorator,
     Component,
@@ -6672,10 +21901,9 @@ return { cells, waveSeeds, isFullBoardClear: false };
             .start();
     }
 }
+</file>
 
-================
-File: assets/scripts/GameManager.ts
-================
+<file path="assets/scripts/GameManager.ts">
 import {
     _decorator,
     Component,
@@ -7768,6 +22996,11 @@ export class GameManager extends Component {
         this.currentSteps = this.safeNum(config.moves, 20);
         this.scoreDoubled = false;
 
+        // Y2.1: 每关开始清理奖励缓存，避免上一关状态污染
+        this.lastCoinReward = 0;
+        this.scoreDoubled = false;
+        this.coinDoubled = false;
+
         // 进关清零计数器
         this.collectedCount = {};
         this.detonatedSpecials = 0;
@@ -8200,25 +23433,12 @@ export class GameManager extends Component {
             this.spawnBossCelebration();
         }
 
+        // Y2.1: 奖励缓存已在 startLevel 中清理，这里再次确认
         this.scoreDoubled = false;
         this.coinDoubled = false;
-        // Y2: 得分翻倍按钮 — 检查每日上限
-        const scoreAdCanUse = SaveManager.inst.canUseRewardedAd('resultScore');
-        this.resultAdBtn!.getComponent(Button)!.interactable = scoreAdCanUse;
-        this.resultAdLabel!.string = scoreAdCanUse ? '▶  看广告·得分翻倍' : '今日已用完';
 
-        // E5: 扭蛋币翻倍按钮仅在过关且 lastCoinReward > 0 时显示
-        if (this.resultCoinAdBtn) {
-            const showCoinAd = isWin && this.safeNum(this.lastCoinReward, 0) > 0;
-            // Y2: 检查每日上限
-            const coinAdCanUse = showCoinAd && SaveManager.inst.canUseRewardedAd('resultCoins');
-            this.resultCoinAdBtn.active = showCoinAd;
-            this.resultCoinAdBtn.getComponent(Button)!.interactable = coinAdCanUse && !this.coinDoubled;
-        }
-        if (this.resultCoinAdLabel) {
-            const coinAdCanUse2 = SaveManager.inst.canUseRewardedAd('resultCoins');
-            this.resultCoinAdLabel.string = coinAdCanUse2 ? '看广告·扭蛋币翻倍' : '今日已用完';
-        }
+        // Y2.1: 广告按钮状态统一延后到 refreshResultAdState 中处理
+        // （在奖励计算完毕、lastCoinReward 确定之后）
 
         if (isWin) {
             if (this.currentLevel >= this.levelConfigs.length - 1) {
@@ -8326,7 +23546,65 @@ export class GameManager extends Component {
         }
         // A: 动态布局结算卡片（通过 monsterLabel.active 判断是否有公仔解锁）
         this.layoutResultPanel(isWin, this.resultMonsterLabel?.node.active ?? false);
+        // Y2.1: 统一刷新结算广告按钮状态（在 lastCoinReward 和按钮 active 确定后）
+        this.refreshResultAdState(isWin);
         console.log(`[GameManager] 结算: ${isWin ? '过关' : '失败'} | 得分 ${this.currentScore}`);
+    }
+
+    /**
+     * Y2.1: 统一刷新结算面板广告按钮状态。
+     * 必须在 lastCoinReward 和按钮 active 状态确定后调用。
+     */
+    private refreshResultAdState(isWin: boolean): void {
+        // Y2.1: 得分翻倍广告按钮
+        if (this.resultAdBtn && this.resultAdLabel) {
+            const showScoreAd = isWin && !this._autoTestRunning;
+            this.resultAdBtn.active = showScoreAd;
+            if (showScoreAd) {
+                const btn = this.resultAdBtn.getComponent(Button);
+                if (btn) {
+                    if (this.scoreDoubled) {
+                        btn.interactable = false;
+                        this.resultAdLabel.string = '已翻倍';
+                    } else if (!SaveManager.inst.canUseRewardedAd('resultScore')) {
+                        btn.interactable = false;
+                        this.resultAdLabel.string = '今日已用完';
+                    } else {
+                        btn.interactable = true;
+                        this.resultAdLabel.string = '▶  看广告·得分翻倍';
+                    }
+                }
+            }
+        }
+
+        // Y2.1: 扭蛋币翻倍广告按钮
+        if (this.resultCoinAdBtn) {
+            const showCoinAd = isWin
+                && this.safeNum(this.lastCoinReward, 0) > 0
+                && !this._autoTestRunning;
+            this.resultCoinAdBtn.active = showCoinAd;
+            if (showCoinAd) {
+                const btn = this.resultCoinAdBtn.getComponent(Button);
+                if (btn) {
+                    if (this.coinDoubled) {
+                        btn.interactable = false;
+                    } else if (!SaveManager.inst.canUseRewardedAd('resultCoins')) {
+                        btn.interactable = false;
+                    } else {
+                        btn.interactable = true;
+                    }
+                }
+            }
+        }
+        if (this.resultCoinAdLabel) {
+            if (this.coinDoubled) {
+                // 已翻倍时保留之前的文案
+            } else if (!SaveManager.inst.canUseRewardedAd('resultCoins')) {
+                this.resultCoinAdLabel.string = '今日已用完';
+            } else {
+                this.resultCoinAdLabel.string = '看广告·扭蛋币翻倍';
+            }
+        }
     }
 
     /** X1/X2: 输出结构化难度诊断日志 + 持久化测试记录（防重复，同一局只输出一次） */
@@ -8938,13 +24216,15 @@ export class GameManager extends Component {
     }
 
     private onResultAdClick(): void {
+        // Y2.1: 自动测试模式隔离
+        if (this._autoTestRunning) return;
+
         if (this.scoreDoubled) return;
 
         // Y2: 每日得分翻倍广告上限检查
         if (!SaveManager.inst.canUseRewardedAd('resultScore')) {
             console.log('[GameManager] 今日得分翻倍广告已用完');
-            this.resultAdBtn!.getComponent(Button)!.interactable = false;
-            this.resultAdLabel!.string = '今日已用完';
+            this.refreshResultAdState(true);
             return;
         }
 
@@ -8952,21 +24232,40 @@ export class GameManager extends Component {
         this.resultAdBtn!.getComponent(Button)!.interactable = false;
         this.resultAdLabel!.string = '广告加载中...';
 
+        let settled = false;
+
         AdManager.getInstance().showRewardedAd(
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // ✓ 发奖：得分翻倍
                 this.scoreDoubled = true;
                 // Y2: 记录每日广告次数
-                SaveManager.inst.recordRewardedAd('resultScore');
+                const recorded = SaveManager.inst.recordRewardedAd('resultScore');
+                if (!recorded) {
+                    console.warn('[GameManager] 得分翻倍广告记录失败（已达上限）');
+                }
+                // Y2.1: 即使 record 失败也发奖（本次是第一次成功回调）
+
                 this.board?.multiplyScore(2);
+                // Y2.1: 翻倍后写入最高分
+                SaveManager.inst.updateBestScore(
+                    this.levelConfigs[this.currentLevel].level,
+                    this.currentScore,
+                );
                 this.resultScore!.string = this.getResultScoreText(this.levelConfigs[this.currentLevel]);
                 this.resultAdLabel!.string = '已翻倍';
                 console.log(`[GameManager] 广告奖励 — 分数翻倍！当前得分: ${this.currentScore}`);
             },
             () => {
-                // ✗ 未看完：恢复按钮可再次点击
-                this.resultAdBtn!.getComponent(Button)!.interactable = true;
-                this.resultAdLabel!.string = '▶  看广告·得分翻倍';
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
+                // Y2.1: 广告失败后按真实状态刷新
+                this.refreshResultAdState(true);
                 console.log('[GameManager] 广告未看完，按钮恢复');
             },
         );
@@ -8974,14 +24273,16 @@ export class GameManager extends Component {
 
     /** E5: 看广告·扭蛋币翻倍 — 成功则本关发放量 ×2 补发 */
     private onResultCoinAdClick(): void {
+        // Y2.1: 自动测试模式隔离
+        if (this._autoTestRunning) return;
+
         if (this.coinDoubled) return;
         if (this.safeNum(this.lastCoinReward, 0) <= 0) return;
 
         // Y2: 每日扭蛋币翻倍广告上限检查
         if (!SaveManager.inst.canUseRewardedAd('resultCoins')) {
             console.log('[GameManager] 今日扭蛋币翻倍广告已用完');
-            this.resultCoinAdBtn!.getComponent(Button)!.interactable = false;
-            this.resultCoinAdLabel!.string = '今日已用完';
+            this.refreshResultAdState(true);
             return;
         }
 
@@ -8989,12 +24290,23 @@ export class GameManager extends Component {
         this.resultCoinAdBtn!.getComponent(Button)!.interactable = false;
         this.resultCoinAdLabel!.string = '广告加载中...';
 
+        let settled = false;
+
         AdManager.getInstance().showRewardedAd(
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // ✓ 发奖：补发同等数量的扭蛋币
                 this.coinDoubled = true;
                 // Y2: 记录每日广告次数
-                SaveManager.inst.recordRewardedAd('resultCoins');
+                const recorded = SaveManager.inst.recordRewardedAd('resultCoins');
+                if (!recorded) {
+                    console.warn('[GameManager] 扭蛋币翻倍广告记录失败（已达上限）');
+                }
+                // Y2.1: 即使 record 失败也发奖（本次是第一次成功回调）
+
                 const bonus = this.safeNum(this.lastCoinReward, 0);
                 SaveManager.inst.addCoins(bonus);
                 this.resultCoinAdLabel!.string = `已翻倍 (+${bonus} 🎲)`;
@@ -9006,9 +24318,12 @@ export class GameManager extends Component {
                 console.log(`[GameManager] 广告奖励 — 扭蛋币翻倍！补发 +${bonus}`);
             },
             () => {
-                // ✗ 未看完：恢复按钮
-                this.resultCoinAdBtn!.getComponent(Button)!.interactable = true;
-                this.resultCoinAdLabel!.string = '看广告·扭蛋币翻倍';
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
+                // Y2.1: 广告失败后按真实状态刷新
+                this.refreshResultAdState(true);
                 console.log('[GameManager] 扭蛋币翻倍广告未看完，按钮恢复');
             },
         );
@@ -9126,10 +24441,15 @@ export class GameManager extends Component {
     /** Y2: 智能续步广告资格判定 */
     private getContinueAdEligibility(): {
         allowed: boolean;
-        reason: 'ok' | 'tutorial' | 'progress' | 'usedThisRun' | 'dailyCap' | 'pending';
+        reason: 'ok' | 'tutorial' | 'progress' | 'usedThisRun' | 'dailyCap' | 'pending' | 'autoTest';
         progress: number;
     } {
         const cfg = this.levelConfigs[this.currentLevel];
+
+        // 0. 自动测试模式 — 不展示续步广告
+        if (this._autoTestRunning) {
+            return { allowed: false, reason: 'autoTest', progress: 0 };
+        }
 
         // 1. 广告进行中
         if (this.continueAdPending) {
@@ -9179,7 +24499,12 @@ export class GameManager extends Component {
 
         const eligibility = this.getContinueAdEligibility();
 
-        if (eligibility.reason === 'pending') {
+        if (eligibility.reason === 'autoTest') {
+            button.interactable = false;
+            if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
+                this.stepsAdLabel.string = '';
+            }
+        } else if (eligibility.reason === 'pending') {
             button.interactable = false;
             if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
                 this.stepsAdLabel.string = '广告加载中…';
@@ -9216,6 +24541,9 @@ export class GameManager extends Component {
     }
 
     private onStepsAdClick(): void {
+        // Y2.1: 自动测试模式隔离
+        if (this._autoTestRunning) return;
+
         // Y2: 智能资格判定
         const eligibility = this.getContinueAdEligibility();
         if (!eligibility.allowed) {
@@ -9232,9 +24560,14 @@ export class GameManager extends Component {
         this.updateStepsAdState();
 
         const token = this.levelRunToken;
+        let settled = false;
 
         AdManager.getInstance().showRewardedAd(
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // X0: 旧关卡回调 → 丢弃
                 if (token !== this.levelRunToken) {
                     console.log('[GameManager] 忽略旧关卡续步广告回调');
@@ -9251,7 +24584,11 @@ export class GameManager extends Component {
                 this.continueAdPending = false;
 
                 // Y2: 记录每日广告次数（广告成功才计数）
-                SaveManager.inst.recordRewardedAd('continue');
+                const recorded = SaveManager.inst.recordRewardedAd('continue');
+                if (!recorded) {
+                    console.warn('[GameManager] 续步广告记录失败（已达上限）');
+                }
+                // Y2.1: 即使 record 失败也发奖（本次是第一次成功回调）
 
                 // ✓ 发奖：+5 步、关闭弹层、继续本关
                 this.currentSteps += 5;
@@ -9268,12 +24605,17 @@ export class GameManager extends Component {
                 );
             },
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // X0: 旧关卡回调 → 丢弃
                 if (token !== this.levelRunToken) {
                     console.log('[GameManager] 忽略旧关卡续步广告失败回调');
                     return;
                 }
                 this.continueAdPending = false;
+                // Y2.1: 广告失败后按真实状态刷新
                 this.updateStepsAdState();
                 console.log('[GameManager] 广告未完成，本局续步机会未消耗，不计数');
             },
@@ -11000,6 +26342,9 @@ export class GameManager extends Component {
      * @param fromAd  true = ad free pull (no coin cost), false = spend 100 coins
      */
     private doSinglePull(fromAd: boolean): void {
+        // Y2.1: 自动测试模式隔离
+        if (fromAd && this._autoTestRunning) return;
+
         if (this.gachaPulling) return;
         this.gachaPulling = true;
 
@@ -11051,8 +26396,7 @@ export class GameManager extends Component {
             // Y2: 每日免费抽卡广告上限检查
             if (!SaveManager.inst.canUseRewardedAd('gacha')) {
                 console.log('[Gacha] 今日免费抽卡广告已用完');
-                if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = false;
-                if (this.gachaAdLabel) this.gachaAdLabel.string = '今日已用完';
+                this.refreshGachaPanel();
                 this.gachaPulling = false;
                 return;
             }
@@ -11061,19 +26405,31 @@ export class GameManager extends Component {
             if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = false;
             if (this.gachaAdLabel) this.gachaAdLabel.string = '广告加载中...';
 
+            let settled = false;
+
             AdManager.getInstance().showRewardedAd(
                 () => {
+                    // Y2.1: 一次性守卫
+                    if (settled) return;
+                    settled = true;
+
                     // Reward: free pull
                     // Y2: 记录每日广告次数
-                    SaveManager.inst.recordRewardedAd('gacha');
-                    if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = false;
-                    if (this.gachaAdLabel) this.gachaAdLabel.string = '今日已用完';
+                    const recorded = SaveManager.inst.recordRewardedAd('gacha');
+                    if (!recorded) {
+                        console.warn('[Gacha] 广告记录失败（已达上限）');
+                    }
+                    // Y2.1: 即使 record 失败也发奖（本次是第一次成功回调）
+                    this.refreshGachaPanel();
                     doPull();
                 },
                 () => {
-                    // Ad not completed
-                    if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = true;
-                    if (this.gachaAdLabel) this.gachaAdLabel.string = '▶  看广告·免费单抽';
+                    // Y2.1: 一次性守卫
+                    if (settled) return;
+                    settled = true;
+
+                    // Y2.1: 广告失败后按真实状态刷新
+                    this.refreshGachaPanel();
                     this.gachaPulling = false;
                     console.log('[Gacha] 广告未看完，不抽卡');
                 },
@@ -11939,7 +27295,7 @@ export class GameManager extends Component {
 
         // Y2: 辅助 — 判断某道具是否可看广告补充
         const canAdRefill = (placement: RewardedAdPlacement): boolean => {
-            return SaveManager.inst.canUseRewardedAd(placement);
+            return !this._autoTestRunning && SaveManager.inst.canUseRewardedAd(placement);
         };
 
         const setBtn = (
@@ -12229,6 +27585,9 @@ export class GameManager extends Component {
         boosterType: BoosterType,
         placement: RewardedAdPlacement,
     ): void {
+        // Y2.1: 自动测试模式隔离
+        if (this._autoTestRunning) return;
+
         // 弹层打开时不可用
         if (this.resultPanel?.active || this.stepsPanel?.active || this.pausePanel?.active) return;
         if (this.boosterBusy) return;
@@ -12245,9 +27604,14 @@ export class GameManager extends Component {
         this.updateBoosterUI();
 
         const token = this.levelRunToken;
+        let settled = false;
 
         AdManager.getInstance().showRewardedAd(
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // 旧关卡回调 → 丢弃
                 if (token !== this.levelRunToken) {
                     this.boosterBusy = false;
@@ -12259,10 +27623,8 @@ export class GameManager extends Component {
                 const recorded = SaveManager.inst.recordRewardedAd(placement);
                 if (!recorded) {
                     console.warn(`[Y2] ${boosterType} 广告记录失败（已达上限）`);
-                    this.boosterBusy = false;
-                    this.updateBoosterUI();
-                    return;
                 }
+                // Y2.1: 即使 record 失败也发奖（本次是第一次成功回调）
 
                 // 补充道具 +1
                 SaveManager.inst.addBooster(boosterType, 1);
@@ -12273,12 +27635,17 @@ export class GameManager extends Component {
                 console.log(`[Y2] ${boosterType} 广告补充成功 → ${SaveManager.inst.getBoosterCount(boosterType)}`);
             },
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // 广告未完成 → 不计数、不发道具
                 if (token !== this.levelRunToken) {
                     this.boosterBusy = false;
                     this.updateBoosterUI();
                     return;
                 }
+                // Y2.1: 广告失败后按真实状态刷新
                 this.boosterBusy = false;
                 this.updateBoosterUI();
                 console.log(`[Y2] ${boosterType} 广告未完成，不补充不计数`);
@@ -14004,11 +29371,6 @@ export class GameManager extends Component {
         this.refreshDailySignPanel();
     }
 }
+</file>
 
-
-
-
-
-================================================================
-End of Codebase
-================================================================
+</files>

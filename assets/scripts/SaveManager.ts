@@ -80,6 +80,7 @@ interface SaveData {
     boosters: BoosterInventory;                  // 持久化道具库存
     // Y2: 每日广告使用记录
     dailyAdUsage: DailyAdUsage;
+}
 
 // ── 常量 ────────────────────────────────────
 

@@ -1090,6 +1090,11 @@ export class GameManager extends Component {
         this.currentSteps = this.safeNum(config.moves, 20);
         this.scoreDoubled = false;
 
+        // Y2.1: 每关开始清理奖励缓存，避免上一关状态污染
+        this.lastCoinReward = 0;
+        this.scoreDoubled = false;
+        this.coinDoubled = false;
+
         // 进关清零计数器
         this.collectedCount = {};
         this.detonatedSpecials = 0;
@@ -1522,25 +1527,12 @@ export class GameManager extends Component {
             this.spawnBossCelebration();
         }
 
+        // Y2.1: 奖励缓存已在 startLevel 中清理，这里再次确认
         this.scoreDoubled = false;
         this.coinDoubled = false;
-        // Y2: 得分翻倍按钮 — 检查每日上限
-        const scoreAdCanUse = SaveManager.inst.canUseRewardedAd('resultScore');
-        this.resultAdBtn!.getComponent(Button)!.interactable = scoreAdCanUse;
-        this.resultAdLabel!.string = scoreAdCanUse ? '▶  看广告·得分翻倍' : '今日已用完';
 
-        // E5: 扭蛋币翻倍按钮仅在过关且 lastCoinReward > 0 时显示
-        if (this.resultCoinAdBtn) {
-            const showCoinAd = isWin && this.safeNum(this.lastCoinReward, 0) > 0;
-            // Y2: 检查每日上限
-            const coinAdCanUse = showCoinAd && SaveManager.inst.canUseRewardedAd('resultCoins');
-            this.resultCoinAdBtn.active = showCoinAd;
-            this.resultCoinAdBtn.getComponent(Button)!.interactable = coinAdCanUse && !this.coinDoubled;
-        }
-        if (this.resultCoinAdLabel) {
-            const coinAdCanUse2 = SaveManager.inst.canUseRewardedAd('resultCoins');
-            this.resultCoinAdLabel.string = coinAdCanUse2 ? '看广告·扭蛋币翻倍' : '今日已用完';
-        }
+        // Y2.1: 广告按钮状态统一延后到 refreshResultAdState 中处理
+        // （在奖励计算完毕、lastCoinReward 确定之后）
 
         if (isWin) {
             if (this.currentLevel >= this.levelConfigs.length - 1) {
@@ -1648,7 +1640,65 @@ export class GameManager extends Component {
         }
         // A: 动态布局结算卡片（通过 monsterLabel.active 判断是否有公仔解锁）
         this.layoutResultPanel(isWin, this.resultMonsterLabel?.node.active ?? false);
+        // Y2.1: 统一刷新结算广告按钮状态（在 lastCoinReward 和按钮 active 确定后）
+        this.refreshResultAdState(isWin);
         console.log(`[GameManager] 结算: ${isWin ? '过关' : '失败'} | 得分 ${this.currentScore}`);
+    }
+
+    /**
+     * Y2.1: 统一刷新结算面板广告按钮状态。
+     * 必须在 lastCoinReward 和按钮 active 状态确定后调用。
+     */
+    private refreshResultAdState(isWin: boolean): void {
+        // Y2.1: 得分翻倍广告按钮
+        if (this.resultAdBtn && this.resultAdLabel) {
+            const showScoreAd = isWin && !this._autoTestRunning;
+            this.resultAdBtn.active = showScoreAd;
+            if (showScoreAd) {
+                const btn = this.resultAdBtn.getComponent(Button);
+                if (btn) {
+                    if (this.scoreDoubled) {
+                        btn.interactable = false;
+                        this.resultAdLabel.string = '已翻倍';
+                    } else if (!SaveManager.inst.canUseRewardedAd('resultScore')) {
+                        btn.interactable = false;
+                        this.resultAdLabel.string = '今日已用完';
+                    } else {
+                        btn.interactable = true;
+                        this.resultAdLabel.string = '▶  看广告·得分翻倍';
+                    }
+                }
+            }
+        }
+
+        // Y2.1: 扭蛋币翻倍广告按钮
+        if (this.resultCoinAdBtn) {
+            const showCoinAd = isWin
+                && this.safeNum(this.lastCoinReward, 0) > 0
+                && !this._autoTestRunning;
+            this.resultCoinAdBtn.active = showCoinAd;
+            if (showCoinAd) {
+                const btn = this.resultCoinAdBtn.getComponent(Button);
+                if (btn) {
+                    if (this.coinDoubled) {
+                        btn.interactable = false;
+                    } else if (!SaveManager.inst.canUseRewardedAd('resultCoins')) {
+                        btn.interactable = false;
+                    } else {
+                        btn.interactable = true;
+                    }
+                }
+            }
+        }
+        if (this.resultCoinAdLabel) {
+            if (this.coinDoubled) {
+                // 已翻倍时保留之前的文案
+            } else if (!SaveManager.inst.canUseRewardedAd('resultCoins')) {
+                this.resultCoinAdLabel.string = '今日已用完';
+            } else {
+                this.resultCoinAdLabel.string = '看广告·扭蛋币翻倍';
+            }
+        }
     }
 
     /** X1/X2: 输出结构化难度诊断日志 + 持久化测试记录（防重复，同一局只输出一次） */
@@ -2260,13 +2310,15 @@ export class GameManager extends Component {
     }
 
     private onResultAdClick(): void {
+        // Y2.1: 自动测试模式隔离
+        if (this._autoTestRunning) return;
+
         if (this.scoreDoubled) return;
 
         // Y2: 每日得分翻倍广告上限检查
         if (!SaveManager.inst.canUseRewardedAd('resultScore')) {
             console.log('[GameManager] 今日得分翻倍广告已用完');
-            this.resultAdBtn!.getComponent(Button)!.interactable = false;
-            this.resultAdLabel!.string = '今日已用完';
+            this.refreshResultAdState(true);
             return;
         }
 
@@ -2274,21 +2326,40 @@ export class GameManager extends Component {
         this.resultAdBtn!.getComponent(Button)!.interactable = false;
         this.resultAdLabel!.string = '广告加载中...';
 
+        let settled = false;
+
         AdManager.getInstance().showRewardedAd(
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // ✓ 发奖：得分翻倍
                 this.scoreDoubled = true;
                 // Y2: 记录每日广告次数
-                SaveManager.inst.recordRewardedAd('resultScore');
+                const recorded = SaveManager.inst.recordRewardedAd('resultScore');
+                if (!recorded) {
+                    console.warn('[GameManager] 得分翻倍广告记录失败（已达上限）');
+                }
+                // Y2.1: 即使 record 失败也发奖（本次是第一次成功回调）
+
                 this.board?.multiplyScore(2);
+                // Y2.1: 翻倍后写入最高分
+                SaveManager.inst.updateBestScore(
+                    this.levelConfigs[this.currentLevel].level,
+                    this.currentScore,
+                );
                 this.resultScore!.string = this.getResultScoreText(this.levelConfigs[this.currentLevel]);
                 this.resultAdLabel!.string = '已翻倍';
                 console.log(`[GameManager] 广告奖励 — 分数翻倍！当前得分: ${this.currentScore}`);
             },
             () => {
-                // ✗ 未看完：恢复按钮可再次点击
-                this.resultAdBtn!.getComponent(Button)!.interactable = true;
-                this.resultAdLabel!.string = '▶  看广告·得分翻倍';
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
+                // Y2.1: 广告失败后按真实状态刷新
+                this.refreshResultAdState(true);
                 console.log('[GameManager] 广告未看完，按钮恢复');
             },
         );
@@ -2296,14 +2367,16 @@ export class GameManager extends Component {
 
     /** E5: 看广告·扭蛋币翻倍 — 成功则本关发放量 ×2 补发 */
     private onResultCoinAdClick(): void {
+        // Y2.1: 自动测试模式隔离
+        if (this._autoTestRunning) return;
+
         if (this.coinDoubled) return;
         if (this.safeNum(this.lastCoinReward, 0) <= 0) return;
 
         // Y2: 每日扭蛋币翻倍广告上限检查
         if (!SaveManager.inst.canUseRewardedAd('resultCoins')) {
             console.log('[GameManager] 今日扭蛋币翻倍广告已用完');
-            this.resultCoinAdBtn!.getComponent(Button)!.interactable = false;
-            this.resultCoinAdLabel!.string = '今日已用完';
+            this.refreshResultAdState(true);
             return;
         }
 
@@ -2311,12 +2384,23 @@ export class GameManager extends Component {
         this.resultCoinAdBtn!.getComponent(Button)!.interactable = false;
         this.resultCoinAdLabel!.string = '广告加载中...';
 
+        let settled = false;
+
         AdManager.getInstance().showRewardedAd(
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // ✓ 发奖：补发同等数量的扭蛋币
                 this.coinDoubled = true;
                 // Y2: 记录每日广告次数
-                SaveManager.inst.recordRewardedAd('resultCoins');
+                const recorded = SaveManager.inst.recordRewardedAd('resultCoins');
+                if (!recorded) {
+                    console.warn('[GameManager] 扭蛋币翻倍广告记录失败（已达上限）');
+                }
+                // Y2.1: 即使 record 失败也发奖（本次是第一次成功回调）
+
                 const bonus = this.safeNum(this.lastCoinReward, 0);
                 SaveManager.inst.addCoins(bonus);
                 this.resultCoinAdLabel!.string = `已翻倍 (+${bonus} 🎲)`;
@@ -2328,9 +2412,12 @@ export class GameManager extends Component {
                 console.log(`[GameManager] 广告奖励 — 扭蛋币翻倍！补发 +${bonus}`);
             },
             () => {
-                // ✗ 未看完：恢复按钮
-                this.resultCoinAdBtn!.getComponent(Button)!.interactable = true;
-                this.resultCoinAdLabel!.string = '看广告·扭蛋币翻倍';
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
+                // Y2.1: 广告失败后按真实状态刷新
+                this.refreshResultAdState(true);
                 console.log('[GameManager] 扭蛋币翻倍广告未看完，按钮恢复');
             },
         );
@@ -2448,10 +2535,15 @@ export class GameManager extends Component {
     /** Y2: 智能续步广告资格判定 */
     private getContinueAdEligibility(): {
         allowed: boolean;
-        reason: 'ok' | 'tutorial' | 'progress' | 'usedThisRun' | 'dailyCap' | 'pending';
+        reason: 'ok' | 'tutorial' | 'progress' | 'usedThisRun' | 'dailyCap' | 'pending' | 'autoTest';
         progress: number;
     } {
         const cfg = this.levelConfigs[this.currentLevel];
+
+        // 0. 自动测试模式 — 不展示续步广告
+        if (this._autoTestRunning) {
+            return { allowed: false, reason: 'autoTest', progress: 0 };
+        }
 
         // 1. 广告进行中
         if (this.continueAdPending) {
@@ -2501,7 +2593,12 @@ export class GameManager extends Component {
 
         const eligibility = this.getContinueAdEligibility();
 
-        if (eligibility.reason === 'pending') {
+        if (eligibility.reason === 'autoTest') {
+            button.interactable = false;
+            if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
+                this.stepsAdLabel.string = '';
+            }
+        } else if (eligibility.reason === 'pending') {
             button.interactable = false;
             if (this.stepsAdLabel && this.stepsAdLabel.isValid) {
                 this.stepsAdLabel.string = '广告加载中…';
@@ -2538,6 +2635,9 @@ export class GameManager extends Component {
     }
 
     private onStepsAdClick(): void {
+        // Y2.1: 自动测试模式隔离
+        if (this._autoTestRunning) return;
+
         // Y2: 智能资格判定
         const eligibility = this.getContinueAdEligibility();
         if (!eligibility.allowed) {
@@ -2554,9 +2654,14 @@ export class GameManager extends Component {
         this.updateStepsAdState();
 
         const token = this.levelRunToken;
+        let settled = false;
 
         AdManager.getInstance().showRewardedAd(
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // X0: 旧关卡回调 → 丢弃
                 if (token !== this.levelRunToken) {
                     console.log('[GameManager] 忽略旧关卡续步广告回调');
@@ -2573,7 +2678,11 @@ export class GameManager extends Component {
                 this.continueAdPending = false;
 
                 // Y2: 记录每日广告次数（广告成功才计数）
-                SaveManager.inst.recordRewardedAd('continue');
+                const recorded = SaveManager.inst.recordRewardedAd('continue');
+                if (!recorded) {
+                    console.warn('[GameManager] 续步广告记录失败（已达上限）');
+                }
+                // Y2.1: 即使 record 失败也发奖（本次是第一次成功回调）
 
                 // ✓ 发奖：+5 步、关闭弹层、继续本关
                 this.currentSteps += 5;
@@ -2590,12 +2699,17 @@ export class GameManager extends Component {
                 );
             },
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // X0: 旧关卡回调 → 丢弃
                 if (token !== this.levelRunToken) {
                     console.log('[GameManager] 忽略旧关卡续步广告失败回调');
                     return;
                 }
                 this.continueAdPending = false;
+                // Y2.1: 广告失败后按真实状态刷新
                 this.updateStepsAdState();
                 console.log('[GameManager] 广告未完成，本局续步机会未消耗，不计数');
             },
@@ -4322,6 +4436,9 @@ export class GameManager extends Component {
      * @param fromAd  true = ad free pull (no coin cost), false = spend 100 coins
      */
     private doSinglePull(fromAd: boolean): void {
+        // Y2.1: 自动测试模式隔离
+        if (fromAd && this._autoTestRunning) return;
+
         if (this.gachaPulling) return;
         this.gachaPulling = true;
 
@@ -4373,8 +4490,7 @@ export class GameManager extends Component {
             // Y2: 每日免费抽卡广告上限检查
             if (!SaveManager.inst.canUseRewardedAd('gacha')) {
                 console.log('[Gacha] 今日免费抽卡广告已用完');
-                if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = false;
-                if (this.gachaAdLabel) this.gachaAdLabel.string = '今日已用完';
+                this.refreshGachaPanel();
                 this.gachaPulling = false;
                 return;
             }
@@ -4383,19 +4499,31 @@ export class GameManager extends Component {
             if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = false;
             if (this.gachaAdLabel) this.gachaAdLabel.string = '广告加载中...';
 
+            let settled = false;
+
             AdManager.getInstance().showRewardedAd(
                 () => {
+                    // Y2.1: 一次性守卫
+                    if (settled) return;
+                    settled = true;
+
                     // Reward: free pull
                     // Y2: 记录每日广告次数
-                    SaveManager.inst.recordRewardedAd('gacha');
-                    if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = false;
-                    if (this.gachaAdLabel) this.gachaAdLabel.string = '今日已用完';
+                    const recorded = SaveManager.inst.recordRewardedAd('gacha');
+                    if (!recorded) {
+                        console.warn('[Gacha] 广告记录失败（已达上限）');
+                    }
+                    // Y2.1: 即使 record 失败也发奖（本次是第一次成功回调）
+                    this.refreshGachaPanel();
                     doPull();
                 },
                 () => {
-                    // Ad not completed
-                    if (this.gachaAdBtn) this.gachaAdBtn.getComponent(Button)!.interactable = true;
-                    if (this.gachaAdLabel) this.gachaAdLabel.string = '▶  看广告·免费单抽';
+                    // Y2.1: 一次性守卫
+                    if (settled) return;
+                    settled = true;
+
+                    // Y2.1: 广告失败后按真实状态刷新
+                    this.refreshGachaPanel();
                     this.gachaPulling = false;
                     console.log('[Gacha] 广告未看完，不抽卡');
                 },
@@ -5261,7 +5389,7 @@ export class GameManager extends Component {
 
         // Y2: 辅助 — 判断某道具是否可看广告补充
         const canAdRefill = (placement: RewardedAdPlacement): boolean => {
-            return SaveManager.inst.canUseRewardedAd(placement);
+            return !this._autoTestRunning && SaveManager.inst.canUseRewardedAd(placement);
         };
 
         const setBtn = (
@@ -5551,6 +5679,9 @@ export class GameManager extends Component {
         boosterType: BoosterType,
         placement: RewardedAdPlacement,
     ): void {
+        // Y2.1: 自动测试模式隔离
+        if (this._autoTestRunning) return;
+
         // 弹层打开时不可用
         if (this.resultPanel?.active || this.stepsPanel?.active || this.pausePanel?.active) return;
         if (this.boosterBusy) return;
@@ -5567,9 +5698,14 @@ export class GameManager extends Component {
         this.updateBoosterUI();
 
         const token = this.levelRunToken;
+        let settled = false;
 
         AdManager.getInstance().showRewardedAd(
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // 旧关卡回调 → 丢弃
                 if (token !== this.levelRunToken) {
                     this.boosterBusy = false;
@@ -5581,10 +5717,8 @@ export class GameManager extends Component {
                 const recorded = SaveManager.inst.recordRewardedAd(placement);
                 if (!recorded) {
                     console.warn(`[Y2] ${boosterType} 广告记录失败（已达上限）`);
-                    this.boosterBusy = false;
-                    this.updateBoosterUI();
-                    return;
                 }
+                // Y2.1: 即使 record 失败也发奖（本次是第一次成功回调）
 
                 // 补充道具 +1
                 SaveManager.inst.addBooster(boosterType, 1);
@@ -5595,12 +5729,17 @@ export class GameManager extends Component {
                 console.log(`[Y2] ${boosterType} 广告补充成功 → ${SaveManager.inst.getBoosterCount(boosterType)}`);
             },
             () => {
+                // Y2.1: 一次性守卫
+                if (settled) return;
+                settled = true;
+
                 // 广告未完成 → 不计数、不发道具
                 if (token !== this.levelRunToken) {
                     this.boosterBusy = false;
                     this.updateBoosterUI();
                     return;
                 }
+                // Y2.1: 广告失败后按真实状态刷新
                 this.boosterBusy = false;
                 this.updateBoosterUI();
                 console.log(`[Y2] ${boosterType} 广告未完成，不补充不计数`);
