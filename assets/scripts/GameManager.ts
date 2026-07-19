@@ -425,6 +425,8 @@ export class GameManager extends Component {
     private levelSelectPanel: Node | null = null;
     /** 关卡按钮引用（index = levelConfigs 索引） */
     private levelSelectBtns: { node: Node; bg: Graphics; mainLabel: Label; subLabel: Label }[] = [];
+    /** Y3.2: 章节宝箱按钮（index 1-5，0 未用） */
+    private chapterChestBtns: { node: Node; bg: Graphics; label: Label }[] = [];
 
     // ── 抽卡页（E2） ─────────────────────────────
     private gachaPanel: Node | null = null;
@@ -560,6 +562,9 @@ export class GameManager extends Component {
 
     /** 章末Boss首次通关赠送的公仔 monId（按章号 1/2/3 → 0兔/3鹿/5狐） */
     private static readonly CHAPTER_BOSS_MONSTER: number[] = [0, 3, 5, 4, 2];
+
+    /** Y3.2: 章节宝箱固定扭蛋币奖励（index 1-5，0 未用） */
+    private static readonly CHAPTER_CHEST_REWARDS: number[] = [0, 30, 40, 50, 60, 80];
 
     /** X2: 难度测试独立存储键 */
     private static readonly DIFFICULTY_TEST_KEY = 'mxmh_difficulty_test_v1';
@@ -3694,11 +3699,53 @@ export class GameManager extends Component {
             // 章节标题
             const chTitle = this.createLabel(chTitleBar, `Ch${ch}Title`, chapterNames[ch], 28, this.COLOR_HUD_TEXT);
             chTitle.isBold = true;
-            const chTitleW = this.safeNum(barW - 20, 540);
+            // Y3.2: 缩窄标题宽度并在左侧排布，右侧让出空间给章宝箱按钮
+            const chestW = 168, chestH = 32;
+            const chTitleW = this.safeNum(barW - chestW - 28, 380);
             chTitle.node.getComponent(UITransform)!.setContentSize(chTitleW, barH);
             chTitle.overflow = Label.Overflow.SHRINK;
             chTitle.enableWrapText = false;
-            chTitle.node.setPosition(0, 0, 0);
+            chTitle.horizontalAlign = Label.HorizontalAlign.LEFT;
+            chTitle.node.setPosition(this.safeNum(-barW / 2 + 12 + chTitleW / 2, -200), 0, 0);
+
+            // Y3.2: 章节宝箱按钮（右侧）
+            const chestBtn = new Node(`Ch${ch}ChestBtn`);
+            chestBtn.parent = chTitleBar;
+            const chestUT = chestBtn.addComponent(UITransform);
+            chestUT.setContentSize(chestW, chestH);
+            const chestBg = chestBtn.addComponent(Graphics);
+            const chestX = this.safeNum(barW / 2 - chestW / 2 - 8, 200);
+            chestBtn.setPosition(chestX, 0, 0);
+
+            const chestLabelNode = new Node('Label');
+            chestLabelNode.parent = chestBtn;
+            const chestLabelUT = chestLabelNode.addComponent(UITransform);
+            chestLabelUT.setContentSize(chestW, chestH);
+            const chestLabel = chestLabelNode.addComponent(Label);
+            chestLabel.string = '🎁';
+            chestLabel.fontSize = 20;
+            chestLabel.lineHeight = 24;
+            chestLabel.color = Color.WHITE.clone();
+            chestLabel.useSystemFont = true;
+            chestLabel.horizontalAlign = Label.HorizontalAlign.CENTER;
+            chestLabel.verticalAlign = Label.VerticalAlign.CENTER;
+            chestLabel.overflow = Label.Overflow.SHRINK;
+            chestLabel.enableWrapText = false;
+
+            const chestButton = chestBtn.addComponent(Button);
+            chestButton.transition = Button.Transition.NONE;
+            chestButton.node.on(Button.EventType.CLICK, () => {
+                try { AudioManager.inst?.playClick(); } catch (e) { /* ignore */ }
+                Tween.stopAllByTarget(chestBtn);
+                chestBtn.setScale(0.95, 0.95, 1);
+                tween(chestBtn)
+                    .to(0.08, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
+                    .start();
+            }, this);
+            const chCapture = ch;
+            chestButton.node.on(Button.EventType.CLICK, () => this.onChapterChestClaim(chCapture), this);
+
+            this.chapterChestBtns[ch] = { node: chestBtn, bg: chestBg, label: chestLabel };
 
             // 按钮排容器
             const rowNode = new Node(`Ch${ch}Row`);
@@ -4048,6 +4095,9 @@ export class GameManager extends Component {
             this.levelSelectCollectionBadge.string = `📖 图鉴 ${collectedCount}/6`;
         }
 
+        // Y3.2: 刷新章宝箱状态
+        this.refreshChapterChestStates();
+
         console.log(`[GameManager] 关卡选择页已刷新: maxUnlocked=${maxUnlocked}`);
     }
 
@@ -4071,6 +4121,110 @@ export class GameManager extends Component {
                 }
             }
         } catch (e) { /* ignore */ }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  Y3.2 · 章节宝箱
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /** Y3.2: 获取指定章节的最终 Boss 关 level 号；未找到返回 -1 */
+    private getChapterBossLevel(chapter: number): number {
+        if (!Number.isSafeInteger(chapter) || chapter < 1) return -1;
+        for (const cfg of this.levelConfigs) {
+            if (cfg.isBoss && this.safeNum(cfg.chapter, 1) === chapter) {
+                return this.safeNum(cfg.level, 0);
+            }
+        }
+        return -1;
+    }
+
+    /** Y3.2: 刷新所有章节宝箱按钮状态 */
+    private refreshChapterChestStates(): void {
+        const chestW = 168, chestH = 32;
+        for (let ch = 1; ch <= 5; ch++) {
+            const entry = this.chapterChestBtns[ch];
+            if (!entry) continue;
+
+            const bossLevel = this.getChapterBossLevel(ch);
+            const bossCleared = bossLevel > 0 && SaveManager.inst.isCleared(bossLevel);
+            const claimed = SaveManager.inst.hasClaimedChapterChest(ch);
+            const reward = this.safeNum(GameManager.CHAPTER_CHEST_REWARDS[ch], 0);
+
+            // 重绘背景
+            entry.bg.clear();
+            if (claimed) {
+                entry.bg.fillColor = new Color(0xCC, 0xCC, 0xCC, 200);
+                entry.bg.strokeColor = new Color(0, 0, 0, 40);
+            } else if (bossCleared) {
+                entry.bg.fillColor = this.COLOR_CHAPTER_GOLD.clone();
+                entry.bg.strokeColor = new Color(0, 0, 0, 60);
+            } else {
+                entry.bg.fillColor = new Color(0xDD, 0xDD, 0xDD, 160);
+                entry.bg.strokeColor = new Color(0, 0, 0, 30);
+            }
+            entry.bg.lineWidth = 2;
+            entry.bg.roundRect(-chestW / 2, -chestH / 2, chestW, chestH, 16);
+            entry.bg.fill();
+            entry.bg.stroke();
+
+            // 文案
+            if (claimed) {
+                entry.label.string = '✓ 已领取';
+                entry.label.color = new Color(0x66, 0x66, 0x66, 255);
+            } else if (bossCleared) {
+                entry.label.string = `🎁 领取 +${reward} 🎲`;
+                entry.label.color = Color.WHITE.clone();
+            } else {
+                entry.label.string = '🎁 通关 Boss 解锁';
+                entry.label.color = new Color(0x88, 0x88, 0x88, 255);
+            }
+
+            // 可点性
+            const btn = entry.node.getComponent(Button);
+            if (btn) btn.interactable = bossCleared && !claimed;
+        }
+    }
+
+    /** Y3.2: 领取章节宝箱 — 仅发固定扭蛋币，不接广告/抽卡/公仔/连胜 */
+    private onChapterChestClaim(chapter: number): void {
+        // 自动测试隔离
+        if (this._autoTestRunning) return;
+
+        // 校验章节合法
+        if (!Number.isSafeInteger(chapter) || chapter < 1 || chapter > 5) return;
+
+        // 校验 Boss 已通关
+        const bossLevel = this.getChapterBossLevel(chapter);
+        if (bossLevel <= 0) {
+            console.warn(`[GameManager] Y3.2: 章节 ${chapter} 未找到 Boss 配置`);
+            return;
+        }
+        if (!SaveManager.inst.isCleared(bossLevel)) return;
+
+        // 校验未领取
+        if (SaveManager.inst.hasClaimedChapterChest(chapter)) return;
+
+        // 奖励金额安全校验
+        const reward = this.safeNum(GameManager.CHAPTER_CHEST_REWARDS[chapter], 0);
+        if (reward <= 0) return;
+
+        // 领取（幂等）：仅返回 true 时发币
+        const claimed = SaveManager.inst.claimChapterChest(chapter);
+        if (!claimed) {
+            console.warn(`[GameManager] Y3.2: 章节 ${chapter} 宝箱领取失败（已领取）`);
+            return;
+        }
+
+        // 发币
+        SaveManager.inst.addCoins(reward);
+        console.log(`[GameManager] Y3.2: 章节宝箱领取 ch=${chapter} +${reward} 扭蛋币`);
+
+        // 奖励反馈
+        try { AudioManager.inst?.playWin(); } catch (e) { /* ignore */ }
+        try { VibrateManager.inst?.long(); } catch (e) { /* ignore */ }
+
+        // 刷新关卡选择页（资源徽章 + 宝箱状态）
+        this.refreshLevelSelectStates();
     }
 
     // ══════════════════════════════════════════════════════════════════════════
