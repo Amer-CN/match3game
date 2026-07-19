@@ -6735,20 +6735,34 @@ export class GameManager extends Component {
 
     /** Q1+Q2: 点击主题格子 — 已拥有则装备，未拥有则看广告解锁 */
     private onDressupThemeSelect(themeId: number): void {
+        // Y2.1: 自动测试模式隔离
+        if (this._autoTestRunning) return;
+
         const ownedThemes = SaveManager.inst.getOwnedThemes();
         if (ownedThemes.includes(themeId)) {
             SaveManager.inst.setEquippedTheme(themeId);
             this.refreshDressupPanel();
             console.log(`[Dressup] 装备主题: ${THEME_DATA[themeId]?.name ?? '?'}`);
         } else {
+            let settled = false;
             AdManager.getInstance().showRewardedAd(
                 () => {
+                    // Y2.1: 一次性守卫
+                    if (settled) return;
+                    settled = true;
+
                     SaveManager.inst.ownTheme(themeId);
                     SaveManager.inst.setEquippedTheme(themeId);
                     this.refreshDressupPanel();
                     console.log(`[Dressup] 广告解锁并装备主题: ${THEME_DATA[themeId]?.name ?? '?'}`);
                 },
                 () => {
+                    // Y2.1: 一次性守卫
+                    if (settled) return;
+                    settled = true;
+
+                    // Y2.1: 广告失败后按真实状态刷新
+                    this.refreshDressupPanel();
                     console.log('[Dressup] 广告未看完，主题未解锁');
                 },
             );
@@ -6757,6 +6771,9 @@ export class GameManager extends Component {
 
     /** Q1+Q2: 点击配饰格子 — id=-1 卸下，已拥有则装备，未拥有则看广告解锁 */
     private onDressupAccessorySelect(accId: number): void {
+        // Y2.1: 自动测试模式隔离
+        if (this._autoTestRunning) return;
+
         if (accId === -1) {
             SaveManager.inst.setEquippedAccessory(-1);
             this.refreshDressupPanel();
@@ -6770,14 +6787,25 @@ export class GameManager extends Component {
             this.refreshDressupPanel();
             console.log(`[Dressup] 装备配饰: ${ACCESSORY_DATA[accId]?.name ?? '?'}`);
         } else {
+            let settled = false;
             AdManager.getInstance().showRewardedAd(
                 () => {
+                    // Y2.1: 一次性守卫
+                    if (settled) return;
+                    settled = true;
+
                     SaveManager.inst.ownAccessory(accId);
                     SaveManager.inst.setEquippedAccessory(accId);
                     this.refreshDressupPanel();
                     console.log(`[Dressup] 广告解锁并装备配饰: ${ACCESSORY_DATA[accId]?.name ?? '?'}`);
                 },
                 () => {
+                    // Y2.1: 一次性守卫
+                    if (settled) return;
+                    settled = true;
+
+                    // Y2.1: 广告失败后按真实状态刷新
+                    this.refreshDressupPanel();
                     console.log('[Dressup] 广告未看完，配饰未解锁');
                 },
             );
