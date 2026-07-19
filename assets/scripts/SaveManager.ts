@@ -602,6 +602,12 @@ export class SaveManager {
         console.log('[SaveManager] 存档已清空');
     }
 
+    /** 调试用：强制从存储重新加载（用于测试后恢复） */
+    reload(): void {
+        this._loaded = false;
+        this.load();
+    }
+
     // ── 装扮系统 API（Q0） ───────────────────────
 
     /** 获取当前装备的主题 id */

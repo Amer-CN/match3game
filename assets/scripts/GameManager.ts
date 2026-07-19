@@ -2198,6 +2198,8 @@ export class GameManager extends Component {
                 // X3: 批量定点测试 — batchtest([{levels:[8,10,14,15,19,24],runs:5},{levels:[4,5,11],runs:3},{levels:[3,7,12,17,22],runs:3},{levels:[25],runs:5}])
                 batchtest: (groups: { levels: number[]; runs: number }[]) => this.startBatchTestRun(groups),
                 stop: () => this.stopAutoTest(),
+                // Y3: 专项回归测试（连胜/保护/宝箱）
+                y3test: () => this.startY3RegressionTest(),
             };
         } catch (e) {
             console.warn('[DifficultyTest] 安装调试 API 失败:', e);
@@ -2333,6 +2335,228 @@ export class GameManager extends Component {
         this._autoTestTargetQueue = [];
         this._autoTestRetryCount = 0;
         console.log('[AutoTest] 已停止，状态已清理');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  Y3 专项回归测试机器人
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Y3 专项回归测试：连胜累加/失败清零/每日保护/章节宝箱幂等/自动测试隔离。
+     * 浏览器预览中调用 __MXMH_DIFFICULTY__.y3test() 运行。
+     * 测试结束后自动恢复原始存档。
+     */
+    private startY3RegressionTest(): void {
+        console.log('═══════════════════════════════════════════');
+        console.log('  Y3 专项回归测试开始');
+        console.log('═══════════════════════════════════════════');
+
+        const results: { name: string; pass: boolean; detail?: string }[] = [];
+        const check = (name: string, cond: boolean, detail?: string) => {
+            results.push({ name, pass: cond, detail });
+            console.log(`  ${cond ? '✅' : '❌'} ${name}${detail ? ' → ' + detail : ''}`);
+        };
+
+        // 确保不在自动测试模式
+        this._autoTestRunning = false;
+
+        // === 备份原始存档 ===
+        let backup: string | null = null;
+        try {
+            backup = localStorage.getItem('mxmh_save_v1');
+        } catch (e) { /* ignore */ }
+        console.log('[Y3Test] 原始存档已备份');
+
+        // ══════════════════════════════════════════════════════════════════════
+        //  Phase 1: 数据层测试
+        // ══════════════════════════════════════════════════════════════════════
+        console.log('\n── Phase 1: 数据层（SaveManager API）──');
+
+        SaveManager.inst.resetAll();
+
+        // --- 连胜 ---
+        check('streak 初始=0', SaveManager.inst.getWinStreak() === 0);
+        SaveManager.inst.incrementWinStreak();
+        check('streak +1 → 1', SaveManager.inst.getWinStreak() === 1, `got ${SaveManager.inst.getWinStreak()}`);
+        SaveManager.inst.incrementWinStreak();
+        check('streak +1 → 2', SaveManager.inst.getWinStreak() === 2, `got ${SaveManager.inst.getWinStreak()}`);
+        SaveManager.inst.resetWinStreak();
+        check('streak reset → 0', SaveManager.inst.getWinStreak() === 0);
+
+        // --- 保护 ---
+        check('shield 初始 canUse=true', SaveManager.inst.canUseStreakShieldToday() === true);
+        check('shield 首次 record=true', SaveManager.inst.recordStreakShieldUse() === true);
+        check('shield 用后 canUse=false', SaveManager.inst.canUseStreakShieldToday() === false);
+        check('shield 二次 record=false', SaveManager.inst.recordStreakShieldUse() === false);
+
+        // --- 宝箱：非法章节 ---
+        check('chest ch=0 → false', SaveManager.inst.hasClaimedChapterChest(0) === false);
+        check('chest ch=-1 → false', SaveManager.inst.hasClaimedChapterChest(-1) === false);
+        check('chest ch=1.5 → false', SaveManager.inst.hasClaimedChapterChest(1.5) === false);
+        check('chest ch=NaN → false', SaveManager.inst.hasClaimedChapterChest(NaN) === false);
+        check('chest ch=Infinity → false', SaveManager.inst.hasClaimedChapterChest(Infinity) === false);
+        check('chest claim ch=0 → false', SaveManager.inst.claimChapterChest(0) === false);
+        check('chest claim ch=1.5 → false', SaveManager.inst.claimChapterChest(1.5) === false);
+        check('chest claim ch=NaN → false', SaveManager.inst.claimChapterChest(NaN) === false);
+
+        // --- 宝箱：合法章节 1-5 幂等 ---
+        for (let ch = 1; ch <= 5; ch++) {
+            check(`chest ch${ch} 初始未领`, SaveManager.inst.hasClaimedChapterChest(ch) === false);
+            check(`chest ch${ch} 首次 claim=true`, SaveManager.inst.claimChapterChest(ch) === true);
+            check(`chest ch${ch} 领后 hasClaimed=true`, SaveManager.inst.hasClaimedChapterChest(ch) === true);
+            check(`chest ch${ch} 二次 claim=false`, SaveManager.inst.claimChapterChest(ch) === false);
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        //  Phase 2: 集成测试（showResultPanel 模拟通关/失败）
+        // ══════════════════════════════════════════════════════════════════════
+        console.log('\n── Phase 2: 集成（连胜累加/清零/保护）──');
+
+        SaveManager.inst.resetAll();
+
+        // 2a: 通关 → 连胜+1
+        this.startLevel(0);
+        check('2a: streakBeforeRun=0', this.streakBeforeRun === 0);
+        this.showResultPanel(true);
+        check('2a: 通关 → streak=1', SaveManager.inst.getWinStreak() === 1, `got ${SaveManager.inst.getWinStreak()}`);
+        check('2a: outcomeSettled=true', this.streakOutcomeSettled === true);
+
+        // 2b: 再通关 → 连胜+1
+        this.startLevel(0);
+        check('2b: streakBeforeRun=1', this.streakBeforeRun === 1);
+        this.showResultPanel(true);
+        check('2b: 通关 → streak=2', SaveManager.inst.getWinStreak() === 2, `got ${SaveManager.inst.getWinStreak()}`);
+
+        // 2c: 失败 + 保护广告（浏览器降级直接成功）
+        this.startLevel(0);
+        check('2c: streakBeforeRun=2', this.streakBeforeRun === 2);
+        this.showResultPanel(false);
+        // canShowShield=true → 暂缓清零
+        check('2c: 失败后 streak 仍=2（等待保护）', SaveManager.inst.getWinStreak() === 2, `got ${SaveManager.inst.getWinStreak()}`);
+        check('2c: outcomeSettled=false（未结算）', this.streakOutcomeSettled === false);
+        // 点击保护广告
+        this.onStreakShieldAdClick();
+        check('2c: 保护后 streak=2（保留）', SaveManager.inst.getWinStreak() === 2, `got ${SaveManager.inst.getWinStreak()}`);
+        check('2c: protectedThisRun=true', this.streakShieldProtectedThisRun === true);
+        check('2c: outcomeSettled=true', this.streakOutcomeSettled === true);
+        check('2c: canUseShield=false（今日已用）', SaveManager.inst.canUseStreakShieldToday() === false);
+
+        // 2d: 再失败，保护已用 → 清零
+        this.startLevel(0);
+        check('2d: streakBeforeRun=2', this.streakBeforeRun === 2);
+        this.showResultPanel(false);
+        // canShowShield=false → finalizeFailedStreak → reset
+        check('2d: 失败无保护 → streak=0', SaveManager.inst.getWinStreak() === 0, `got ${SaveManager.inst.getWinStreak()}`);
+        check('2d: outcomeSettled=true', this.streakOutcomeSettled === true);
+
+        // 2e: 连胜=0 时失败 → 直接清零
+        this.startLevel(0);
+        check('2e: streakBeforeRun=0', this.streakBeforeRun === 0);
+        this.showResultPanel(false);
+        check('2e: 0连胜失败 → 仍=0', SaveManager.inst.getWinStreak() === 0);
+
+        // ══════════════════════════════════════════════════════════════════════
+        //  Phase 3: 章节宝箱集成
+        // ══════════════════════════════════════════════════════════════════════
+        console.log('\n── Phase 3: 章节宝箱集成 ──');
+
+        SaveManager.inst.resetAll();
+        // 模拟全部 5 章 Boss 通关
+        for (const cfg of this.levelConfigs) {
+            if (cfg.isBoss) {
+                SaveManager.inst.markCleared(this.safeNum(cfg.level, 0), 1000);
+            }
+        }
+
+        const coinsBeforeChest = SaveManager.inst.getCoins();
+        const chestRewards = [0, 30, 40, 50, 60, 80];
+        let expectedTotal = 0;
+
+        for (let ch = 1; ch <= 5; ch++) {
+            const bossLevel = this.getChapterBossLevel(ch);
+            check(`3: ch${ch} Boss 已通关`, bossLevel > 0 && SaveManager.inst.isCleared(bossLevel));
+            check(`3: ch${ch} 未领取`, !SaveManager.inst.hasClaimedChapterChest(ch));
+
+            // 模拟 onChapterChestClaim 的核心逻辑（不经过 UI 点击）
+            const claimed = SaveManager.inst.claimChapterChest(ch);
+            check(`3: ch${ch} claim=true`, claimed === true);
+            if (claimed) {
+                SaveManager.inst.addCoins(chestRewards[ch]);
+                expectedTotal += chestRewards[ch];
+            }
+            check(`3: ch${ch} 已领取`, SaveManager.inst.hasClaimedChapterChest(ch));
+            check(`3: ch${ch} 二次 claim=false`, SaveManager.inst.claimChapterChest(ch) === false);
+        }
+        check('3: 总奖励=260', SaveManager.inst.getCoins() === coinsBeforeChest + 260,
+            `got ${SaveManager.inst.getCoins() - coinsBeforeChest}`);
+        check('3: expectedTotal=260', expectedTotal === 260, `got ${expectedTotal}`);
+
+        // ══════════════════════════════════════════════════════════════════════
+        //  Phase 4: 自动测试隔离
+        // ══════════════════════════════════════════════════════════════════════
+        console.log('\n── Phase 4: 自动测试隔离 ──');
+
+        SaveManager.inst.resetAll();
+        SaveManager.inst.incrementWinStreak();
+        SaveManager.inst.incrementWinStreak();
+        const streakBeforeAuto = SaveManager.inst.getWinStreak();
+        check('4: 初始 streak=2', streakBeforeAuto === 2);
+
+        this._autoTestRunning = true;
+        this.startLevel(0);
+        this.showResultPanel(true);
+        check('4: autoTest 通关 → streak 不变', SaveManager.inst.getWinStreak() === streakBeforeAuto,
+            `got ${SaveManager.inst.getWinStreak()}`);
+
+        this.startLevel(0);
+        this.showResultPanel(false);
+        check('4: autoTest 失败 → streak 不变', SaveManager.inst.getWinStreak() === streakBeforeAuto,
+            `got ${SaveManager.inst.getWinStreak()}`);
+
+        // 保护按钮不应工作
+        this.onStreakShieldAdClick();
+        check('4: autoTest shield 点击无效', SaveManager.inst.canUseStreakShieldToday() === true);
+        this._autoTestRunning = false;
+
+        // ══════════════════════════════════════════════════════════════════════
+        //  恢复原始存档
+        // ══════════════════════════════════════════════════════════════════════
+        try {
+            if (backup !== null) {
+                localStorage.setItem('mxmh_save_v1', backup);
+            } else {
+                localStorage.removeItem('mxmh_save_v1');
+            }
+            SaveManager.inst.reload();
+            console.log('[Y3Test] ✅ 原始存档已恢复');
+        } catch (e) {
+            console.warn('[Y3Test] 恢复存档失败:', e);
+        }
+
+        // ══════════════════════════════════════════════════════════════════════
+        //  汇总
+        // ══════════════════════════════════════════════════════════════════════
+        const passed = results.filter(r => r.pass).length;
+        const failed = results.filter(r => !r.pass).length;
+
+        console.log('\n═══════════════════════════════════════════');
+        console.log('  Y3 回归测试结果');
+        console.log('═══════════════════════════════════════════');
+        console.log(`  总计: ${results.length} | 通过: ${passed} | 失败: ${failed}`);
+
+        if (failed > 0) {
+            console.log('\n❌ 失败项:');
+            for (const r of results) {
+                if (!r.pass) {
+                    console.log(`  ❌ ${r.name}${r.detail ? ' → ' + r.detail : ''}`);
+                }
+            }
+        } else {
+            console.log('\n✅ 全部通过！');
+        }
+        console.log('═══════════════════════════════════════════\n');
+
+        (globalThis as any).__Y3_TEST_RESULT__ = { passed, failed, total: results.length, results };
     }
 
     /** X2: 机器人主循环 — 每帧检查状态并行动 */
