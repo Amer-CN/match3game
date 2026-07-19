@@ -387,11 +387,13 @@ export class SaveManager {
         // streakShieldUsedToday: 只接受严格 boolean
         result.streakShieldUsedToday = (parsed.streakShieldUsedToday === true);
 
-        // chapterChestClaims: 只接受对象；键须为正整数 chapter；值仅 true 才保留
+        // chapterChestClaims: 只接受对象；键须为严格正整数字符串；值仅 true 才保留
         if (parsed.chapterChestClaims && typeof parsed.chapterChestClaims === 'object') {
             for (const key of Object.keys(parsed.chapterChestClaims)) {
-                const chapterNum = parseInt(key, 10);
-                if (isNaN(chapterNum) || chapterNum < 1 || !isFinite(chapterNum)) continue;
+                // 仅接受规范的正整数字符串键（拒绝 "01"、"1.5"、"1abc"、"1e3"、"-1"、"NaN" 等）
+                if (!/^[1-9]\d*$/.test(key)) continue;
+                const chapterNum = Number(key);
+                if (!Number.isSafeInteger(chapterNum) || chapterNum < 1) continue;
                 if ((parsed.chapterChestClaims as any)[key] === true) {
                     result.chapterChestClaims[chapterNum] = true;
                 }
@@ -986,9 +988,8 @@ export class SaveManager {
     /** 判断某章节宝箱是否已领取（chapter 非法返回 false） */
     hasClaimedChapterChest(chapter: number): boolean {
         this.load();
-        if (typeof chapter !== 'number' || isNaN(chapter) || !isFinite(chapter) || chapter < 1) return false;
-        const safeChapter = Math.floor(chapter);
-        return this._data.chapterChestClaims[safeChapter] === true;
+        if (typeof chapter !== 'number' || !Number.isFinite(chapter) || !Number.isSafeInteger(chapter) || chapter < 1) return false;
+        return this._data.chapterChestClaims[chapter] === true;
     }
 
     /**
@@ -999,14 +1000,13 @@ export class SaveManager {
      */
     claimChapterChest(chapter: number): boolean {
         this.load();
-        if (typeof chapter !== 'number' || isNaN(chapter) || !isFinite(chapter) || chapter < 1) return false;
-        const safeChapter = Math.floor(chapter);
-        if (this._data.chapterChestClaims[safeChapter] === true) {
+        if (typeof chapter !== 'number' || !Number.isFinite(chapter) || !Number.isSafeInteger(chapter) || chapter < 1) return false;
+        if (this._data.chapterChestClaims[chapter] === true) {
             return false;
         }
-        this._data.chapterChestClaims[safeChapter] = true;
+        this._data.chapterChestClaims[chapter] = true;
         this._flush();
-        console.log(`[SaveManager] claimChapterChest(chapter=${safeChapter}) → true`);
+        console.log(`[SaveManager] claimChapterChest(chapter=${chapter}) → true`);
         return true;
     }
 
