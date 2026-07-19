@@ -404,6 +404,19 @@ export class GameManager extends Component {
     private lastCoinReward = 0;
     /** 扭蛋币翻倍广告是否已用（本关结算期间） */
     private coinDoubled = false;
+
+    // ── Y3.1: 连胜 / 保护 运行时状态 ──────────────
+    /** 本局开始前的连胜快照 */
+    private streakBeforeRun = 0;
+    /** 本局连胜结果是否已最终结算 */
+    private streakOutcomeSettled = false;
+    /** 本局失败是否已成功保护连胜 */
+    private streakShieldProtectedThisRun = false;
+    /** 保护广告是否正在请求 */
+    private streakShieldAdPending = false;
+    /** 结算页连胜保护广告按钮 */
+    private streakShieldAdBtn: Node | null = null;
+    private streakShieldAdLabel: Label | null = null;
     /** 结算页扭蛋币翻倍广告按钮 */
     private resultCoinAdBtn: Node | null = null;
     private resultCoinAdLabel: Label | null = null;
@@ -1095,6 +1108,12 @@ export class GameManager extends Component {
         this.scoreDoubled = false;
         this.coinDoubled = false;
 
+        // Y3.1: 连胜 / 保护 运行时状态初始化
+        this.streakBeforeRun = SaveManager.inst.getWinStreak();
+        this.streakOutcomeSettled = false;
+        this.streakShieldProtectedThisRun = false;
+        this.streakShieldAdPending = false;
+
         // 进关清零计数器
         this.collectedCount = {};
         this.detonatedSpecials = 0;
@@ -1547,6 +1566,12 @@ export class GameManager extends Component {
         if (isWin) {
             this.logDifficultyResult(true);
 
+            // Y3.1: 通关连胜 +1（仅结算一次、非自动测试）
+            if (!this.streakOutcomeSettled && !this._autoTestRunning) {
+                SaveManager.inst.incrementWinStreak();
+                this.streakOutcomeSettled = true;
+            }
+
             // X3.1: 自动测试模式 — 跳过存档、发币、公仔解锁、音效和震动
             if (this._autoTestRunning) {
                 this.lastCoinReward = 0;
@@ -1637,11 +1662,23 @@ export class GameManager extends Component {
             if (this.resultMonsterLabel) {
                 this.resultMonsterLabel.node.active = false;
             }
+
+            // Y3.1: 失败连胜处理
+            // 如果连胜为 0 或不可保护，立即清零；否则暂缓，等待玩家选择保护或离开
+            const canShowShield =
+                this.streakBeforeRun > 0 &&
+                !this._autoTestRunning &&
+                SaveManager.inst.canUseStreakShieldToday();
+            if (!canShowShield) {
+                this.finalizeFailedStreak();
+            }
         }
         // A: 动态布局结算卡片（通过 monsterLabel.active 判断是否有公仔解锁）
         this.layoutResultPanel(isWin, this.resultMonsterLabel?.node.active ?? false);
         // Y2.1: 统一刷新结算广告按钮状态（在 lastCoinReward 和按钮 active 确定后）
         this.refreshResultAdState(isWin);
+        // Y3.1: 刷新连胜保护广告按钮状态
+        this.refreshStreakShieldAdState(isWin);
         console.log(`[GameManager] 结算: ${isWin ? '过关' : '失败'} | 得分 ${this.currentScore}`);
     }
 
@@ -1699,6 +1736,133 @@ export class GameManager extends Component {
                 this.resultCoinAdLabel.string = '看广告·扭蛋币翻倍';
             }
         }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  Y3.1 · 连胜保护
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Y3.1: 统一结算失败连胜。
+     * 仅当本局尚未 settled、且未成功保护、且非自动测试时，
+     * 调 SaveManager.inst.resetWinStreak()，然后置 streakOutcomeSettled=true。
+     * 幂等：重复调用不会重复清零。
+     */
+    private finalizeFailedStreak(): void {
+        if (this.streakOutcomeSettled) return;
+        if (this.streakShieldProtectedThisRun) {
+            this.streakOutcomeSettled = true;
+            return;
+        }
+        if (!this._autoTestRunning) {
+            SaveManager.inst.resetWinStreak();
+        }
+        this.streakOutcomeSettled = true;
+        console.log('[GameManager] Y3.1: 失败连胜已清零');
+    }
+
+    /**
+     * Y3.1: 刷新连胜保护广告按钮状态。
+     * 仅失败结算页、连胜 > 0、未 settled、未保护、非自动测试、今日可用时显示。
+     */
+    private refreshStreakShieldAdState(isWin: boolean): void {
+        if (!this.streakShieldAdBtn || !this.streakShieldAdLabel) return;
+
+        const shouldShow =
+            !isWin &&
+            this.streakBeforeRun > 0 &&
+            !this.streakOutcomeSettled &&
+            !this.streakShieldProtectedThisRun &&
+            !this._autoTestRunning;
+
+        this.streakShieldAdBtn.active = shouldShow;
+        if (!shouldShow) return;
+
+        const btn = this.streakShieldAdBtn.getComponent(Button);
+        if (!btn) return;
+
+        if (this.streakShieldAdPending) {
+            btn.interactable = false;
+            this.streakShieldAdLabel.string = '广告加载中...';
+        } else if (this.streakShieldProtectedThisRun) {
+            btn.interactable = false;
+            this.streakShieldAdLabel.string = '已保护连胜';
+        } else if (!SaveManager.inst.canUseStreakShieldToday()) {
+            btn.interactable = false;
+            this.streakShieldAdLabel.string = '今日已用完';
+        } else {
+            btn.interactable = true;
+            this.streakShieldAdLabel.string = `▶ 看广告·保护连胜（当前 ${this.streakBeforeRun} 连胜）`;
+        }
+    }
+
+    /** Y3.1: 看广告·保护连胜 — 成功则保留失败前的连胜 */
+    private onStreakShieldAdClick(): void {
+        // 自动测试隔离
+        if (this._autoTestRunning) return;
+
+        // 校验失败结算仍有效
+        if (!this.resultPanel?.active) return;
+        if (this.streakOutcomeSettled) return;
+        if (this.streakShieldProtectedThisRun) return;
+        if (this.streakShieldAdPending) return;
+        if (this.streakBeforeRun <= 0) return;
+        if (!SaveManager.inst.canUseStreakShieldToday()) {
+            this.refreshStreakShieldAdState(false);
+            return;
+        }
+
+        this.streakShieldAdPending = true;
+        this.refreshStreakShieldAdState(false);
+
+        const token = this.levelRunToken;
+        let settled = false;
+
+        AdManager.getInstance().showRewardedAd(
+            () => {
+                // 一次性守卫
+                if (settled) return;
+                settled = true;
+
+                // 旧关卡回调 → 仅清理本地 pending
+                if (token !== this.levelRunToken) {
+                    this.streakShieldAdPending = false;
+                    return;
+                }
+
+                // 记录保护使用
+                const recorded = SaveManager.inst.recordStreakShieldUse();
+                if (!recorded) {
+                    console.warn('[GameManager] Y3.1: 连胜保护记录失败（今日已用）');
+                    this.streakShieldAdPending = false;
+                    this.refreshStreakShieldAdState(false);
+                    return;
+                }
+
+                // 保护成功：保留连胜，不 +1、不 markCleared、不发币/公仔/道具/步数
+                this.streakShieldProtectedThisRun = true;
+                this.streakOutcomeSettled = true;
+                this.streakShieldAdPending = false;
+                this.refreshStreakShieldAdState(false);
+                console.log(`[GameManager] Y3.1: 连胜保护成功，保留 ${this.streakBeforeRun} 连胜`);
+            },
+            () => {
+                // 一次性守卫
+                if (settled) return;
+                settled = true;
+
+                // 旧关卡回调 → 仅清理本地 pending
+                if (token !== this.levelRunToken) {
+                    this.streakShieldAdPending = false;
+                    return;
+                }
+
+                // 广告未完成 → 不保护、不写记录
+                this.streakShieldAdPending = false;
+                this.refreshStreakShieldAdState(false);
+                console.log('[GameManager] Y3.1: 保护广告未完成，连胜未保护');
+            },
+        );
     }
 
     /** X1/X2: 输出结构化难度诊断日志 + 持久化测试记录（防重复，同一局只输出一次） */
@@ -2424,6 +2588,9 @@ export class GameManager extends Component {
     }
 
     private onResultNextClick(): void {
+        // Y3.1: 离开失败结算 → 确保连胜清零（若未保护）
+        this.finalizeFailedStreak();
+
         const config = this.levelConfigs[this.currentLevel];
         const isWin = this.isGoalReached(config);
 
@@ -2441,6 +2608,9 @@ export class GameManager extends Component {
 
     /** 结算页"关卡选择"按钮 → 返回选择页（刷新解锁状态） */
     private onResultLevelSelectClick(): void {
+        // Y3.1: 离开失败结算 → 确保连胜清零（若未保护）
+        this.finalizeFailedStreak();
+
         this.hidePanel(this.resultPanel);
         this.showLevelSelectPanel();
         console.log('[GameManager] 返回关卡选择');
@@ -3059,6 +3229,12 @@ export class GameManager extends Component {
         this.resultCoinAdLabel = this.resultCoinAdBtn.getChildByName('Label')!.getComponent(Label)!;
         this.resultCoinAdBtn.active = false;
 
+        // Y3.1: 连胜保护广告按钮（仅失败且有连胜时显示）
+        this.streakShieldAdBtn = this.createRoundButton(card, 'StreakShieldBtn', '▶ 看广告·保护连胜',
+            this.COLOR_BTN_AD, 440, 80, () => this.onStreakShieldAdClick());
+        this.streakShieldAdLabel = this.streakShieldAdBtn.getChildByName('Label')!.getComponent(Label)!;
+        this.streakShieldAdBtn.active = false;
+
         this.resultPanel.active = false;
     }
 
@@ -3072,10 +3248,18 @@ export class GameManager extends Component {
         const showCoinLabel = isWin;
         const showMonsterLabel = hasMonsterUnlock;
         const showCoinAdBtn = isWin && this.safeNum(this.lastCoinReward, 0) > 0;
+        // Y3.1: 连胜保护按钮（仅失败且有连胜且未 settled 且非自动测试时显示）
+        const showStreakShieldBtn =
+            !isWin &&
+            this.streakBeforeRun > 0 &&
+            !this.streakOutcomeSettled &&
+            !this.streakShieldProtectedThisRun &&
+            !this._autoTestRunning;
 
         // 元素高度
         const titleH = 76, scoreH = 56, coinLabelH = 40, monsterLabelH = 48;
         const adBtnH = 82, shareBtnH = 82, nextBtnH = 82, selectBtnH = 80, coinAdBtnH = 80;
+        const streakShieldBtnH = 80;
         const gapLabel = 12, gapBtn = 18, paddingTop = 40, paddingBottom = 40;
 
         // 计算所需高度
@@ -3084,6 +3268,7 @@ export class GameManager extends Component {
         if (showMonsterLabel) needH += gapLabel + monsterLabelH;
         needH += gapBtn + adBtnH + gapBtn + shareBtnH + gapBtn + nextBtnH + gapBtn + selectBtnH;
         if (showCoinAdBtn) needH += gapBtn + coinAdBtnH;
+        if (showStreakShieldBtn) needH += gapBtn + streakShieldBtnH;
         needH += paddingBottom;
 
         const cardH = Math.max(720, Math.min(1060, needH));
@@ -3139,6 +3324,8 @@ export class GameManager extends Component {
         place(this.resultSelectBtn, selectBtnH, gapBtn);
         // CoinAdBtn (only win with coins)
         if (showCoinAdBtn) place(this.resultCoinAdBtn, coinAdBtnH, gapBtn);
+        // Y3.1: StreakShieldBtn (only fail with streak)
+        if (showStreakShieldBtn) place(this.streakShieldAdBtn, streakShieldBtnH, gapBtn);
     }
 
     // ── 步数耗尽弹层（同款遮罩 + 奶白卡片） ──
