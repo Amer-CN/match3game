@@ -80,6 +80,11 @@ interface SaveData {
     boosters: BoosterInventory;                  // 持久化道具库存
     // Y2: 每日广告使用记录
     dailyAdUsage: DailyAdUsage;
+    // Y3.0: 连胜 / 宝箱 / 保护
+    winStreak: number;                           // 当前连续通关数
+    streakShieldDate: string;                    // 最近一次使用连胜保护广告的日期 YYYY-MM-DD
+    streakShieldUsedToday: boolean;              // 当天是否已使用过连胜保护
+    chapterChestClaims: { [chapter: number]: boolean }; // 章节宝箱领取记录
 }
 
 // ── 常量 ────────────────────────────────────
@@ -116,6 +121,11 @@ function createDefaultSave(): SaveData {
             resultScore: 0,
             resultCoins: 0,
         },
+        // Y3.0: 连胜 / 宝箱 / 保护 默认值
+        winStreak: 0,
+        streakShieldDate: '',
+        streakShieldUsedToday: false,
+        chapterChestClaims: {},
     };
 }
 
@@ -359,6 +369,33 @@ export class SaveManager {
                 resultScore: this._sanitizeAdCount(rawAdUsage.resultScore),
                 resultCoins: this._sanitizeAdCount(rawAdUsage.resultCoins),
             };
+        }
+
+        // Y3.0: 连胜 / 宝箱 / 保护 清洗（向后兼容，老存档无则补默认）
+
+        // winStreak: 有限非负数字，向下取整，clamp 0-9999
+        const rawWinStreak = parsed.winStreak;
+        if (typeof rawWinStreak === 'number' && !isNaN(rawWinStreak) && isFinite(rawWinStreak) && rawWinStreak >= 0) {
+            result.winStreak = Math.min(9999, Math.floor(rawWinStreak));
+        } else {
+            result.winStreak = 0;
+        }
+
+        // streakShieldDate: 只接受 string
+        result.streakShieldDate = (typeof parsed.streakShieldDate === 'string') ? parsed.streakShieldDate : '';
+
+        // streakShieldUsedToday: 只接受严格 boolean
+        result.streakShieldUsedToday = (parsed.streakShieldUsedToday === true);
+
+        // chapterChestClaims: 只接受对象；键须为正整数 chapter；值仅 true 才保留
+        if (parsed.chapterChestClaims && typeof parsed.chapterChestClaims === 'object') {
+            for (const key of Object.keys(parsed.chapterChestClaims)) {
+                const chapterNum = parseInt(key, 10);
+                if (isNaN(chapterNum) || chapterNum < 1 || !isFinite(chapterNum)) continue;
+                if ((parsed.chapterChestClaims as any)[key] === true) {
+                    result.chapterChestClaims[chapterNum] = true;
+                }
+            }
         }
 
         return result;
@@ -883,6 +920,93 @@ export class SaveManager {
         }
         this._flush();
         console.log(`[SaveManager] recordRewardedAd(${placement}) → ${this.getRewardedAdCount(placement)}/${cap}`);
+        return true;
+    }
+
+    // ── 连胜 / 宝箱 / 保护 API（Y3.0） ─────────────
+
+    /** 获取当前连胜数（安全值） */
+    getWinStreak(): number {
+        this.load();
+        return this._data.winStreak;
+    }
+
+    /** 连胜 +1（clamp 9999），写盘，返回新值 */
+    incrementWinStreak(): number {
+        this.load();
+        this._data.winStreak = Math.min(9999, this._data.winStreak + 1);
+        this._flush();
+        console.log(`[SaveManager] incrementWinStreak → ${this._data.winStreak}`);
+        return this._data.winStreak;
+    }
+
+    /** 连胜清零，写盘 */
+    resetWinStreak(): void {
+        this.load();
+        this._data.winStreak = 0;
+        this._flush();
+        console.log('[SaveManager] resetWinStreak → 0');
+    }
+
+    /** 连胜保护跨天重置：日期不是今天时，streakShieldUsedToday 置 false（不重置 winStreak，不影响 dailyAdUsage） */
+    private _ensureStreakShieldDate(): void {
+        const today = this._getTodayStr();
+        if (this._data.streakShieldDate !== today) {
+            this._data.streakShieldDate = today;
+            this._data.streakShieldUsedToday = false;
+            this._flush();
+        }
+    }
+
+    /** 判断今天是否仍可使用一次连胜保护 */
+    canUseStreakShieldToday(): boolean {
+        this.load();
+        this._ensureStreakShieldDate();
+        return !this._data.streakShieldUsedToday;
+    }
+
+    /**
+     * 记录一次连胜保护使用。
+     * 当天未使用：写入今天日期、置 usedToday=true、写盘、返回 true。
+     * 当天已使用：不改数据，返回 false。
+     */
+    recordStreakShieldUse(): boolean {
+        this.load();
+        this._ensureStreakShieldDate();
+        if (this._data.streakShieldUsedToday) {
+            return false;
+        }
+        this._data.streakShieldDate = this._getTodayStr();
+        this._data.streakShieldUsedToday = true;
+        this._flush();
+        console.log(`[SaveManager] recordStreakShieldUse → date=${this._data.streakShieldDate}`);
+        return true;
+    }
+
+    /** 判断某章节宝箱是否已领取（chapter 非法返回 false） */
+    hasClaimedChapterChest(chapter: number): boolean {
+        this.load();
+        if (typeof chapter !== 'number' || isNaN(chapter) || !isFinite(chapter) || chapter < 1) return false;
+        const safeChapter = Math.floor(chapter);
+        return this._data.chapterChestClaims[safeChapter] === true;
+    }
+
+    /**
+     * 标记某章节宝箱已领取（幂等）。
+     * chapter 合法且未领取：标记 true、写盘、返回 true。
+     * 已领取或 chapter 非法：不改数据、返回 false。
+     * 本方法不发币，Y3.2 由 GameManager 根据返回值发奖励。
+     */
+    claimChapterChest(chapter: number): boolean {
+        this.load();
+        if (typeof chapter !== 'number' || isNaN(chapter) || !isFinite(chapter) || chapter < 1) return false;
+        const safeChapter = Math.floor(chapter);
+        if (this._data.chapterChestClaims[safeChapter] === true) {
+            return false;
+        }
+        this._data.chapterChestClaims[safeChapter] = true;
+        this._flush();
+        console.log(`[SaveManager] claimChapterChest(chapter=${safeChapter}) → true`);
         return true;
     }
 
